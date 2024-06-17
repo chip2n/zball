@@ -3,11 +3,17 @@
 ** Building
 
 #+begin_src bash
-gcc -I. -lm -o game main.c janet.c 
+gcc -I. -Isokol -lm -lGL -lglfw -o game main.c janet.c glfw_glue.c
 #+end_src
+
+Examples:
 
 #+begin_src bash
 gcc -I. -lGL -lX11 -lXcursor -lXi -o example example.c
+#+end_src
+
+#+begin_src bash
+gcc -I. -lGL -lglfw -o example2 example2.c glfw_glue.c
 #+end_src
 
 ** Compiling shaders

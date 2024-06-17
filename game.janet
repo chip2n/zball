@@ -1,12 +1,7 @@
-# (defn print-greeting
-#   [greetee]
-#   (print "Hello, " greetee "!"))
-
-# (defn main
-#   [& args]
-#   (pp args)
-#   (print (length args))
-#   (print-greeting (get args 1)))
-
 (defn start []
-  (print "Game has been started!"))
+  (c/start)
+
+  (while (not (c/should-close?))
+    (c/render))
+
+  (c/end))
