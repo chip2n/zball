@@ -1,0 +1,17 @@
+* janet-sokol
+
+** Building
+
+#+begin_src bash
+gcc -I. -lm -o game main.c janet.c 
+#+end_src
+
+#+begin_src bash
+gcc -I. -lGL -lX11 -lXcursor -lXi -o example example.c
+#+end_src
+
+** Compiling shaders
+
+#+begin_src bash
+~/dev/sokol-tools-bin/bin/linux/sokol-shdc --input sokol/triangle-sapp.glsl --output sokol/example.glsl.h --slang glsl430
+#+end_src
