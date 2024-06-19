@@ -1,0 +1,23 @@
+.{
+    .name = "game",
+    .version = "0.0.0",
+    .dependencies = .{
+        .sokol = .{
+            .url = "git+https://github.com/floooh/sokol-zig.git#7b7d4bafe6176baca152b8fce935f4cac5a90ba0",
+            .hash = "1220ce851df99fd0ddeb6f20e75cdd35dd4e24404f7de7a2aa4cc4f37de58f039cab",
+        },
+    },
+    .paths = .{
+        // This makes *all* files, recursively, included in this package. It is generally
+        // better to explicitly list the files and directories instead, to insure that
+        // fetching from tarballs, file system paths, and version control all result
+        // in the same contents hash.
+        "",
+        // For example...
+        //"build.zig",
+        //"build.zig.zon",
+        //"src",
+        //"LICENSE",
+        //"README.md",
+    },
+}

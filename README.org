@@ -3,7 +3,7 @@
 ** Building
 
 #+begin_src bash
-gcc -I. -Isokol -lm -lGL -lglfw -o game main.c janet.c glfw_glue.c
+gcc -I. -Isokol -lm -lGL -lglfw -o game main.c janet.c
 #+end_src
 
 Examples:
