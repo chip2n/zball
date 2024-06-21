@@ -10,7 +10,7 @@ const shd = @import("shaders/triangle.glsl.zig");
 
 const janet = @import("cjanet");
 // TODO
-const janet2 = @import("janet.zig");
+const j = @import("janet.zig");
 const boot = @embedFile("boot.janet");
 const boot_image = @embedFile("out/test.jimage");
 
@@ -63,15 +63,15 @@ export fn cleanup() void {
 }
 
 pub fn main() !void {
-    if (janet2.init() != 0) {
+    if (j.init() != 0) {
         return error.JanetInitializationFailed;
     }
-    defer janet2.deinit();
+    defer j.deinit();
 
-    const jenv = janet2.core_env(null) orelse {
+    const jenv = j.core_env(null) orelse {
         return error.JanetInitializationFailed;
     };
-    const lookup = janet2.env_lookup(jenv);
+    const lookup = j.env_lookup(jenv);
 
     // janet.janet_cfuns(jenv, "c", &cfuns);
 
@@ -81,10 +81,10 @@ pub fn main() !void {
     // }
 
     { // Unmarshal bytecode
-        const handle = janet2.gclock();
+        const handle = j.gclock();
         // TODO defer unlocn
 
-        const marsh_out = janet2.unmarshal(
+        const marsh_out = j.unmarshal(
             boot_image,
             // @sizeOf(@TypeOf(boot_image)),
             boot_image.len,
@@ -97,46 +97,46 @@ pub fn main() !void {
         // }
 
         // const jfunc = janet.janet_unwrap_function(marsh_out);
-        const tbl = janet2.unwrap_table(marsh_out);
+        const tbl = j.unwrap_table(marsh_out);
         var main_func: *janet.JanetFunction  = undefined;
         var found = false;
         for (0..@intCast(tbl.*.count)) |i| outer: {
             const key = tbl.*.data[i].key;
             const value = tbl.*.data[i].value;
-            const t = janet2.janet_type(key);
+            const t = j.janet_type(key);
 
             var buf: [128]u8 = undefined;
             _ = try std.fmt.bufPrintZ(&buf, "key type: {}", .{t});
             emscripten.emscripten_console_log(&buf);
 
             std.log.warn("key type: {}", .{t});
-            if (janet2.checktype(key, janet.JANET_SYMBOL) != 0) {
+            if (j.checktype(key, janet.JANET_SYMBOL) != 0) {
                 std.log.warn("pass", .{});
                 // const sym = janet.janet_unwrap_symbol(key);
-                const s = janet2.to_string(key);
+                const s = j.to_string(key);
                 if (std.mem.eql(u8, std.mem.span(s), "main")) {
                     std.log.warn("s: {s}", .{s});
-                    std.log.warn("main type: {}", .{janet2.janet_type(value)});
-                    const main_tbl = janet2.unwrap_table(value);
+                    std.log.warn("main type: {}", .{j.janet_type(value)});
+                    const main_tbl = j.unwrap_table(value);
 
-                    for (0..@intCast(main_tbl.*.count)) |j| {
-                        const key2 = main_tbl.*.data[j].key;
-                        const value2 = main_tbl.*.data[j].value;
-                        std.log.warn("key: {} {}", .{janet2.janet_type(key2), janet2.janet_type(value2)});
+                    for (0..@intCast(main_tbl.*.count)) |k| {
+                        const key2 = main_tbl.*.data[k].key;
+                        const value2 = main_tbl.*.data[k].value;
+                        std.log.warn("key: {} {}", .{j.janet_type(key2), j.janet_type(value2)});
                         // TODO we shouldn't have to do this nonsense - why can't I just use table_get?
                         // const unwrapped = janet.janet_unwrap_keyword(key2);
                         // std.log.warn("name of the thing: {s}", .{unwrapped});
-                        if (janet2.janet_type(value2) == 12) {
-                            main_func = janet2.unwrap_function(value2);
+                        if (j.janet_type(value2) == 12) {
+                            main_func = j.unwrap_function(value2);
                             found = true;
                             break :outer;
                         }
                     }
-                    const f = janet2.table_find(main_tbl, janet2.wrap_keyword("value"));
+                    const f = j.table_find(main_tbl, j.wrap_keyword("value"));
                     std.log.warn("found??? {*}", .{f});
-                    const main_func_raw = janet2.table_get(main_tbl, janet2.wrap_keyword("value"));
-                    std.log.warn("main type2: {}", .{janet2.janet_type(main_func_raw)});
-                    main_func = janet2.unwrap_function(main_func_raw);
+                    const main_func_raw = j.table_get(main_tbl, j.wrap_keyword("value"));
+                    std.log.warn("main type2: {}", .{j.janet_type(main_func_raw)});
+                    main_func = j.unwrap_function(main_func_raw);
                     found = true;
                     break;
                 }
@@ -161,26 +161,26 @@ pub fn main() !void {
         // janet.janet_table_put(temptab, janet.janet_ckeywordv("executable"), janet.janet_cstringv("game"));
         // janet.janet_gcroot(janet.janet_wrap_table(temptab));
 
-        janet2.gcunlock(handle);
+        j.gcunlock(handle);
 
 
-        const fiber = janet2.fiber(main_func, 64, 0, null);
+        const fiber = j.fiber(main_func, 64, 0, null);
         
         // fiber.*.env = temptab;
 
         // fiber.env.* = temptab; // TODO needed?
         // fiber.*.env = jenv;
         var out: janet.Janet = undefined;
-        const result = janet2.fiber_continue(fiber, janet2.wrap_nil(), &out);
-        if (result != janet2.SIGNAL_OK and result != janet2.SIGNAL_EVENT) {
+        const result = j.fiber_continue(fiber, j.wrap_nil(), &out);
+        if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
             std.log.warn("Something went wrong!", .{});
-            janet2.stacktrace(fiber, out);
+            j.stacktrace(fiber, out);
             return;
         }
         
 
 
-        // std.log.warn("Type: {}", .{janet2.janet_type(marsh_out)});
+        // std.log.warn("Type: {}", .{j.janet_type(marsh_out)});
         std.log.warn("Table count: {}", .{tbl.*.count});
     }
 
