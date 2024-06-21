@@ -8,7 +8,6 @@ const sapp = sokol.app;
 const sglue = sokol.glue;
 const shd = @import("shaders/triangle.glsl.zig");
 
-
 const janet = @import("cjanet");
 // TODO
 const j = @import("janet.zig");
@@ -54,6 +53,9 @@ export fn frame() void {
     sg.beginPass(.{ .swapchain = sglue.swapchain() });
     sg.applyPipeline(state.pip);
     sg.applyBindings(state.bind);
+
+    script_engine.draw() catch unreachable;
+
     sg.draw(0, 3, 1);
     sg.endPass();
     sg.commit();
@@ -61,29 +63,55 @@ export fn frame() void {
 
 export fn cleanup() void {
     sg.shutdown();
+    script_engine.deinit();
 }
 
 pub fn main() !void {
-    if (j.init() != 0) {
-        return error.JanetInitializationFailed;
-    }
-    defer j.deinit();
+    script_engine = try ScriptEngine.init();
+    errdefer script_engine.deinit();
 
-    const jenv = j.core_env(null) orelse {
-        return error.JanetInitializationFailed;
-    };
-    const lookup = j.env_lookup(jenv);
+    try script_engine.start();
 
-    // janet.janet_cfuns(jenv, "c", &cfuns);
+    sapp.run(.{
+        .init_cb = init,
+        .frame_cb = frame,
+        .cleanup_cb = cleanup,
+        .width = 640,
+        .height = 480,
+        .icon = .{ .sokol_default = true },
+        .window_title = "triangle.zig",
+        .logger = .{ .func = slog.func },
+    });
+}
 
-    // var res: janet.Janet = undefined;
-    // if (janet.janet_dostring(jenv, boot, null, &res) != 0) {
-    //     return error.JanetInitializationFailed;
-    // }
+var script_engine: ScriptEngine = undefined;
+const ScriptEngine = struct {
+    const Self = @This();
 
-    { // Unmarshal bytecode
+    main_fn: *j.JanetFunction,
+    draw_fn: *j.JanetFunction,
+
+    pub fn init() !Self {
+        if (j.init() != 0) {
+            return error.JanetInitializationFailed;
+        }
+        errdefer j.deinit();
+
+        const jenv = j.core_env(null) orelse {
+            return error.JanetInitializationFailed;
+        };
+        const lookup = j.env_lookup(jenv);
+
+        // janet.janet_cfuns(jenv, "c", &cfuns);
+
+        // var res: janet.Janet = undefined;
+        // if (janet.janet_dostring(jenv, boot, null, &res) != 0) {
+        //     return error.JanetInitializationFailed;
+        // }
+
         const handle = j.gclock();
         defer j.gcunlock(handle);
+
         const marsh_out = j.unmarshal(boot_image, boot_image.len, 0, lookup, null);
         const tbl = j.unwrap_table(marsh_out);
 
@@ -107,37 +135,34 @@ pub fn main() !void {
             }
         };
 
-        script_engine.main_fn = j.unwrap_function(main_fn);
-        script_engine.draw_fn = j.unwrap_function(draw_fn);
+        return .{
+            .main_fn = j.unwrap_function(main_fn),
+            .draw_fn = j.unwrap_function(draw_fn),
+        };
     }
 
-    try script_engine.start();
+    pub fn deinit(self: *Self) void {
+        _ = self;
+        j.deinit();
+    }
 
-    sapp.run(.{
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup,
-        .width = 640,
-        .height = 480,
-        .icon = .{ .sokol_default = true },
-        .window_title = "triangle.zig",
-        .logger = .{ .func = slog.func },
-    });
-}
-
-var script_engine: ScriptEngine = undefined;
-const ScriptEngine = struct {
-    main_fn: *j.JanetFunction,
-    draw_fn: *j.JanetFunction,
-
-    fn start(self: ScriptEngine) !void {
+    pub fn start(self: Self) !void {
         const fiber = j.fiber(self.main_fn, 64, 0, null);
-        var out: janet.Janet = undefined;
+        var out: j.Janet = undefined;
         const result = j.fiber_continue(fiber, j.wrap_nil(), &out);
         if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
             std.log.warn("Something went wrong!", .{});
             j.stacktrace(fiber, out);
             return error.ScriptEngineInitializationFailed;
+        }
+    }
+
+    pub fn draw(self: Self) !void {
+        var out: j.Janet = undefined;
+        const result = j.pcall(self.draw_fn, 0, null, &out, null);
+        if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
+            std.log.warn("Something went wrong!", .{});
+            return error.ScriptEngineDrawFailed;
         }
     }
 };

@@ -37,6 +37,8 @@ pub const BINDING_DEF = janet.JANET_BINDING_DEF;
 pub const janet_type = janet.janet_type;
 pub const fiber_continue = janet.janet_continue;
 
+pub const pcall = janet.janet_pcall;
+
 pub const resolve = janet.janet_resolve;
 pub fn resolveBindingDef(env: *JanetTable, sym: JanetSymbol) !Janet {
     var ret: Janet = undefined;

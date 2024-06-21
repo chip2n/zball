@@ -62,7 +62,6 @@ fn buildNative(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, 
 
     const run_step = b.step("run", "Run the game");
     run_step.dependOn(&run_cmd.step);
-
 }
 
 fn buildWeb(
