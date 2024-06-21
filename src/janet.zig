@@ -1,5 +1,7 @@
 const janet = @import("cjanet");
 
+pub const JanetFunction = janet.JanetFunction;
+pub const Janet = janet.Janet;
 pub const init = janet.janet_init;
 pub const deinit = janet.janet_deinit;
 pub const core_env = janet.janet_core_env;
@@ -13,6 +15,10 @@ pub const unwrap_table = janet.janet_unwrap_table;
 pub const unwrap_function = janet.janet_unwrap_function;
 pub const checktype = janet.janet_checktype;
 pub const to_string = janet.janet_to_string;
+pub const ckeywordv = janet.janet_ckeywordv;
+pub const ckeyword = janet.janet_ckeyword;
+pub const csymbol = janet.janet_csymbol;
+pub const resolve = janet.janet_resolve;
 
 pub const table_find = janet.janet_table_find;
 pub const table_get = janet.janet_table_get;
@@ -23,6 +29,8 @@ pub const stacktrace = janet.janet_stacktrace;
 
 pub const SIGNAL_OK = janet.JANET_SIGNAL_OK;
 pub const SIGNAL_EVENT = janet.JANET_SIGNAL_EVENT;
+
+pub const BINDING_DEF = janet.JANET_BINDING_DEF;
 
 // TODO needed to rename these
 pub const janet_type = janet.janet_type;
