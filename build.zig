@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
 
@@ -14,7 +15,8 @@ pub fn build(b: *Build) void {
     });
 
     if (target.result.isWasm()) {
-        try buildWeb(b, target, optimize, dep_sokol);
+        const dep_emsdk = b.dependency("emsdk", .{});
+        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol);
     } else {
         try buildNative(b, target, optimize, dep_sokol);
     }
@@ -63,17 +65,20 @@ fn buildNative(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, 
 
 }
 
-fn buildWeb(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, dep_sokol: *Build.Dependency) !void {
+fn buildWeb(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    optimize: OptimizeMode,
+    dep_emsdk: *Build.Dependency,
+    dep_sokol: *Build.Dependency,
+) !void {
     const lib = b.addStaticLibrary(.{
         .name = "game",
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/main2.zig"),
-        // .root_source_file = b.path("src/debug.zig"),
-        .link_libc = true,
     });
     lib.root_module.addImport("sokol", dep_sokol.module("sokol"));
-    // _ = dep_sokol;
 
     const c_header = b.addTranslateC(.{
         .root_source_file = b.path("janet.h"),
@@ -83,14 +88,15 @@ fn buildWeb(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, dep
     const c_module = b.addModule("cjanet", .{
         .root_source_file = .{ .generated = .{ .file = &c_header.output_file } },
     });
-    c_module.link_libc = true;
     lib.root_module.addImport("cjanet", c_module);
 
     lib.addIncludePath(b.path("."));
 
-    c_header.addIncludeDir("/home/chip/.emscripten_cache/sysroot/include");
-    c_module.addIncludePath(.{ .cwd_relative = "/home/chip/.emscripten_cache/sysroot/include"});
-    lib.addIncludePath(.{ .cwd_relative = "/home/chip/.emscripten_cache/sysroot/include"});
+    const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
+
+    c_header.addIncludeDir(emsdk_sysroot.getPath(b));
+    c_module.addIncludePath(emsdk_sysroot);
+    lib.addSystemIncludePath(emsdk_sysroot);
 
     //"-std=c99", "-O2", "-flto", "-DJANET_NO_NANBOX"
     lib.addCSourceFile(.{ .file = b.path("janet.c"), .flags = &.{"-flto"} });
@@ -111,7 +117,12 @@ fn buildWeb(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, dep
         // TODO
         .shell_file_path = "/home/chip/dev/janet-sokol/src/shell.html"
     });
+
     const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
     run.step.dependOn(&link_step.step);
     b.step("run", "Run the game").dependOn(&run.step);
+}
+
+fn emSdkLazyPath(b: *Build, emsdk: *Build.Dependency, subPaths: []const []const u8) Build.LazyPath {
+    return emsdk.path(b.pathJoin(subPaths));
 }

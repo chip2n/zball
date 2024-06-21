@@ -6,6 +6,10 @@
             .url = "git+https://github.com/floooh/sokol-zig.git#7b7d4bafe6176baca152b8fce935f4cac5a90ba0",
             .hash = "1220ce851df99fd0ddeb6f20e75cdd35dd4e24404f7de7a2aa4cc4f37de58f039cab",
         },
+        .emsdk = .{
+            .url = "git+https://github.com/emscripten-core/emsdk#3.1.61",
+            .hash = "12200ba39d83227f5de08287b043b011a2eb855cdb077f4b165edce30564ba73400e",
+        },
     },
     .paths = .{
         // This makes *all* files, recursively, included in this package. It is generally
