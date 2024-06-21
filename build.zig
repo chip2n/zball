@@ -115,7 +115,7 @@ fn buildWeb(
         // .extra_args = &.{"-sUSE_GLFW=3"},
         .extra_args = &.{"-sUSE_OFFSET_CONVERTER=1"},
         // TODO
-        .shell_file_path = "/home/chip/dev/janet-sokol/src/shell.html"
+        .shell_file_path = b.path("src/shell.html").getPath(b),
     });
 
     const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
