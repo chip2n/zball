@@ -1,7 +1,16 @@
+# (defn start []
+#   (c/start)
+
+#   (while (not (c/should-close?))
+#     (c/render))
+
+#   (c/end))
+
+# (defn render []
+#   )
+
 (defn start []
-  (c/start)
+  (print "Starting")
+  )
 
-  (while (not (c/should-close?))
-    (c/render))
-
-  (c/end))
+(print "Compiled")
