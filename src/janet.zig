@@ -1,5 +1,7 @@
 const janet = @import("cjanet");
 
+pub const JanetTable = janet.JanetTable;
+pub const JanetSymbol = janet.JanetSymbol;
 pub const JanetFunction = janet.JanetFunction;
 pub const Janet = janet.Janet;
 pub const init = janet.janet_init;
@@ -18,7 +20,6 @@ pub const to_string = janet.janet_to_string;
 pub const ckeywordv = janet.janet_ckeywordv;
 pub const ckeyword = janet.janet_ckeyword;
 pub const csymbol = janet.janet_csymbol;
-pub const resolve = janet.janet_resolve;
 
 pub const table_find = janet.janet_table_find;
 pub const table_get = janet.janet_table_get;
@@ -35,3 +36,13 @@ pub const BINDING_DEF = janet.JANET_BINDING_DEF;
 // TODO needed to rename these
 pub const janet_type = janet.janet_type;
 pub const fiber_continue = janet.janet_continue;
+
+pub const resolve = janet.janet_resolve;
+pub fn resolveBindingDef(env: *JanetTable, sym: JanetSymbol) !Janet {
+    var ret: Janet = undefined;
+    const f = janet.janet_resolve(env, sym, &ret);
+    if (f != BINDING_DEF) {
+        return error.JanetBindingDefNotFound;
+    }
+    return ret;
+}

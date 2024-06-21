@@ -81,29 +81,37 @@ pub fn main() !void {
     //     return error.JanetInitializationFailed;
     // }
 
-    // Unmarshal bytecode
-    const main_func = blk: {
+    { // Unmarshal bytecode
         const handle = j.gclock();
         defer j.gcunlock(handle);
-
         const marsh_out = j.unmarshal(boot_image, boot_image.len, 0, lookup, null);
         const tbl = j.unwrap_table(marsh_out);
 
-        var ret: j.Janet = undefined;
-        const f = j.resolve(tbl, j.csymbol("main"), &ret);
-        assert(f == j.BINDING_DEF);
-        const main_func: *j.JanetFunction  = j.unwrap_function(ret);
-        break :blk main_func;
-    };
+        const main_fn = j.resolveBindingDef(tbl, j.csymbol("main")) catch |err| {
+            switch (err) {
+                error.JanetBindingDefNotFound => {
+                    std.log.err("Need to define a main function in your script.", .{});
+                    return error.ScriptInitializationFailed;
+                },
+                else => return err,
+            }
+        };
 
-    const fiber = j.fiber(main_func, 64, 0, null);
-    var out: janet.Janet = undefined;
-    const result = j.fiber_continue(fiber, j.wrap_nil(), &out);
-    if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
-        std.log.warn("Something went wrong!", .{});
-        j.stacktrace(fiber, out);
-        return;
+        const draw_fn = j.resolveBindingDef(tbl, j.csymbol("draw")) catch |err| {
+            switch (err) {
+                error.JanetBindingDefNotFound => {
+                    std.log.err("Need to define a draw function in your script.", .{});
+                    return error.ScriptInitializationFailed;
+                },
+                else => return err,
+            }
+        };
+
+        script_engine.main_fn = j.unwrap_function(main_fn);
+        script_engine.draw_fn = j.unwrap_function(draw_fn);
     }
+
+    try script_engine.start();
 
     sapp.run(.{
         .init_cb = init,
@@ -116,6 +124,23 @@ pub fn main() !void {
         .logger = .{ .func = slog.func },
     });
 }
+
+var script_engine: ScriptEngine = undefined;
+const ScriptEngine = struct {
+    main_fn: *j.JanetFunction,
+    draw_fn: *j.JanetFunction,
+
+    fn start(self: ScriptEngine) !void {
+        const fiber = j.fiber(self.main_fn, 64, 0, null);
+        var out: janet.Janet = undefined;
+        const result = j.fiber_continue(fiber, j.wrap_nil(), &out);
+        if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
+            std.log.warn("Something went wrong!", .{});
+            j.stacktrace(fiber, out);
+            return error.ScriptEngineInitializationFailed;
+        }
+    }
+};
 
 // const cfuns = [_]janet.JanetReg{
 //     // janet.JanetReg{ .name = "c/start", .cfun = c_start, .documentation = ""},
