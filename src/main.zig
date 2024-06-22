@@ -8,6 +8,8 @@ const sapp = sokol.app;
 const sglue = sokol.glue;
 const shd = @import("shaders/main.glsl.zig");
 
+const zm = @import("zmath");
+
 const img = @embedFile("spritesheet.png");
 const Texture = @import("Texture.zig");
 
@@ -45,6 +47,14 @@ export fn init() void {
             // zig fmt: on
         }),
     });
+
+    const max_quads = 1024;
+    const max_verts = max_quads * 4;
+    const vert_buf = sg.makeBuffer(.{
+        .usage = .DYNAMIC,
+        .size = max_verts,
+    });
+    _ = vert_buf; // autofix
 
     // Let's texture it up!
     const texture = Texture.init(img);

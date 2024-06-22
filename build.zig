@@ -9,20 +9,15 @@ pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const dep_sokol = b.dependency("sokol", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    const dep_stb = b.dependency("stb", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    const dep_sokol = b.dependency("sokol", .{ .target = target, .optimize = optimize });
+    const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
+    const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_stb);
+        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_stb, dep_zmath);
     } else {
-        try buildNative(b, target, optimize, dep_sokol, dep_stb);
+        try buildNative(b, target, optimize, dep_sokol, dep_stb, dep_zmath);
     }
 }
 
@@ -32,6 +27,7 @@ fn buildNative(
     optimize: OptimizeMode,
     dep_sokol: *Build.Dependency,
     dep_stb: *Build.Dependency,
+    dep_zmath: *Build.Dependency,
 ) !void {
     const exe = b.addExecutable(.{
         .name = "game",
@@ -46,6 +42,9 @@ fn buildNative(
     // stb
     exe.addIncludePath(dep_stb.path("."));
     exe.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
+
+    // zmath
+    exe.root_module.addImport("zmath", dep_zmath.module("root"));
 
     b.installArtifact(exe);
 
@@ -66,6 +65,7 @@ fn buildWeb(
     dep_emsdk: *Build.Dependency,
     dep_sokol: *Build.Dependency,
     dep_stb: *Build.Dependency,
+    dep_zmath: *Build.Dependency,
 ) !void {
     const lib = b.addStaticLibrary(.{
         .name = "game",
@@ -80,6 +80,9 @@ fn buildWeb(
     // stb
     lib.addIncludePath(dep_stb.path("."));
     lib.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
+
+    // zmath
+    lib.root_module.addImport("zmath", dep_zmath.module("root"));
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
