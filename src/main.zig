@@ -43,9 +43,13 @@ export fn init() void {
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .data = sg.asRange(&[_]Vertex{
             // zig fmt: off
-            .{ .x = 0.0,  .y =  0.5, .z = 0.5, .color = 0xFF0000FF, .u = 0.0, .v = 0.0 },
-            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0x00FF00FF, .u = 1.0, .v = 0.0 },
-            .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0x0000FFFF, .u = 1.0, .v = 1.0 },
+            .{ .x = -0.5, .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
+            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
+            .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 },
+
+            .{ .x = -0.5, .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
+            .{ .x = 0.5,  .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 },
+            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
             // zig fmt: on
         }),
     });
@@ -58,6 +62,7 @@ export fn init() void {
     // create a shader and pipeline object
     var pip_desc: sg.PipelineDesc = .{
         .shader = sg.makeShader(shd.mainShaderDesc(sg.queryBackend())),
+        .cull_mode = .BACK,
     };
     pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
     pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
@@ -74,7 +79,7 @@ export fn frame() void {
 
     script_engine.draw() catch unreachable;
 
-    sg.draw(0, 3, 1);
+    sg.draw(0, 6, 1);
     sg.endPass();
     sg.commit();
 }
