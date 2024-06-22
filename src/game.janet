@@ -1,16 +1,5 @@
-# (defn start []
-#   (c/start)
+(defn main []
+  (print "Hello world!"))
 
-#   (while (not (c/should-close?))
-#     (c/render))
-
-#   (c/end))
-
-# (defn render []
-#   )
-
-(defn start []
-  (print "Starting")
-  )
-
-(print "Compiled")
+(defn draw []
+  (print "DRAW"))

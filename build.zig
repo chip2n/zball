@@ -25,8 +25,7 @@ pub fn build(b: *Build) void {
 fn buildNative(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, dep_sokol: *Build.Dependency) !void {
     const exe = b.addExecutable(.{
         .name = "game",
-        .root_source_file = b.path("src/main2.zig"),
-        // .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -75,7 +74,7 @@ fn buildWeb(
         .name = "game",
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("src/main2.zig"),
+        .root_source_file = b.path("src/main.zig"),
     });
     lib.root_module.addImport("sokol", dep_sokol.module("sokol"));
 

@@ -1,149 +1,160 @@
 const std = @import("std");
-const janet = @import("cjanet");
-
-const c = @cImport(
-    @cInclude("GLFW/glfw3.h"),
-);
+const assert = std.debug.assert;
 
 const sokol = @import("sokol");
+const slog = sokol.log;
 const sg = sokol.gfx;
+const sapp = sokol.app;
+const sglue = sokol.glue;
+const shd = @import("shaders/triangle.glsl.zig");
 
-const boot = @embedFile("boot.janet");
+const janet = @import("cjanet");
+// TODO
+const j = @import("janet.zig");
+const boot_image = @embedFile("out/game.jimage");
 
-var sample_count: i32 = 1;
-var window: *c.GLFWwindow = undefined;
-var vbuf: sg.Buffer = undefined;
-var shd: sg.Shader = undefined;
-var pip: sg.Pipeline = undefined;
-var bind: sg.Bindings = undefined;
+const emscripten = @cImport(
+    @cInclude("emscripten/console.h"),
+);
 
-pub fn main() !void {
-    if (janet.janet_init() != 0) {
-        return error.JanetInitializationFailed;
-    }
-    defer janet.janet_deinit();
+const state = struct {
+    var bind: sg.Bindings = .{};
+    var pip: sg.Pipeline = .{};
+};
 
-    const jenv = janet.janet_core_env(null) orelse {
-        return error.JanetInitializationFailed;
-    };
-
-    janet.janet_cfuns(jenv, "c", &cfuns);
-    var res: janet.Janet = undefined;
-    if (janet.janet_dostring(jenv, boot, null, &res) != 0) {
-        return error.JanetInitializationFailed;
-    }
-}
-
-fn c_start(argc: i32, argv: [*c]janet.Janet) callconv(.C) janet.Janet {
-    _ = argv; // autofix
-    janet.janet_fixarity(argc, 0);
-
-    if (c.glfwInit() == c.GLFW_FALSE) {
-        janet.janet_panic("Failed to initialize GLFW.");
-    }
-    c.glfwWindowHint(c.GLFW_COCOA_RETINA_FRAMEBUFFER, 0);
-    c.glfwWindowHint(c.GLFW_DEPTH_BITS, 0);
-    c.glfwWindowHint(c.GLFW_STENCIL_BITS, 0);
-    c.glfwWindowHint(c.GLFW_SAMPLES, if (sample_count == 1) 0 else sample_count);
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 1);
-    c.glfwWindowHint(c.GLFW_OPENGL_FORWARD_COMPAT, c.GLFW_TRUE);
-    c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
-
-    window = c.glfwCreateWindow(640, 480, "Game", null, null) orelse {
-        janet.janet_panic("Failed to initialize GLFW.");
-    };
-    c.glfwMakeContextCurrent(window);
-    c.glfwSwapInterval(1);
-
+export fn init() void {
     sg.setup(.{
-        .environment = .{
-            .defaults = .{
-                .color_format = .RGBA8,
-                .depth_format = .NONE,
-                .sample_count = sample_count,
-            },
-        },
+        .environment = sglue.environment(),
+        .logger = .{ .func = slog.func },
     });
 
-    const vertices = [_]f32{
-        // positions            // colors
-        0.0,  0.5, 0.5,     1.0, 0.0, 0.0, 1.0,
-        0.5, -0.5, 0.5,     0.0, 1.0, 0.0, 1.0,
-        -0.5, -0.5, 0.5,     0.0, 0.0, 1.0, 1.0
-    };
-    vbuf = sg.makeBuffer(.{
-        .data = sg.asRange(&vertices),
+    // create vertex buffer with triangle vertices
+    state.bind.vertex_buffers[0] = sg.makeBuffer(.{
+        .data = sg.asRange(&[_]f32{
+            // positions         colors
+            0.0,  0.5,  0.5, 1.0, 0.0, 0.0, 1.0,
+            0.5,  -0.5, 0.5, 0.0, 1.0, 0.0, 1.0,
+            -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, 1.0,
+        }),
     });
 
-    shd = sg.makeShader(.{
-        .vs = .{ .source = @embedFile("vert.glsl") },
-        .fs = .{ .source = @embedFile("frag.glsl") },
-    });
-
+    // create a shader and pipeline object
     var pip_desc: sg.PipelineDesc = .{
-        .shader = shd,
+        .shader = sg.makeShader(shd.triangleShaderDesc(sg.queryBackend())),
     };
-    pip_desc.layout.attrs[0]  = .{ .format = .FLOAT3 };
-    pip_desc.layout.attrs[1]  = .{ .format = .FLOAT4 };
-    pip = sg.makePipeline(pip_desc);
-
-    bind.vertex_buffers[0] = vbuf;
-
-    return janet.janet_wrap_nil();
+    pip_desc.layout.attrs[0].format = .FLOAT3;
+    pip_desc.layout.attrs[1].format = .FLOAT4;
+    state.pip = sg.makePipeline(pip_desc);
 }
 
-fn c_end(argc: i32, argv: [*c]janet.Janet) callconv(.C) janet.Janet {
-    _ = argv; // autofix
-    janet.janet_fixarity(argc, 0);
+export fn frame() void {
+    // default pass-action clears to grey
+    sg.beginPass(.{ .swapchain = sglue.swapchain() });
+    sg.applyPipeline(state.pip);
+    sg.applyBindings(state.bind);
 
-    sg.shutdown();
-    c.glfwTerminate();
+    script_engine.draw() catch unreachable;
 
-    return janet.janet_wrap_nil();
-}
-
-fn c_should_close(argc: i32, argv: [*c]janet.Janet) callconv(.C) janet.Janet {
-    _ = argv; // autofix
-    janet.janet_fixarity(argc, 0);
-
-    return janet.janet_wrap_boolean(c.glfwWindowShouldClose(window));
-}
-
-fn c_render(argc: i32, argv: [*c]janet.Janet) callconv(.C) janet.Janet {
-    _ = argv; // autofix
-    janet.janet_fixarity(argc, 0);
-
-    var width: i32 = undefined;
-    var height: i32 = undefined;
-    c.glfwGetFramebufferSize(window, &width, &height);
-    const chain: sg.Swapchain = .{
-        .width = width,
-        .height = height,
-        .sample_count = sample_count,
-        .color_format = .RGBA8,
-        .depth_format = .NONE,
-        .gl = .{
-            // we just assume here that the GL framebuffer is always 0
-            .framebuffer = 0,
-        }
-    };
-    sg.beginPass(.{ .swapchain = chain });
-    sg.applyPipeline(pip);
-    sg.applyBindings(bind);
     sg.draw(0, 3, 1);
     sg.endPass();
     sg.commit();
-
-    c.glfwSwapBuffers(window);
-    c.glfwPollEvents();
-    return janet.janet_wrap_nil();
 }
 
-const cfuns = [_]janet.JanetReg{
-    janet.JanetReg{ .name = "c/start", .cfun = c_start, .documentation = ""},
-    janet.JanetReg{ .name = "c/end", .cfun = c_end, .documentation = ""},
-    janet.JanetReg{ .name = "c/should-close?", .cfun = c_should_close, .documentation = ""},
-    janet.JanetReg{ .name = "c/render", .cfun = c_render, .documentation = ""},
-    janet.JanetReg{ .name = null, .cfun = null, .documentation = null},
+export fn cleanup() void {
+    sg.shutdown();
+    script_engine.deinit();
+}
+
+pub fn main() !void {
+    script_engine = try ScriptEngine.init();
+    errdefer script_engine.deinit();
+
+    try script_engine.start();
+
+    sapp.run(.{
+        .init_cb = init,
+        .frame_cb = frame,
+        .cleanup_cb = cleanup,
+        .width = 640,
+        .height = 480,
+        .icon = .{ .sokol_default = true },
+        .window_title = "triangle.zig",
+        .logger = .{ .func = slog.func },
+    });
+}
+
+var script_engine: ScriptEngine = undefined;
+const ScriptEngine = struct {
+    const Self = @This();
+
+    main_fn: *j.JanetFunction,
+    draw_fn: *j.JanetFunction,
+
+    pub fn init() !Self {
+        if (j.init() != 0) {
+            return error.JanetInitializationFailed;
+        }
+        errdefer j.deinit();
+
+        const jenv = j.core_env(null) orelse {
+            return error.JanetInitializationFailed;
+        };
+        const lookup = j.env_lookup(jenv);
+
+        const handle = j.gclock();
+        defer j.gcunlock(handle);
+
+        const marsh_out = j.unmarshal(boot_image, boot_image.len, 0, lookup, null);
+        const tbl = j.unwrap_table(marsh_out);
+
+        const main_fn = j.resolveBindingDef(tbl, j.csymbol("main")) catch |err| {
+            switch (err) {
+                error.JanetBindingDefNotFound => {
+                    std.log.err("Need to define a main function in your script.", .{});
+                    return error.ScriptInitializationFailed;
+                },
+                else => return err,
+            }
+        };
+
+        const draw_fn = j.resolveBindingDef(tbl, j.csymbol("draw")) catch |err| {
+            switch (err) {
+                error.JanetBindingDefNotFound => {
+                    std.log.err("Need to define a draw function in your script.", .{});
+                    return error.ScriptInitializationFailed;
+                },
+                else => return err,
+            }
+        };
+
+        return .{
+            .main_fn = j.unwrap_function(main_fn),
+            .draw_fn = j.unwrap_function(draw_fn),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        _ = self;
+        j.deinit();
+    }
+
+    pub fn start(self: Self) !void {
+        const fiber = j.fiber(self.main_fn, 64, 0, null);
+        var out: j.Janet = undefined;
+        const result = j.fiber_continue(fiber, j.wrap_nil(), &out);
+        if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
+            std.log.warn("Something went wrong!", .{});
+            j.stacktrace(fiber, out);
+            return error.ScriptEngineInitializationFailed;
+        }
+    }
+
+    pub fn draw(self: Self) !void {
+        var out: j.Janet = undefined;
+        const result = j.pcall(self.draw_fn, 0, null, &out, null);
+        if (result != j.SIGNAL_OK and result != j.SIGNAL_EVENT) {
+            std.log.warn("Something went wrong!", .{});
+            return error.ScriptEngineDrawFailed;
+        }
+    }
 };
