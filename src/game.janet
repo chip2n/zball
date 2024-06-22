@@ -2,4 +2,5 @@
   (print "Hello world!"))
 
 (defn draw []
-  (print "DRAW"))
+  # (print "DRAW")
+  )

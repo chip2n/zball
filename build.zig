@@ -13,16 +13,26 @@ pub fn build(b: *Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const dep_stb = b.dependency("stb", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol);
+        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_stb);
     } else {
-        try buildNative(b, target, optimize, dep_sokol);
+        try buildNative(b, target, optimize, dep_sokol, dep_stb);
     }
 }
 
-fn buildNative(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, dep_sokol: *Build.Dependency) !void {
+fn buildNative(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    optimize: OptimizeMode,
+    dep_sokol: *Build.Dependency,
+    dep_stb: *Build.Dependency,
+) !void {
     const exe = b.addExecutable(.{
         .name = "game",
         .root_source_file = b.path("src/main.zig"),
@@ -51,6 +61,9 @@ fn buildNative(b: *Build, target: Build.ResolvedTarget, optimize: OptimizeMode, 
 
     b.installFile("src/game.janet", "bin/game.janet");
 
+    exe.addIncludePath(dep_stb.path("."));
+    exe.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
+
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.setCwd(b.path("zig-out/bin/"));
     run_cmd.step.dependOn(b.getInstallStep());
@@ -69,6 +82,7 @@ fn buildWeb(
     optimize: OptimizeMode,
     dep_emsdk: *Build.Dependency,
     dep_sokol: *Build.Dependency,
+    dep_stb: *Build.Dependency,
 ) !void {
     const lib = b.addStaticLibrary(.{
         .name = "game",
@@ -100,6 +114,9 @@ fn buildWeb(
     lib.addCSourceFile(.{ .file = b.path("janet.c"), .flags = &.{"-flto"} });
 
     b.installFile("src/game.janet", "web/game.janet");
+
+    lib.addIncludePath(dep_stb.path("."));
+    lib.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
 
     const emsdk = dep_sokol.builder.dependency("emsdk", .{});
     const link_step = try sokol.emLinkStep(b, .{
