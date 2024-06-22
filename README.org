@@ -19,5 +19,5 @@ gcc -I. -lGL -lglfw -o example2 example2.c glfw_glue.c
 ** Compiling shaders
 
 #+begin_src bash
-~/dev/sokol-tools-bin/bin/linux/sokol-shdc --input sokol/triangle-sapp.glsl --output sokol/example.glsl.h --slang glsl430
+~/dev/sokol-tools-bin/bin/linux/sokol-shdc --input src/shaders/main.glsl --output src/shaders/main.glsl.zig --slang glsl410:metal_macos:hlsl5:glsl300es:wgsl --format=sokol_zig
 #+end_src

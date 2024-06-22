@@ -2,11 +2,13 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const sokol = @import("sokol");
-const slog = sokol.log;
 const sg = sokol.gfx;
+const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
-const shd = @import("shaders/triangle.glsl.zig");
+const shd = @import("shaders/main.glsl.zig");
+
+const Texture = @import("Texture.zig");
 
 const janet = @import("cjanet");
 // TODO
@@ -22,6 +24,15 @@ const state = struct {
     var pip: sg.Pipeline = .{};
 };
 
+const Vertex = extern struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    color: u32,
+    u: f32,
+    v: f32,
+};
+
 export fn init() void {
     sg.setup(.{
         .environment = sglue.environment(),
@@ -30,20 +41,28 @@ export fn init() void {
 
     // create vertex buffer with triangle vertices
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
-        .data = sg.asRange(&[_]f32{
-            // positions         colors
-            0.0,  0.5,  0.5, 1.0, 0.0, 0.0, 1.0,
-            0.5,  -0.5, 0.5, 0.0, 1.0, 0.0, 1.0,
-            -0.5, -0.5, 0.5, 0.0, 0.0, 1.0, 1.0,
+        .data = sg.asRange(&[_]Vertex{
+            // zig fmt: off
+            .{ .x = 0.0,  .y =  0.5, .z = 0.5, .color = 0xFF0000FF, .u = 0.0, .v = 0.0 },
+            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0x00FF00FF, .u = 1.0, .v = 0.0 },
+            .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0x0000FFFF, .u = 1.0, .v = 1.0 },
+            // zig fmt: on
         }),
     });
 
+    // Let's texture it up!
+    const texture = Texture.init();
+    state.bind.fs.images[shd.SLOT_tex] = sg.makeImage(texture.desc);
+    state.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
+
     // create a shader and pipeline object
     var pip_desc: sg.PipelineDesc = .{
-        .shader = sg.makeShader(shd.triangleShaderDesc(sg.queryBackend())),
+        .shader = sg.makeShader(shd.mainShaderDesc(sg.queryBackend())),
     };
-    pip_desc.layout.attrs[0].format = .FLOAT3;
-    pip_desc.layout.attrs[1].format = .FLOAT4;
+    pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
+    pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
+    pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
+
     state.pip = sg.makePipeline(pip_desc);
 }
 
@@ -78,7 +97,7 @@ pub fn main() !void {
         .width = 640,
         .height = 480,
         .icon = .{ .sokol_default = true },
-        .window_title = "triangle.zig",
+        .window_title = "game",
         .logger = .{ .func = slog.func },
     });
 }
