@@ -21,7 +21,7 @@ const max_quads = 1024;
 const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
-const viewport_size: [2]i32 = .{ 160, 80 };
+const viewport_size: [2]i32 = .{ 160, 120 };
 
 const state = struct {
     const offscreen = struct {
@@ -43,7 +43,7 @@ const state = struct {
     };
 
     var texture: Texture = undefined;
-    var pos: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
+    var pos: [2]f32 = .{ 10, 10 };
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
 
     var window_size: [2]i32 = initial_screen_size;
@@ -117,7 +117,7 @@ export fn init() void {
     // a vertex buffer to render a fullscreen quad
     const quad_vbuf = sg.makeBuffer(.{
         .usage = .IMMUTABLE,
-        .data = sg.asRange(&[_]f32{ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 }),
+        .data = sg.asRange(&[_]f32{ -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5 }),
     });
 
     // shader and pipeline object to render a fullscreen quad which composes
@@ -289,16 +289,15 @@ fn computeFSQParams() shd.VsFsqParams {
     const height: f32 = @floatFromInt(state.window_size[1]);
     const aspect = width / height;
 
-    const viewport_aspect = viewport_size[0] / viewport_size[1];
-    var w: f32 = 2;
-    var h: f32 = 2;
+    const vw: f32 = @floatFromInt(viewport_size[0]);
+    const vh: f32 = @floatFromInt(viewport_size[1]);
+    const viewport_aspect = vw / vh;
 
+    var model = zm.scaling(2, (2 / viewport_aspect) * aspect, 1);
     if (aspect > viewport_aspect) {
-        w = 2 / (viewport_aspect / aspect);
-    } else {
-        h = 2 * viewport_aspect / aspect;
+        model = zm.scaling((2 * viewport_aspect) / aspect, 2, 1);
     }
-    return shd.VsFsqParams{ .mvp = zm.orthographicLh(w, h, -10, 10) };
+    return shd.VsFsqParams{ .mvp = model };
 }
 
 // helper function to create or re-create render target images and pass object for offscreen rendering

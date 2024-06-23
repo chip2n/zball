@@ -48,7 +48,7 @@ in vec2 pos;
 out vec2 uv;
 
 void main() {
-    gl_Position = mvp * vec4(pos*2.0-1.0, 0.5, 1.0);
+    gl_Position = mvp * vec4(pos, 0, 1);
     uv = pos;
 }
 @end
