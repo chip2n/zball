@@ -21,6 +21,7 @@ const max_quads = 1024;
 const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
+const viewport_size: [2]i32 = .{ 160, 80 };
 
 const state = struct {
     const offscreen = struct {
@@ -42,12 +43,10 @@ const state = struct {
     };
 
     var texture: Texture = undefined;
-    var pos: [2]f32 = .{ 0, 0 };
-    var camera: [2]f32 = .{ initial_screen_size[0] / 2, initial_screen_size[1] / 2 };
+    var pos: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
+    var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
 
     var window_size: [2]i32 = initial_screen_size;
-    var viewport_size: [2]i32 = initial_screen_size;
-    var viewport_aspect: f32 = @as(f32, @floatFromInt(initial_screen_size[0])) / initial_screen_size[1];
 };
 
 const Vertex = extern struct {
@@ -69,7 +68,6 @@ export fn init() void {
     });
 
     // setup pass action for default render pass
-    // state.default.pass_action.colors[0] = .{ .load_action = .DONTCARE };
     state.default.pass_action.colors[0] = .{
         .load_action = .CLEAR,
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
@@ -91,7 +89,7 @@ export fn init() void {
 
     // setup the offscreen render pass resources
     // this will also be called when the window resizes
-    createOffscreenAttachments(sapp.width(), sapp.height());
+    createOffscreenAttachments(viewport_size[0], viewport_size[1]);
 
     state.texture = Texture.init(img);
 
@@ -133,8 +131,8 @@ export fn init() void {
 
     // a sampler to sample the offscreen render target as texture
     const smp = sg.makeSampler(.{
-        .min_filter = .LINEAR,
-        .mag_filter = .LINEAR,
+        .min_filter = .NEAREST,
+        .mag_filter = .NEAREST,
         .wrap_u = .CLAMP_TO_EDGE,
         .wrap_v = .CLAMP_TO_EDGE,
     });
@@ -193,7 +191,7 @@ export fn frame() void {
     quad(.{
         .buf = &verts,
         .src = .{ .x = 0, .y = 0, .w = 16, .h = 8 },
-        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16 * 4, .h = 8 * 4 },
+        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16, .h = 8 },
         .tw = @floatFromInt(state.texture.desc.width),
         .th = @floatFromInt(state.texture.desc.height),
     });
@@ -211,7 +209,6 @@ export fn frame() void {
     ig.igSetNextWindowSize(.{ .x = 400, .y = 100 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Viewport: %d %d", state.viewport_size[0], state.viewport_size[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
     _ = ig.igDragFloat2("Pos", &state.pos, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
     ig.igEnd();
@@ -247,7 +244,7 @@ export fn event(ev: [*c]const sapp.Event) void {
             const width = ev.*.window_width;
             const height = ev.*.window_height;
             state.window_size = .{ width, height };
-            createOffscreenAttachments(ev.*.framebuffer_width, ev.*.framebuffer_height);
+            createOffscreenAttachments(viewport_size[0], viewport_size[1]);
         },
         else => {},
     }
@@ -278,8 +275,8 @@ fn computeVsParams() shd.VsParams {
     const model = zm.identity();
     const view = zm.translation(-state.camera[0], -state.camera[1], 0);
     const proj = zm.orthographicLh(
-        @floatFromInt(state.viewport_size[0]),
-        @floatFromInt(state.viewport_size[1]),
+        @floatFromInt(viewport_size[0]),
+        @floatFromInt(viewport_size[1]),
         -10,
         10,
     );
@@ -290,15 +287,16 @@ fn computeVsParams() shd.VsParams {
 fn computeFSQParams() shd.VsFsqParams {
     const width: f32 = @floatFromInt(state.window_size[0]);
     const height: f32 = @floatFromInt(state.window_size[1]);
-    const aspect = height / width;
+    const aspect = width / height;
 
+    const viewport_aspect = viewport_size[0] / viewport_size[1];
     var w: f32 = 2;
     var h: f32 = 2;
 
-    if (aspect > 1.0) {
-        h = 2 * aspect;
+    if (aspect > viewport_aspect) {
+        w = 2 / (viewport_aspect / aspect);
     } else {
-        w = 2 / aspect;
+        h = 2 * viewport_aspect / aspect;
     }
     return shd.VsFsqParams{ .mvp = zm.orthographicLh(w, h, -10, 10) };
 }
