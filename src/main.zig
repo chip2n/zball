@@ -72,13 +72,13 @@ export fn init() void {
     };
 }
 
-fn quad(buf: []Vertex, x: f32, y: f32, offset: usize) void {
-    buf[offset + 0] = .{ .x = x - 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 1] = .{ .x = x + 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
-    buf[offset + 2] = .{ .x = x - 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
-    buf[offset + 3] = .{ .x = x - 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 4] = .{ .x = x + 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
-    buf[offset + 5] = .{ .x = x + 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+fn quad(buf: []Vertex, x: f32, y: f32, w: f32, h: f32, offset: usize) void {
+    buf[offset + 0] = .{ .x = x - w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 1] = .{ .x = x + w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+    buf[offset + 2] = .{ .x = x - w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
+    buf[offset + 3] = .{ .x = x - w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 4] = .{ .x = x + w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
+    buf[offset + 5] = .{ .x = x + w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
 }
 
 export fn frame() void {
@@ -86,7 +86,7 @@ export fn frame() void {
     state.pos += @floatCast(dt * 1);
 
     var verts: [6]Vertex = undefined;
-    quad(&verts, 0.0, 0.2, 0);
+    quad(&verts, 0.0, 0.0, 640, 480, 0);
     sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
@@ -104,10 +104,12 @@ export fn frame() void {
     ig.igEnd();
     //=== UI CODE ENDS HERE
 
+    const vs_params = computeVsParams();
     sg.beginPass(.{ .action = state.pass_action, .swapchain = sglue.swapchain() });
 
     sg.applyPipeline(state.pip);
     sg.applyBindings(state.bind);
+    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
     sg.draw(0, 6, 1);
 
     simgui.render();
@@ -137,4 +139,12 @@ pub fn main() !void {
         .window_title = "game",
         .logger = .{ .func = slog.func },
     });
+}
+
+fn computeVsParams() shd.VsParams {
+    const model = zm.identity();
+    const view = zm.identity();
+    const proj = zm.orthographicRh(640, 480, 0.1, 10.0);
+    const mvp = zm.mul(zm.mul(proj, view), model);
+    return shd.VsParams{ .mvp = mvp };
 }
