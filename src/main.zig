@@ -18,7 +18,7 @@ const Texture = @import("Texture.zig");
 const max_quads = 1024;
 const max_verts = max_quads * 4;
 
-const screen_size = .{ 640, 480 };
+const initial_screen_size = .{ 640, 480 };
 
 const state = struct {
     var bind: sg.Bindings = .{};
@@ -27,7 +27,9 @@ const state = struct {
 
     var texture: Texture = undefined;
     var pos: [2]f32 = .{ 0, 0 };
-    var camera: [2]f32 = .{ screen_size[0] / 2, screen_size[1] / 2 };
+    var camera: [2]f32 = .{ initial_screen_size[0] / 2, initial_screen_size[1] / 2 };
+
+    var window_size: [2]i32 = initial_screen_size;
 };
 
 const Vertex = extern struct {
@@ -162,6 +164,15 @@ export fn frame() void {
 }
 
 export fn event(ev: [*c]const sapp.Event) void {
+    switch (ev.*.type) {
+        .RESIZED => {
+            const width = ev.*.window_width;
+            const height = ev.*.window_height;
+            state.window_size = .{ width, height };
+        },
+        else => {},
+    }
+
     // forward input events to sokol-imgui
     _ = simgui.handleEvent(ev.*);
 }
@@ -176,8 +187,8 @@ pub fn main() !void {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = event,
-        .width = screen_size[0],
-        .height = screen_size[1],
+        .width = initial_screen_size[0],
+        .height = initial_screen_size[1],
         .icon = .{ .sokol_default = true },
         .window_title = "game",
         .logger = .{ .func = slog.func },
@@ -187,7 +198,12 @@ pub fn main() !void {
 fn computeVsParams() shd.VsParams {
     const model = zm.identity();
     const view = zm.translation(-state.camera[0], -state.camera[1], 0);
-    var proj = zm.orthographicLh(640, 480, -10, 10);
+    var proj = zm.orthographicLh(
+        @floatFromInt(state.window_size[0]),
+        @floatFromInt(state.window_size[1]),
+        -10,
+        10,
+    );
     // flip so y-axis point down
     proj = zm.mul(zm.scaling(1, -1, 1), proj);
     const mvp = zm.mul(model, zm.mul(view, proj));
