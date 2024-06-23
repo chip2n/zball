@@ -14,6 +14,7 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .with_sokol_imgui = true,
     });
+    const dep_sokol_tools = b.dependency("sokol_tools", .{ .target = target, .optimize = optimize });
     const dep_cimgui = b.dependency("cimgui", .{ .target = target, .optimize = optimize });
     // inject the cimgui header search path into the sokol C library compile step
     const cimgui_root = dep_cimgui.namedWriteFiles("cimgui").getDirectory();
@@ -21,11 +22,23 @@ pub fn build(b: *Build) void {
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
+    // Shader compilation step
+    const shdc = dep_sokol_tools.path("bin/linux/sokol-shdc").getPath(b);
+    const shader_cmd = b.addSystemCommand(&.{
+        shdc,
+        "--input=src/shaders/main.glsl",
+        "--output=src/shaders/main.glsl.zig",
+        "--slang=glsl410:metal_macos:hlsl5:glsl300es:wgsl",
+        "--format=sokol_zig",
+    });
+
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
+        const lib = try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
+        lib.step.dependOn(&shader_cmd.step);
     } else {
-        try buildNative(b, target, optimize, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
+        const exe = try buildNative(b, target, optimize, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
+        exe.step.dependOn(&shader_cmd.step);
     }
 }
 
@@ -37,7 +50,7 @@ fn buildNative(
     dep_cimgui: *Build.Dependency,
     dep_stb: *Build.Dependency,
     dep_zmath: *Build.Dependency,
-) !void {
+) !*Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "game",
         .root_source_file = b.path("src/main.zig"),
@@ -68,6 +81,8 @@ fn buildNative(
     }
     const run_step = b.step("run", "Run the game");
     run_step.dependOn(&run_cmd.step);
+
+    return exe;
 }
 
 fn buildWeb(
@@ -79,7 +94,7 @@ fn buildWeb(
     dep_cimgui: *Build.Dependency,
     dep_stb: *Build.Dependency,
     dep_zmath: *Build.Dependency,
-) !void {
+) !*Build.Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "game",
         .target = target,
@@ -124,6 +139,8 @@ fn buildWeb(
     const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
     run.step.dependOn(&link_step.step);
     b.step("run", "Run the game").dependOn(&run.step);
+
+    return lib;
 }
 
 fn emSdkLazyPath(b: *Build, emsdk: *Build.Dependency, subPaths: []const []const u8) Build.LazyPath {

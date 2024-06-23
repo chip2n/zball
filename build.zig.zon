@@ -10,6 +10,10 @@
             .url = "git+https://github.com/floooh/sokol-zig.git#7b7d4bafe6176baca152b8fce935f4cac5a90ba0",
             .hash = "1220ce851df99fd0ddeb6f20e75cdd35dd4e24404f7de7a2aa4cc4f37de58f039cab",
         },
+        .sokol_tools = .{
+            .url = "git+https://github.com/floooh/sokol-tools-bin.git#da7dd818362cfb0af35ed4189974c30ccebca9cf",
+            .hash = "12203342eb62364e0a4b295e16854e8add50df707b54653e083801df1099ad1a8e3b",
+        },
         .zmath = .{ .path = "libs/zmath" },
         .cimgui = .{ .path = "libs/cimgui" },
         .emsdk = .{
