@@ -6,16 +6,24 @@ const sg = sokol.gfx;
 const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
+const simgui = sokol.imgui;
 const shd = @import("shaders/main.glsl.zig");
 
+const ig = @import("cimgui");
 const zm = @import("zmath");
 
 const img = @embedFile("spritesheet.png");
 const Texture = @import("Texture.zig");
 
+const max_quads = 1024;
+const max_verts = max_quads * 4;
+
 const state = struct {
     var bind: sg.Bindings = .{};
     var pip: sg.Pipeline = .{};
+    var pass_action: sg.PassAction = .{};
+
+    var pos: f32 = 0.0;
 };
 
 const Vertex = extern struct {
@@ -32,29 +40,14 @@ export fn init() void {
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
-
-    // create vertex buffer with triangle vertices
-    state.bind.vertex_buffers[0] = sg.makeBuffer(.{
-        .data = sg.asRange(&[_]Vertex{
-            // zig fmt: off
-            .{ .x = -0.5, .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
-            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
-            .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 },
-
-            .{ .x = -0.5, .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
-            .{ .x = 0.5,  .y =  0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 },
-            .{ .x = 0.5,  .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
-            // zig fmt: on
-        }),
+    simgui.setup(.{
+        .logger = .{ .func = slog.func },
     });
 
-    const max_quads = 1024;
-    const max_verts = max_quads * 4;
-    const vert_buf = sg.makeBuffer(.{
+    state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .usage = .DYNAMIC,
         .size = max_verts,
     });
-    _ = vert_buf; // autofix
 
     // Let's texture it up!
     const texture = Texture.init(img);
@@ -71,17 +64,59 @@ export fn init() void {
     pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
 
     state.pip = sg.makePipeline(pip_desc);
+
+    // initial clear color
+    state.pass_action.colors[0] = .{
+        .load_action = .CLEAR,
+        .clear_value = .{ .r = 0.0, .g = 0.5, .b = 1.0, .a = 1.0 },
+    };
 }
 
 export fn frame() void {
-    // default pass-action clears to grey
-    sg.beginPass(.{ .swapchain = sglue.swapchain() });
+    const dt: f64 = sapp.frameDuration();
+    state.pos += @floatCast(dt * 1);
+
+    const verts = [_]Vertex{
+        .{ .x = -0.5 + state.pos, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
+        .{ .x = 0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
+        .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 },
+
+        .{ .x = -0.5, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
+        .{ .x = 0.5, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 },
+        .{ .x = 0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
+    };
+    sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
+
+    simgui.newFrame(.{
+        .width = sapp.width(),
+        .height = sapp.height(),
+        .delta_time = sapp.frameDuration(),
+        .dpi_scale = sapp.dpiScale(),
+    });
+
+    //=== UI CODE STARTS HERE
+    ig.igSetNextWindowPos(.{ .x = 10, .y = 10 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
+    ig.igSetNextWindowSize(.{ .x = 400, .y = 100 }, ig.ImGuiCond_Once);
+    _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
+    _ = ig.igColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ig.ImGuiColorEditFlags_None);
+    ig.igEnd();
+    //=== UI CODE ENDS HERE
+
+    sg.beginPass(.{ .action = state.pass_action, .swapchain = sglue.swapchain() });
+
     sg.applyPipeline(state.pip);
     sg.applyBindings(state.bind);
-
     sg.draw(0, 6, 1);
+
+    simgui.render();
+
     sg.endPass();
     sg.commit();
+}
+
+export fn event(ev: [*c]const sapp.Event) void {
+    // forward input events to sokol-imgui
+    _ = simgui.handleEvent(ev.*);
 }
 
 export fn cleanup() void {
@@ -93,6 +128,7 @@ pub fn main() !void {
         .init_cb = init,
         .frame_cb = frame,
         .cleanup_cb = cleanup,
+        .event_cb = event,
         .width = 640,
         .height = 480,
         .icon = .{ .sokol_default = true },

@@ -9,15 +9,23 @@ pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const dep_sokol = b.dependency("sokol", .{ .target = target, .optimize = optimize });
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+        .with_sokol_imgui = true,
+    });
+    const dep_cimgui = b.dependency("cimgui", .{ .target = target, .optimize = optimize });
+    // inject the cimgui header search path into the sokol C library compile step
+    const cimgui_root = dep_cimgui.namedWriteFiles("cimgui").getDirectory();
+    dep_sokol.artifact("sokol_clib").addIncludePath(cimgui_root);
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_stb, dep_zmath);
+        try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
     } else {
-        try buildNative(b, target, optimize, dep_sokol, dep_stb, dep_zmath);
+        try buildNative(b, target, optimize, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
     }
 }
 
@@ -26,6 +34,7 @@ fn buildNative(
     target: Build.ResolvedTarget,
     optimize: OptimizeMode,
     dep_sokol: *Build.Dependency,
+    dep_cimgui: *Build.Dependency,
     dep_stb: *Build.Dependency,
     dep_zmath: *Build.Dependency,
 ) !void {
@@ -38,6 +47,9 @@ fn buildNative(
 
     // sokol
     exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
+
+    // imgui
+    exe.root_module.addImport("cimgui", dep_cimgui.module("cimgui"));
 
     // stb
     exe.addIncludePath(dep_stb.path("."));
@@ -64,6 +76,7 @@ fn buildWeb(
     optimize: OptimizeMode,
     dep_emsdk: *Build.Dependency,
     dep_sokol: *Build.Dependency,
+    dep_cimgui: *Build.Dependency,
     dep_stb: *Build.Dependency,
     dep_zmath: *Build.Dependency,
 ) !void {
@@ -77,6 +90,9 @@ fn buildWeb(
     // sokol
     lib.root_module.addImport("sokol", dep_sokol.module("sokol"));
 
+    // imgui
+    lib.root_module.addImport("cimgui", dep_cimgui.module("cimgui"));
+
     // stb
     lib.addIncludePath(dep_stb.path("."));
     lib.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
@@ -86,6 +102,12 @@ fn buildWeb(
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
+
+    // need to inject the Emscripten system header include path into
+    // the cimgui C library otherwise the C/C++ code won't find
+    // C stdlib headers
+    dep_cimgui.artifact("cimgui_clib").addSystemIncludePath(emsdk_sysroot);
+
     const emsdk = dep_sokol.builder.dependency("emsdk", .{});
     const link_step = try sokol.emLinkStep(b, .{
         .lib_main = lib,
