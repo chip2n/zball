@@ -198,7 +198,7 @@ export fn frame() void {
             quad(.{
                 .buf = &verts,
                 .offset = (y * num_bricks + x) * 6,
-                .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
+                .src = .{ .x = fy * brick_w, .y = 0, .w = brick_w, .h = brick_h },
                 .dst = .{ .x = fx * brick_w, .y = fy * brick_h, .w = brick_w, .h = brick_h },
                 .tw = @floatFromInt(state.texture.desc.width),
                 .th = @floatFromInt(state.texture.desc.height),
