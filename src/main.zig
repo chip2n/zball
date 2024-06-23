@@ -18,12 +18,15 @@ const Texture = @import("Texture.zig");
 const max_quads = 1024;
 const max_verts = max_quads * 4;
 
+const screen_size = .{ 640, 480 };
+
 const state = struct {
     var bind: sg.Bindings = .{};
     var pip: sg.Pipeline = .{};
     var pass_action: sg.PassAction = .{};
 
     var pos: f32 = 0.0;
+    var camera: [2]f32 = .{ screen_size[0] / 2, screen_size[1] / 2 };
 };
 
 const Vertex = extern struct {
@@ -73,12 +76,12 @@ export fn init() void {
 }
 
 fn quad(buf: []Vertex, x: f32, y: f32, w: f32, h: f32, offset: usize) void {
-    buf[offset + 0] = .{ .x = x - w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 1] = .{ .x = x + w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
-    buf[offset + 2] = .{ .x = x - w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
-    buf[offset + 3] = .{ .x = x - w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 4] = .{ .x = x + w / 2, .y = y + h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
-    buf[offset + 5] = .{ .x = x + w / 2, .y = y - h / 2, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+    buf[offset + 0] = .{ .x = x, .y = y + h, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 1] = .{ .x = x + w, .y = y, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+    buf[offset + 2] = .{ .x = x, .y = y, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
+    buf[offset + 3] = .{ .x = x, .y = y + h, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 4] = .{ .x = x + w, .y = y + h, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
+    buf[offset + 5] = .{ .x = x + w, .y = y, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
 }
 
 export fn frame() void {
@@ -86,7 +89,7 @@ export fn frame() void {
     state.pos += @floatCast(dt * 1);
 
     var verts: [6]Vertex = undefined;
-    quad(&verts, 0.0, 0.0, 640, 480, 0);
+    quad(&verts, state.pos, 0.0, 640, 480, 0);
     sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
@@ -101,6 +104,7 @@ export fn frame() void {
     ig.igSetNextWindowSize(.{ .x = 400, .y = 100 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igColorEdit3("Background", &state.pass_action.colors[0].clear_value.r, ig.ImGuiColorEditFlags_None);
+    _ = ig.igDragFloat("Pos", &state.pos, 0.2, 0.0, 100.0, "format", ig.ImGuiSliderFlags_None);
     ig.igEnd();
     //=== UI CODE ENDS HERE
 
@@ -133,8 +137,8 @@ pub fn main() !void {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = event,
-        .width = 640,
-        .height = 480,
+        .width = screen_size[0],
+        .height = screen_size[1],
         .icon = .{ .sokol_default = true },
         .window_title = "game",
         .logger = .{ .func = slog.func },
@@ -143,8 +147,8 @@ pub fn main() !void {
 
 fn computeVsParams() shd.VsParams {
     const model = zm.identity();
-    const view = zm.identity();
+    const view = zm.translation(-state.camera[0], -state.camera[1], 0);
     const proj = zm.orthographicRh(640, 480, 0.1, 10.0);
-    const mvp = zm.mul(zm.mul(proj, view), model);
+    const mvp = zm.mul(model, zm.mul(view, proj));
     return shd.VsParams{ .mvp = mvp };
 }
