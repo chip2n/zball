@@ -72,19 +72,21 @@ export fn init() void {
     };
 }
 
+fn quad(buf: []Vertex, x: f32, y: f32, offset: usize) void {
+    buf[offset + 0] = .{ .x = x - 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 1] = .{ .x = x + 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+    buf[offset + 2] = .{ .x = x - 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
+    buf[offset + 3] = .{ .x = x - 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
+    buf[offset + 4] = .{ .x = x + 0.5, .y = y + 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
+    buf[offset + 5] = .{ .x = x + 0.5, .y = y - 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+}
+
 export fn frame() void {
     const dt: f64 = sapp.frameDuration();
     state.pos += @floatCast(dt * 1);
 
-    const verts = [_]Vertex{
-        .{ .x = -0.5 + state.pos, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
-        .{ .x = 0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
-        .{ .x = -0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 },
-
-        .{ .x = -0.5, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 },
-        .{ .x = 0.5, .y = 0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 },
-        .{ .x = 0.5, .y = -0.5, .z = 0.5, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 },
-    };
+    var verts: [6]Vertex = undefined;
+    quad(&verts, 0.0, 0.2, 0);
     sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
