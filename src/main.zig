@@ -18,7 +18,7 @@ const Texture = @import("Texture.zig");
 const offscreen_sample_count = 1;
 
 const max_quads = 1024;
-const max_verts = max_quads * 4;
+const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
 
@@ -84,7 +84,10 @@ export fn init() void {
         .clear_value = .{ .r = 0.25, .g = 0, .b = 0, .a = 1 },
     };
 
-    state.offscreen.bind.vertex_buffers[0] = sg.makeBuffer(.{ .usage = .DYNAMIC, .size = max_verts }); // TODO size correct?
+    state.offscreen.bind.vertex_buffers[0] = sg.makeBuffer(.{
+        .usage = .DYNAMIC,
+        .size = max_verts * @sizeOf(Vertex),
+    });
 
     // setup the offscreen render pass resources
     // this will also be called when the window resizes
