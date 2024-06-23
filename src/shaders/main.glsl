@@ -34,3 +34,33 @@ void main() {
 @end
 
 @program main vs fs
+
+// shaders for rendering a fullscreen-quad in default pass
+@vs vs_fsq
+@glsl_options flip_vert_y
+
+in vec2 pos;
+
+out vec2 uv;
+
+void main() {
+    gl_Position = vec4(pos*2.0-1.0, 0.5, 1.0);
+    uv = pos;
+}
+@end
+
+@fs fs_fsq
+uniform texture2D tex;
+uniform sampler smp;
+
+in vec2 uv;
+
+out vec4 frag_color;
+
+void main() {
+    vec3 c = texture(sampler2D(tex, smp), uv).xyz;
+    frag_color = vec4(c, 1.0);
+}
+@end
+
+@program fsq vs_fsq fs_fsq
