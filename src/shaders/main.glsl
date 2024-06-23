@@ -49,7 +49,7 @@ out vec2 uv;
 
 void main() {
     gl_Position = mvp * vec4(pos, 0, 1);
-    uv = pos;
+    uv = vec2(pos.x + 0.5, pos.y + 0.5);
 }
 @end
 
