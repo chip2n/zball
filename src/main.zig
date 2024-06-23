@@ -46,6 +46,8 @@ const state = struct {
     var camera: [2]f32 = .{ initial_screen_size[0] / 2, initial_screen_size[1] / 2 };
 
     var window_size: [2]i32 = initial_screen_size;
+    var viewport_size: [2]i32 = initial_screen_size;
+    var viewport_aspect: f32 = @as(f32, @floatFromInt(initial_screen_size[0])) / initial_screen_size[1];
 };
 
 const Vertex = extern struct {
@@ -67,7 +69,11 @@ export fn init() void {
     });
 
     // setup pass action for default render pass
-    state.default.pass_action.colors[0] = .{ .load_action = .DONTCARE };
+    // state.default.pass_action.colors[0] = .{ .load_action = .DONTCARE };
+    state.default.pass_action.colors[0] = .{
+        .load_action = .CLEAR,
+        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+    };
 
     // setup pass action for imgui
     state.ui.pass_action.colors[0] = .{ .load_action = .LOAD };
@@ -78,7 +84,7 @@ export fn init() void {
         .clear_value = .{ .r = 0.25, .g = 0, .b = 0, .a = 1 },
     };
 
-    state.offscreen.bind.vertex_buffers[0] = sg.makeBuffer(.{ .usage = .DYNAMIC, .size = max_verts });
+    state.offscreen.bind.vertex_buffers[0] = sg.makeBuffer(.{ .usage = .DYNAMIC, .size = max_verts }); // TODO size correct?
 
     // setup the offscreen render pass resources
     // this will also be called when the window resizes
@@ -109,6 +115,7 @@ export fn init() void {
 
     // a vertex buffer to render a fullscreen quad
     const quad_vbuf = sg.makeBuffer(.{
+        .usage = .IMMUTABLE,
         .data = sg.asRange(&[_]f32{ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 }),
     });
 
@@ -183,7 +190,7 @@ export fn frame() void {
     quad(.{
         .buf = &verts,
         .src = .{ .x = 0, .y = 0, .w = 16, .h = 8 },
-        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16, .h = 8 },
+        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16 * 4, .h = 8 * 4 },
         .tw = @floatFromInt(state.texture.desc.width),
         .th = @floatFromInt(state.texture.desc.height),
     });
@@ -200,12 +207,15 @@ export fn frame() void {
     ig.igSetNextWindowPos(.{ .x = 10, .y = 10 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
     ig.igSetNextWindowSize(.{ .x = 400, .y = 100 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
+    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Viewport: %d %d", state.viewport_size[0], state.viewport_size[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
     _ = ig.igDragFloat2("Pos", &state.pos, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
     ig.igEnd();
     //=== UI CODE ENDS HERE
 
     const vs_params = computeVsParams();
+    const fsq_params = computeFSQParams();
 
     sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
     sg.applyPipeline(state.offscreen.pip);
@@ -217,6 +227,7 @@ export fn frame() void {
     sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
     sg.applyPipeline(state.fsq.pip);
     sg.applyBindings(state.fsq.bind);
+    sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
     sg.draw(0, 4, 1);
     sg.endPass();
 
@@ -255,7 +266,7 @@ pub fn main() !void {
         .width = initial_screen_size[0],
         .height = initial_screen_size[1],
         .icon = .{ .sokol_default = true },
-        .window_title = "game",
+        .window_title = "Game",
         .logger = .{ .func = slog.func },
     });
 }
@@ -264,13 +275,29 @@ fn computeVsParams() shd.VsParams {
     const model = zm.identity();
     const view = zm.translation(-state.camera[0], -state.camera[1], 0);
     const proj = zm.orthographicLh(
-        @floatFromInt(state.window_size[0]),
-        @floatFromInt(state.window_size[1]),
+        @floatFromInt(state.viewport_size[0]),
+        @floatFromInt(state.viewport_size[1]),
         -10,
         10,
     );
     const mvp = zm.mul(model, zm.mul(view, proj));
     return shd.VsParams{ .mvp = mvp };
+}
+
+fn computeFSQParams() shd.VsFsqParams {
+    const width: f32 = @floatFromInt(state.window_size[0]);
+    const height: f32 = @floatFromInt(state.window_size[1]);
+    const aspect = height / width;
+
+    var w: f32 = 2;
+    var h: f32 = 2;
+
+    if (aspect > 1.0) {
+        h = 2 * aspect;
+    } else {
+        w = 2 / aspect;
+    }
+    return shd.VsFsqParams{ .mvp = zm.orthographicLh(w, h, -10, 10) };
 }
 
 // helper function to create or re-create render target images and pass object for offscreen rendering
