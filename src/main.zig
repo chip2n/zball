@@ -25,6 +25,7 @@ const state = struct {
     var pip: sg.Pipeline = .{};
     var pass_action: sg.PassAction = .{};
 
+    var texture: Texture = undefined;
     var pos: [2]f32 = .{ 0, 0 };
     var camera: [2]f32 = .{ screen_size[0] / 2, screen_size[1] / 2 };
 };
@@ -53,8 +54,8 @@ export fn init() void {
     });
 
     // Let's texture it up!
-    const texture = Texture.init(img);
-    state.bind.fs.images[shd.SLOT_tex] = sg.makeImage(texture.desc);
+    state.texture = Texture.init(img);
+    state.bind.fs.images[shd.SLOT_tex] = sg.makeImage(state.texture.desc);
     state.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 
     // create a shader and pipeline object
@@ -87,6 +88,9 @@ const QuadOptions = struct {
     offset: usize = 0,
     src: ?Rect = null,
     dst: Rect,
+    // reference texture dimensions
+    tw: f32,
+    th: f32,
 };
 fn quad(v: QuadOptions) void {
     const buf = v.buf;
@@ -96,13 +100,19 @@ fn quad(v: QuadOptions) void {
     const z = 0;
     const w = v.dst.w;
     const h = v.dst.h;
+    const tw = v.tw;
+    const th = v.th;
+
+    const src = v.src orelse Rect{ .x = 0, .y = 0, .w = tw, .h = th };
+    const uv1 = .{ src.x / tw, src.y / th };
+    const uv2 = .{ (src.x + src.w) / tw, (src.y + src.h) / th };
     // zig fmt: off
-    buf[offset + 0] = .{ .x = x,      .y = y,  .z = z, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 1] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
-    buf[offset + 2] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = 0.0, .v = 1.0 };
-    buf[offset + 3] = .{ .x = x,      .y = y,  .z = z, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
-    buf[offset + 4] = .{ .x = x + w,  .y = y,  .z = z, .color = 0xFFFFFFFF, .u = 1.0, .v = 0.0 };
-    buf[offset + 5] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
+    buf[offset + 0] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[offset + 1] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
+    buf[offset + 2] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
+    buf[offset + 3] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[offset + 4] = .{ .x = x + w,  .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
+    buf[offset + 5] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
     // zig fmt: on
 }
 
@@ -113,12 +123,20 @@ export fn frame() void {
     var verts: [6]Vertex = undefined;
     quad(.{
         .buf = &verts,
+        .src = .{
+            .x = 0,
+            .y = 0,
+            .w = 16,
+            .h = 8,
+        },
         .dst = .{
             .x = state.pos[0],
             .y = state.pos[1],
-            .w = 640,
-            .h = 480,
+            .w = 16,
+            .h = 8,
         },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
     });
     sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
 
