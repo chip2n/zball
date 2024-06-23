@@ -75,8 +75,22 @@ export fn init() void {
     };
 }
 
-fn quad(buf: []Vertex, x: f32, y: f32, w: f32, h: f32, offset: usize) void {
+const QuadOptions = struct {
+    buf: []Vertex,
+    offset: usize = 0,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+};
+fn quad(v: QuadOptions) void {
+    const buf = v.buf;
+    const offset = v.offset;
+    const x = v.x;
+    const y = v.y;
     const z = 0;
+    const w = v.w;
+    const h = v.h;
     // zig fmt: off
     buf[offset + 0] = .{ .x = x,      .y = y,  .z = z, .color = 0xFFFFFFFF, .u = 0.0, .v = 0.0 };
     buf[offset + 1] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = 1.0, .v = 1.0 };
@@ -92,7 +106,13 @@ export fn frame() void {
     _ = dt; // autofix
 
     var verts: [6]Vertex = undefined;
-    quad(&verts, state.pos[0], state.pos[1], 640, 480, 0);
+    quad(.{
+        .buf = &verts,
+        .x = state.pos[0],
+        .y = state.pos[1],
+        .w = 640,
+        .h = 480,
+    });
     sg.updateBuffer(state.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
