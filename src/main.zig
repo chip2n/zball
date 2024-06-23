@@ -43,7 +43,6 @@ const state = struct {
     };
 
     var texture: Texture = undefined;
-    var pos: [2]f32 = .{ 10, 10 };
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
 
     var window_size: [2]i32 = initial_screen_size;
@@ -187,14 +186,25 @@ export fn frame() void {
     const dt: f64 = sapp.frameDuration();
     _ = dt;
 
-    var verts: [6]Vertex = undefined;
-    quad(.{
-        .buf = &verts,
-        .src = .{ .x = 0, .y = 0, .w = 16, .h = 8 },
-        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16, .h = 8 },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
-    });
+    const num_bricks = 10;
+    const num_rows = 5;
+    var verts: [6 * num_bricks * num_rows]Vertex = undefined;
+    const brick_w = 16;
+    const brick_h = 8;
+    for (0..num_rows) |y| {
+        for (0..num_bricks) |x| {
+            const fx: f32 = @floatFromInt(x);
+            const fy: f32 = @floatFromInt(y);
+            quad(.{
+                .buf = &verts,
+                .offset = (y * num_bricks + x) * 6,
+                .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
+                .dst = .{ .x = fx * brick_w, .y = fy * brick_h, .w = brick_w, .h = brick_h },
+                .tw = @floatFromInt(state.texture.desc.width),
+                .th = @floatFromInt(state.texture.desc.height),
+            });
+        }
+    }
     sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
@@ -210,7 +220,6 @@ export fn frame() void {
     _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
-    _ = ig.igDragFloat2("Pos", &state.pos, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
     ig.igEnd();
     //=== UI CODE ENDS HERE
 
