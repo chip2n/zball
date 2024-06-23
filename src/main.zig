@@ -123,18 +123,8 @@ export fn frame() void {
     var verts: [6]Vertex = undefined;
     quad(.{
         .buf = &verts,
-        .src = .{
-            .x = 0,
-            .y = 0,
-            .w = 16,
-            .h = 8,
-        },
-        .dst = .{
-            .x = state.pos[0],
-            .y = state.pos[1],
-            .w = 16,
-            .h = 8,
-        },
+        .src = .{ .x = 0, .y = 0, .w = 16, .h = 8 },
+        .dst = .{ .x = state.pos[0], .y = state.pos[1], .w = 16, .h = 8 },
         .tw = @floatFromInt(state.texture.desc.width),
         .th = @floatFromInt(state.texture.desc.height),
     });
