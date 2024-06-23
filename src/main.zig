@@ -78,7 +78,7 @@ export fn init() void {
     // set pass action for offscreen render pass
     state.offscreen.pass_action.colors[0] = .{
         .load_action = .CLEAR,
-        .clear_value = .{ .r = 0.25, .g = 0, .b = 0, .a = 1 },
+        .clear_value = .{ .r = 0.05, .g = 0.05, .b = 0.05, .a = 1 },
     };
 
     state.offscreen.bind.vertex_buffers[0] = sg.makeBuffer(.{
