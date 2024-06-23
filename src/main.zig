@@ -151,7 +151,6 @@ const Rect = struct {
 
 const QuadOptions = struct {
     buf: []Vertex,
-    offset: usize = 0,
     src: ?Rect = null,
     dst: Rect,
     // reference texture dimensions
@@ -160,7 +159,6 @@ const QuadOptions = struct {
 };
 fn quad(v: QuadOptions) void {
     const buf = v.buf;
-    const offset = v.offset;
     const x = v.dst.x;
     const y = v.dst.y;
     const z = 0;
@@ -173,12 +171,12 @@ fn quad(v: QuadOptions) void {
     const uv1 = .{ src.x / tw, src.y / th };
     const uv2 = .{ (src.x + src.w) / tw, (src.y + src.h) / th };
     // zig fmt: off
-    buf[offset + 0] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[offset + 1] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
-    buf[offset + 2] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[offset + 3] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[offset + 4] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[offset + 5] = .{ .x = x + w,  .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
+    buf[0] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[1] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
+    buf[2] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
+    buf[3] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[4] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
+    buf[5] = .{ .x = x + w,  .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
     // zig fmt: on
 }
 
@@ -196,8 +194,7 @@ export fn frame() void {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
             quad(.{
-                .buf = &verts,
-                .offset = (y * num_bricks + x) * 6,
+                .buf = verts[((y * num_bricks + x) * 6)..],
                 .src = .{ .x = fy * brick_w, .y = 0, .w = brick_w, .h = brick_h },
                 .dst = .{ .x = fx * brick_w, .y = fy * brick_h, .w = brick_w, .h = brick_h },
                 .tw = @floatFromInt(state.texture.desc.width),
