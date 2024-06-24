@@ -225,6 +225,14 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
+fn isRectsOverlapping(r1: Rect, r2: Rect) bool {
+    if (r1.x > r2.x + r2.w) return false;
+    if (r1.x + r1.w < r2.x) return false;
+    if (r1.y > r2.y + r2.h) return false;
+    if (r1.y + r1.h < r2.y) return false;
+    return true;
+}
+
 export fn frame() void {
     const dt: f32 = @floatCast(sapp.frameDuration());
 
@@ -242,6 +250,15 @@ export fn frame() void {
     { // Move ball
         state.ball_pos[0] += state.ball_dir[0] * ball_speed * dt;
         state.ball_pos[1] += state.ball_dir[1] * ball_speed * dt;
+    }
+
+    // Has the ball hit any bricks?
+    const ball_rect = Rect{ .x = state.ball_pos[0], .y = state.ball_pos[1], .w = ball_w, .h = ball_h };
+    for (state.bricks.items, 0..) |brick, i| {
+        const brick_rect = Rect{ .x = brick.pos[0], .y = brick.pos[1], .w = brick_w, .h = brick_h };
+        if (isRectsOverlapping(ball_rect, brick_rect)) {
+            _ = state.bricks.swapRemove(i);
+        }
     }
 
     var verts: [max_verts]Vertex = undefined;
