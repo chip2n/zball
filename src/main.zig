@@ -254,11 +254,18 @@ export fn frame() void {
 
     // Has the ball hit any bricks?
     const ball_rect = Rect{ .x = state.ball_pos[0], .y = state.ball_pos[1], .w = ball_w, .h = ball_h };
+    var collided = false;
     for (state.bricks.items, 0..) |brick, i| {
         const brick_rect = Rect{ .x = brick.pos[0], .y = brick.pos[1], .w = brick_w, .h = brick_h };
         if (isRectsOverlapping(ball_rect, brick_rect)) {
             _ = state.bricks.swapRemove(i);
+            collided = true;
         }
+    }
+
+    if (collided) {
+        // TODO need to know the normal of the collision point
+        state.ball_dir[1] = -state.ball_dir[1];
     }
 
     var verts: [max_verts]Vertex = undefined;
