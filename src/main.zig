@@ -22,6 +22,18 @@ const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
+const paddle_w: f32 = 16;
+const paddle_h: f32 = 8;
+const ball_w: f32 = 4;
+const ball_h: f32 = 4;
+const initial_paddle_pos: [2]f32 = .{
+    viewport_size[0] / 2,
+    viewport_size[1] - 20,
+};
+const initial_ball_pos: [2]f32 = .{
+    initial_paddle_pos[0],
+    initial_paddle_pos[1] - paddle_h / 2,
+};
 
 const state = struct {
     const offscreen = struct {
@@ -47,8 +59,8 @@ const state = struct {
 
     var window_size: [2]i32 = initial_screen_size;
 
-    var paddle_w: f32 = 16;
-    var paddle_x: f32 = viewport_size[0] / 2;
+    var paddle_pos: [2]f32 = initial_paddle_pos;
+    var ball_pos: [2]f32 = initial_ball_pos;
 
     const input = struct {
         var left_down: bool = false;
@@ -200,7 +212,7 @@ export fn frame() void {
         if (state.input.right_down) {
             paddle_dx += 1;
         }
-        state.paddle_x += paddle_dx * paddle_speed * @as(f32, @floatCast(dt));
+        state.paddle_pos[0] += paddle_dx * paddle_speed * @as(f32, @floatCast(dt));
     }
 
     const num_bricks = 10;
@@ -226,15 +238,30 @@ export fn frame() void {
         }
     }
 
+    // ball
+    quad(.{
+        .buf = verts[vert_index..],
+        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+        .dst = .{
+            .x = state.ball_pos[0] - ball_w / 2,
+            .y = state.ball_pos[1] - ball_h / 2,
+            .w = ball_w,
+            .h = ball_h,
+        },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
+    });
+    vert_index += 6;
+
     // paddle
     quad(.{
         .buf = verts[vert_index..],
         .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
         .dst = .{
-            .x = state.paddle_x - state.paddle_w / 2,
-            .y = viewport_size[1] - 20, // TODO
-            .w = brick_w,
-            .h = brick_h,
+            .x = state.paddle_pos[0] - paddle_w / 2,
+            .y = state.paddle_pos[1],
+            .w = paddle_w,
+            .h = paddle_h,
         },
         .tw = @floatFromInt(state.texture.desc.width),
         .th = @floatFromInt(state.texture.desc.height),
