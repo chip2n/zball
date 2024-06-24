@@ -17,7 +17,7 @@ const Texture = @import("Texture.zig");
 
 const offscreen_sample_count = 1;
 
-const max_quads = 1024;
+const max_quads = 256;
 const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
