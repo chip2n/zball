@@ -24,16 +24,19 @@ const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
 const paddle_w: f32 = 16;
 const paddle_h: f32 = 8;
+const paddle_speed: f32 = 80;
 const ball_w: f32 = 4;
 const ball_h: f32 = 4;
+const ball_speed: f32 = 20;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
-    viewport_size[1] - 20,
+    viewport_size[1] - 10,
 };
 const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
-    initial_paddle_pos[1] - paddle_h / 2,
+    initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
 };
+const initial_ball_dir: [2]f32 = .{ 0, -1 };
 
 const state = struct {
     const offscreen = struct {
@@ -61,6 +64,7 @@ const state = struct {
 
     var paddle_pos: [2]f32 = initial_paddle_pos;
     var ball_pos: [2]f32 = initial_ball_pos;
+    var ball_dir: [2]f32 = initial_ball_dir;
 
     const input = struct {
         var left_down: bool = false;
@@ -201,20 +205,23 @@ fn quad(v: QuadOptions) void {
 }
 
 export fn frame() void {
-    const dt: f64 = sapp.frameDuration();
+    const dt: f32 = @floatCast(sapp.frameDuration());
 
     { // Move paddle
         var paddle_dx: f32 = 0;
-        const paddle_speed: f32 = 80;
         if (state.input.left_down) {
             paddle_dx -= 1;
         }
         if (state.input.right_down) {
             paddle_dx += 1;
         }
-        state.paddle_pos[0] += paddle_dx * paddle_speed * @as(f32, @floatCast(dt));
+        state.paddle_pos[0] += paddle_dx * paddle_speed * dt;
     }
 
+    { // Move ball
+        state.ball_pos[0] += state.ball_dir[0] * ball_speed * dt;
+        state.ball_pos[1] += state.ball_dir[1] * ball_speed * dt;
+    }
     const num_bricks = 10;
     const num_rows = 5;
 
@@ -259,7 +266,7 @@ export fn frame() void {
         .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
         .dst = .{
             .x = state.paddle_pos[0] - paddle_w / 2,
-            .y = state.paddle_pos[1],
+            .y = state.paddle_pos[1] - paddle_h / 2,
             .w = paddle_w,
             .h = paddle_h,
         },
