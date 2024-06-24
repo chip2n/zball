@@ -46,6 +46,14 @@ const state = struct {
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
 
     var window_size: [2]i32 = initial_screen_size;
+
+    var paddle_w: f32 = 16;
+    var paddle_x: f32 = viewport_size[0] / 2;
+
+    const input = struct {
+        var left_down: bool = false;
+        var right_down: bool = false;
+    };
 };
 
 const Vertex = extern struct {
@@ -182,13 +190,27 @@ fn quad(v: QuadOptions) void {
 
 export fn frame() void {
     const dt: f64 = sapp.frameDuration();
-    _ = dt;
+
+    { // Move paddle
+        var paddle_dx: f32 = 0;
+        const paddle_speed: f32 = 80;
+        if (state.input.left_down) {
+            paddle_dx -= 1;
+        }
+        if (state.input.right_down) {
+            paddle_dx += 1;
+        }
+        state.paddle_x += paddle_dx * paddle_speed * @as(f32, @floatCast(dt));
+    }
 
     const num_bricks = 10;
     const num_rows = 5;
-    var verts: [6 * num_bricks * num_rows]Vertex = undefined;
+
+    var verts: [max_verts]Vertex = undefined;
     const brick_w = 16;
     const brick_h = 8;
+
+    var vert_index: usize = 0;
     for (0..num_rows) |y| {
         for (0..num_bricks) |x| {
             const fx: f32 = @floatFromInt(x);
@@ -200,8 +222,25 @@ export fn frame() void {
                 .tw = @floatFromInt(state.texture.desc.width),
                 .th = @floatFromInt(state.texture.desc.height),
             });
+            vert_index += 6;
         }
     }
+
+    // paddle
+    quad(.{
+        .buf = verts[vert_index..],
+        .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
+        .dst = .{
+            .x = state.paddle_x - state.paddle_w / 2,
+            .y = viewport_size[1] - 20, // TODO
+            .w = brick_w,
+            .h = brick_h,
+        },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
+    });
+    vert_index += 6;
+
     sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
@@ -246,6 +285,28 @@ export fn frame() void {
 
 export fn event(ev: [*c]const sapp.Event) void {
     switch (ev.*.type) {
+        .KEY_DOWN => {
+            switch (ev.*.key_code) {
+                .LEFT => {
+                    state.input.left_down = true;
+                },
+                .RIGHT => {
+                    state.input.right_down = true;
+                },
+                else => {},
+            }
+        },
+        .KEY_UP => {
+            switch (ev.*.key_code) {
+                .LEFT => {
+                    state.input.left_down = false;
+                },
+                .RIGHT => {
+                    state.input.right_down = false;
+                },
+                else => {},
+            }
+        },
         .RESIZED => {
             const width = ev.*.window_width;
             const height = ev.*.window_height;
