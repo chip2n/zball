@@ -37,6 +37,25 @@ const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
 };
 const initial_ball_dir: [2]f32 = .{ 0, -1 };
+const num_bricks = 10;
+const num_rows = 5;
+const brick_w = 16;
+const brick_h = 8;
+
+const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
+
+const Brick = struct {
+    pos: [2]f32,
+};
+
+const Vertex = extern struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    color: u32,
+    u: f32,
+    v: f32,
+};
 
 const state = struct {
     const offscreen = struct {
@@ -70,15 +89,11 @@ const state = struct {
         var left_down: bool = false;
         var right_down: bool = false;
     };
-};
 
-const Vertex = extern struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    color: u32,
-    u: f32,
-    v: f32,
+    var allocator = std.heap.c_allocator;
+    var arena: std.heap.ArenaAllocator = undefined;
+
+    var bricks: std.ArrayList(Brick) = undefined;
 };
 
 export fn init() void {
@@ -164,14 +179,20 @@ export fn init() void {
     // offscreen render target textures
     state.fsq.bind.vertex_buffers[0] = quad_vbuf;
     state.fsq.bind.fs.samplers[0] = smp;
-}
 
-const Rect = struct {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-};
+    // initialize game state
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){ .backing_allocator = std.heap.c_allocator };
+    state.arena = std.heap.ArenaAllocator.init(state.allocator);
+    errdefer state.arena.deinit();
+    state.bricks = std.ArrayList(Brick).initCapacity(state.arena.allocator(), num_rows * num_bricks) catch unreachable;
+    for (0..num_rows) |y| {
+        for (0..num_bricks) |x| {
+            const fx: f32 = @floatFromInt(x);
+            const fy: f32 = @floatFromInt(y);
+            state.bricks.append(.{ .pos = .{ fx * brick_w, fy * brick_h } }) catch unreachable;
+        }
+    }
+}
 
 const QuadOptions = struct {
     buf: []Vertex,
@@ -222,27 +243,20 @@ export fn frame() void {
         state.ball_pos[0] += state.ball_dir[0] * ball_speed * dt;
         state.ball_pos[1] += state.ball_dir[1] * ball_speed * dt;
     }
-    const num_bricks = 10;
-    const num_rows = 5;
 
     var verts: [max_verts]Vertex = undefined;
-    const brick_w = 16;
-    const brick_h = 8;
-
     var vert_index: usize = 0;
-    for (0..num_rows) |y| {
-        for (0..num_bricks) |x| {
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
-            quad(.{
-                .buf = verts[((y * num_bricks + x) * 6)..],
-                .src = .{ .x = fy * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-                .dst = .{ .x = fx * brick_w, .y = fy * brick_h, .w = brick_w, .h = brick_h },
-                .tw = @floatFromInt(state.texture.desc.width),
-                .th = @floatFromInt(state.texture.desc.height),
-            });
-            vert_index += 6;
-        }
+    for (state.bricks.items) |brick| {
+        const x = brick.pos[0];
+        const y = brick.pos[1];
+        quad(.{
+            .buf = verts[vert_index..],
+            .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+            .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
+            .tw = @floatFromInt(state.texture.desc.width),
+            .th = @floatFromInt(state.texture.desc.height),
+        });
+        vert_index += 6;
     }
 
     // ball
@@ -356,6 +370,7 @@ export fn event(ev: [*c]const sapp.Event) void {
 
 export fn cleanup() void {
     sg.shutdown();
+    state.arena.deinit();
 }
 
 pub fn main() !void {
