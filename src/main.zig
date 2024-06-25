@@ -10,6 +10,8 @@ const simgui = sokol.imgui;
 const shd = @import("shaders/main.glsl.zig");
 
 const ig = @import("cimgui");
+// TODO
+const m = @import("math.zig");
 const zm = @import("zmath");
 
 const img = @embedFile("spritesheet.png");
@@ -36,7 +38,7 @@ const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
     initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
 };
-const initial_ball_dir: [2]f32 = .{ 0, -1 };
+const initial_ball_dir: [2]f32 = .{ 1, -1 };
 const num_bricks = 10;
 const num_rows = 5;
 const brick_w = 16;
@@ -46,6 +48,7 @@ const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
 
 const Brick = struct {
     pos: [2]f32,
+    destroyed: bool = false,
 };
 
 const Vertex = extern struct {
@@ -192,6 +195,7 @@ export fn init() void {
             state.bricks.append(.{ .pos = .{ fx * brick_w, fy * brick_h } }) catch unreachable;
         }
     }
+    m.normalize(&state.ball_dir);
 }
 
 const QuadOptions = struct {
@@ -247,30 +251,49 @@ export fn frame() void {
         state.paddle_pos[0] += paddle_dx * paddle_speed * dt;
     }
 
+    const old_ball_pos = state.ball_pos;
     { // Move ball
         state.ball_pos[0] += state.ball_dir[0] * ball_speed * dt;
         state.ball_pos[1] += state.ball_dir[1] * ball_speed * dt;
     }
+    const new_ball_pos = state.ball_pos;
 
     // Has the ball hit any bricks?
-    const ball_rect = Rect{ .x = state.ball_pos[0], .y = state.ball_pos[1], .w = ball_w, .h = ball_h };
+    // const ball_rect = Rect{ .x = state.ball_pos[0], .y = state.ball_pos[1], .w = ball_w, .h = ball_h };
     var collided = false;
-    for (state.bricks.items, 0..) |brick, i| {
-        const brick_rect = Rect{ .x = brick.pos[0], .y = brick.pos[1], .w = brick_w, .h = brick_h };
-        if (isRectsOverlapping(ball_rect, brick_rect)) {
-            _ = state.bricks.swapRemove(i);
-            collided = true;
+    var out: [2]f32 = undefined;
+    var normal: [2]f32 = undefined;
+    for (state.bricks.items) |*brick| {
+        // const brick_rect = Rect{ .x = brick.pos[0], .y = brick.pos[1], .w = brick_w, .h = brick_h };
+        // if (isRectsOverlapping(ball_rect, brick_rect)) {
+        //     _ = state.bricks.swapRemove(i);
+        //     collided = true;
+        // }
+        var r = @import("collision.zig").Rect{
+            // .min = .{ brick.pos[0], brick.pos[1] + brick_h },
+            // .max = .{ brick.pos[0] + brick_w, brick.pos[1] },
+            .min = .{ brick.pos[0], brick.pos[1] },
+            .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+        };
+        r.grow(.{ ball_w / 2, ball_h / 2 });
+        const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+        if (c) {
+            std.log.warn("COLLIDED", .{});
+            // _ = state.bricks.swapRemove(i);
+            brick.destroyed = true;
         }
+        collided = collided or c;
     }
 
     if (collided) {
-        // TODO need to know the normal of the collision point
+        state.ball_pos = out;
         state.ball_dir[1] = -state.ball_dir[1];
     }
 
     var verts: [max_verts]Vertex = undefined;
     var vert_index: usize = 0;
     for (state.bricks.items) |brick| {
+        if (brick.destroyed) continue;
         const x = brick.pos[0];
         const y = brick.pos[1];
         quad(.{
