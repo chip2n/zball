@@ -268,10 +268,27 @@ export fn frame() void {
         }
         collided = collided or c;
     }
-
     if (collided) {
         state.ball_pos = out;
         state.ball_dir = m.reflect(state.ball_dir, normal);
+    }
+
+    const vw: f32 = @floatFromInt(viewport_size[0]);
+    const vh: f32 = @floatFromInt(viewport_size[1]);
+    { // Has the ball hit the right wall?
+        const c = @import("collision.zig").line_intersection(
+            old_ball_pos,
+            state.ball_pos,
+            .{ vw - ball_w / 2, 0 },
+            .{ vw - ball_w / 2, vh },
+            &out,
+        );
+        if (c) {
+            std.log.warn("WALL", .{});
+            normal = .{ -1, 0 };
+            state.ball_pos = out;
+            state.ball_dir = m.reflect(state.ball_dir, normal);
+        }
     }
 
     var verts: [max_verts]Vertex = undefined;
