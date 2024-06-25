@@ -256,6 +256,8 @@ export fn frame() void {
     { // Has the ball hit any bricks?
         var collided = false;
         for (state.bricks.items) |*brick| {
+            if (brick.destroyed) continue;
+
             var r = @import("collision.zig").Rect{
                 .min = .{ brick.pos[0], brick.pos[1] },
                 .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
@@ -288,7 +290,7 @@ export fn frame() void {
         if (c) {
             std.log.warn("PADDLE", .{});
             state.ball_pos = out;
-            state.ball_dir = m.reflect(state.ball_dir, normal);
+            state.ball_dir = paddle_reflect(state.paddle_pos[0], paddle_w, state.ball_pos, state.ball_dir);
         }
     }
 
