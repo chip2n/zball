@@ -29,7 +29,7 @@ const paddle_h: f32 = 8;
 const paddle_speed: f32 = 80;
 const ball_w: f32 = 4;
 const ball_h: f32 = 4;
-const ball_speed: f32 = 20;
+const ball_speed: f32 = 40;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
     viewport_size[1] - 10,
@@ -250,37 +250,70 @@ export fn frame() void {
     }
     const new_ball_pos = state.ball_pos;
 
-    // Has the ball hit any bricks?
-    var collided = false;
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
-    for (state.bricks.items) |*brick| {
-        var r = @import("collision.zig").Rect{
-            .min = .{ brick.pos[0], brick.pos[1] },
-            .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
-        };
-        r.grow(.{ ball_w / 2, ball_h / 2 });
-        const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-        if (c) {
-            std.log.warn("COLLIDED", .{});
-            // _ = state.bricks.swapRemove(i);
-            brick.destroyed = true;
+
+    { // Has the ball hit any bricks?
+        var collided = false;
+        for (state.bricks.items) |*brick| {
+            var r = @import("collision.zig").Rect{
+                .min = .{ brick.pos[0], brick.pos[1] },
+                .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+            };
+            r.grow(.{ ball_w / 2, ball_h / 2 });
+            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+            if (c) {
+                std.log.warn("COLLIDED", .{});
+                brick.destroyed = true;
+            }
+            collided = collided or c;
         }
-        collided = collided or c;
-    }
-    if (collided) {
-        state.ball_pos = out;
-        state.ball_dir = m.reflect(state.ball_dir, normal);
+        if (collided) {
+            state.ball_pos = out;
+            state.ball_dir = m.reflect(state.ball_dir, normal);
+        }
     }
 
     const vw: f32 = @floatFromInt(viewport_size[0]);
     const vh: f32 = @floatFromInt(viewport_size[1]);
+
+    { // Has the ball hit the paddle?
+        var r = @import("collision.zig").Rect{
+            .min = .{ state.paddle_pos[0] - paddle_w / 2, state.paddle_pos[1] - paddle_h / 2 },
+            .max = .{ state.paddle_pos[0] + paddle_w / 2, state.paddle_pos[1] + paddle_h / 2 },
+        };
+        r.grow(.{ ball_w / 2, ball_h / 2 });
+        // TODO not sure we're using the right ball positions
+        const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+        if (c) {
+            std.log.warn("PADDLE", .{});
+            state.ball_pos = out;
+            state.ball_dir = m.reflect(state.ball_dir, normal);
+        }
+    }
+
     { // Has the ball hit the right wall?
         const c = @import("collision.zig").line_intersection(
             old_ball_pos,
             state.ball_pos,
             .{ vw - ball_w / 2, 0 },
             .{ vw - ball_w / 2, vh },
+            &out,
+        );
+        if (c) {
+            std.log.warn("WALL", .{});
+            normal = .{ -1, 0 };
+            state.ball_pos = out;
+            state.ball_dir = m.reflect(state.ball_dir, normal);
+        }
+    }
+
+    { // Has the ball hit the left wall?
+        const c = @import("collision.zig").line_intersection(
+            old_ball_pos,
+            state.ball_pos,
+            .{ ball_w / 2, 0 },
+            .{ ball_w / 2, vh },
             &out,
         );
         if (c) {
@@ -377,6 +410,14 @@ export fn frame() void {
     sg.endPass();
 
     sg.commit();
+}
+
+// The angle depends on how far the ball is from the center of the paddle
+fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir: [2]f32) [2]f32 {
+    const p = (paddle_pos - ball_pos[0]) / paddle_width;
+    var new_dir = [_]f32{ -p, -ball_dir[1] };
+    m.normalize(&new_dir);
+    return new_dir;
 }
 
 export fn event(ev: [*c]const sapp.Event) void {

@@ -39,33 +39,33 @@ pub fn box_intersection(p0: [2]f32, p1: [2]f32, box: Rect, out: ?*[2]f32, normal
     var t: f32 = m.magnitude(m.vsub(p0, p1));
     var collided = false;
 
-    // // Top
-    // if (line_intersection(p0, p1, .{ min[0], min[1] }, .{ max[0], min[1] }, out)) {
-    //     const nt = m.magnitude(m.vsub(out.?.*, p0));
-    //     if (nt < t) {
-    //         t = nt;
-    //         if (normal) |n| n.* = .{ 0, 1 };
-    //         collided = true;
-    //     }
-    // }
-    // // Left
-    // if (line_intersection(p0, p1, .{ min[0], min[1] }, .{ min[0], max[1] }, out)) {
-    //     const nt = m.magnitude(m.vsub(out.?.*, p0));
-    //     if (nt < t) {
-    //         t = nt;
-    //         if (normal) |n| n.* = .{ -1, 0 };
-    //         collided = true;
-    //     }
-    // }
-    // // Right
-    // if (line_intersection(p0, p1, .{ max[0], min[1] }, .{ max[0], max[1] }, out)) {
-    //     const nt = m.magnitude(m.vsub(out.?.*, p0));
-    //     if (nt < t) {
-    //         t = nt;
-    //         if (normal) |n| n.* = .{ 1, 0 };
-    //         collided = true;
-    //     }
-    // }
+    // Top
+    if (line_intersection(p0, p1, .{ min[0], min[1] }, .{ max[0], min[1] }, out)) {
+        const nt = m.magnitude(m.vsub(out.?.*, p0));
+        if (nt < t) {
+            t = nt;
+            if (normal) |n| n.* = .{ 0, 1 };
+            collided = true;
+        }
+    }
+    // Left
+    if (line_intersection(p0, p1, .{ min[0], min[1] }, .{ min[0], max[1] }, out)) {
+        const nt = m.magnitude(m.vsub(out.?.*, p0));
+        if (nt < t) {
+            t = nt;
+            if (normal) |n| n.* = .{ -1, 0 };
+            collided = true;
+        }
+    }
+    // Right
+    if (line_intersection(p0, p1, .{ max[0], min[1] }, .{ max[0], max[1] }, out)) {
+        const nt = m.magnitude(m.vsub(out.?.*, p0));
+        if (nt < t) {
+            t = nt;
+            if (normal) |n| n.* = .{ 1, 0 };
+            collided = true;
+        }
+    }
     // Bottom
     if (line_intersection(p0, p1, .{ min[0], max[1] }, .{ max[0], max[1] }, out)) {
         const nt = m.magnitude(m.vsub(out.?.*, p0));
