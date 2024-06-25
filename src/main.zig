@@ -287,7 +287,7 @@ export fn frame() void {
 
     if (collided) {
         state.ball_pos = out;
-        state.ball_dir[1] = -state.ball_dir[1];
+        state.ball_dir = m.reflect(state.ball_dir, normal);
     }
 
     var verts: [max_verts]Vertex = undefined;
