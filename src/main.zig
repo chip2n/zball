@@ -206,6 +206,7 @@ const QuadOptions = struct {
     tw: f32,
     th: f32,
 };
+
 fn quad(v: QuadOptions) void {
     const buf = v.buf;
     const x = v.dst.x;
@@ -255,6 +256,7 @@ export fn frame() void {
 
     { // Has the ball hit any bricks?
         var collided = false;
+        var coll_dist = std.math.floatMax(f32);
         for (state.bricks.items) |*brick| {
             if (brick.destroyed) continue;
 
@@ -263,8 +265,15 @@ export fn frame() void {
                 .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
             };
             r.grow(.{ ball_w / 2, ball_h / 2 });
-            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+            var c_normal: [2]f32 = undefined;
+            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
             if (c) {
+                const brick_dist = m.magnitude(m.vsub(brick.pos, state.ball_pos));
+                if (brick_dist < coll_dist) {
+                    // always use the normal of the closest brick for ball reflection
+                    normal = c_normal;
+                    coll_dist = brick_dist;
+                }
                 std.log.warn("COLLIDED", .{});
                 brick.destroyed = true;
             }
