@@ -84,20 +84,38 @@ const state = struct {
 
     var window_size: [2]i32 = initial_screen_size;
 
-    var paddle_pos: [2]f32 = initial_paddle_pos;
-    var ball_pos: [2]f32 = initial_ball_pos;
-    var ball_dir: [2]f32 = initial_ball_dir;
-
-    const input = struct {
-        var left_down: bool = false;
-        var right_down: bool = false;
-    };
-
     var allocator = std.heap.c_allocator;
     var arena: std.heap.ArenaAllocator = undefined;
 
-    var bricks: std.ArrayList(Brick) = undefined;
+    var debug: bool = false;
 };
+
+const GameState = struct {
+    bricks: [num_rows * num_bricks]Brick = undefined,
+
+    paddle_pos: [2]f32 = initial_paddle_pos,
+    ball_pos: [2]f32 = initial_ball_pos,
+    ball_dir: [2]f32 = initial_ball_dir,
+
+    input: struct {
+        left_down: bool = false,
+        right_down: bool = false,
+    } = .{},
+
+    collisions: [8]struct {
+        brick: usize,
+        loc: [2]f32,
+        normal: [2]f32,
+    } = undefined,
+    collision_count: usize = 0,
+};
+
+var current_game: GameState = .{};
+
+// Debug stuff
+var history: std.ArrayList(GameState) = undefined;
+var history_index: usize = 0;
+var dbg_selected_coll: usize = 0;
 
 export fn init() void {
     sg.setup(.{
@@ -184,18 +202,19 @@ export fn init() void {
     state.fsq.bind.fs.samplers[0] = smp;
 
     // initialize game state
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){ .backing_allocator = std.heap.c_allocator };
     state.arena = std.heap.ArenaAllocator.init(state.allocator);
     errdefer state.arena.deinit();
-    state.bricks = std.ArrayList(Brick).initCapacity(state.arena.allocator(), num_rows * num_bricks) catch unreachable;
+
     for (0..num_rows) |y| {
         for (0..num_bricks) |x| {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
-            state.bricks.append(.{ .pos = .{ fx * brick_w, fy * brick_h } }) catch unreachable;
+            current_game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, fy * brick_h } };
         }
     }
-    m.normalize(&state.ball_dir);
+    m.normalize(&current_game.ball_dir);
+
+    history = std.ArrayList(GameState).init(state.arena.allocator());
 }
 
 const QuadOptions = struct {
@@ -230,26 +249,27 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
-export fn frame() void {
-    const dt: f32 = @floatCast(sapp.frameDuration());
+fn updateGame(game: *GameState, dt: f32) !void {
+    // Reset data from previous frame
+    game.collision_count = 0;
 
     { // Move paddle
         var paddle_dx: f32 = 0;
-        if (state.input.left_down) {
+        if (game.input.left_down) {
             paddle_dx -= 1;
         }
-        if (state.input.right_down) {
+        if (game.input.right_down) {
             paddle_dx += 1;
         }
-        state.paddle_pos[0] += paddle_dx * paddle_speed * dt;
+        game.paddle_pos[0] += paddle_dx * paddle_speed * dt;
     }
 
-    const old_ball_pos = state.ball_pos;
+    const old_ball_pos = game.ball_pos;
     { // Move ball
-        state.ball_pos[0] += state.ball_dir[0] * ball_speed * dt;
-        state.ball_pos[1] += state.ball_dir[1] * ball_speed * dt;
+        game.ball_pos[0] += game.ball_dir[0] * ball_speed * dt;
+        game.ball_pos[1] += game.ball_dir[1] * ball_speed * dt;
     }
-    const new_ball_pos = state.ball_pos;
+    const new_ball_pos = game.ball_pos;
 
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
@@ -257,7 +277,7 @@ export fn frame() void {
     { // Has the ball hit any bricks?
         var collided = false;
         var coll_dist = std.math.floatMax(f32);
-        for (state.bricks.items) |*brick| {
+        for (&game.bricks, 0..) |*brick, i| {
             if (brick.destroyed) continue;
 
             var r = @import("collision.zig").Rect{
@@ -268,20 +288,24 @@ export fn frame() void {
             var c_normal: [2]f32 = undefined;
             const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
             if (c) {
-                const brick_dist = m.magnitude(m.vsub(brick.pos, state.ball_pos));
+                // always use the normal of the closest brick for ball reflection
+                const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] / brick_h / 2 };
+                const brick_dist = m.magnitude(m.vsub(brick_pos, game.ball_pos));
                 if (brick_dist < coll_dist) {
-                    // always use the normal of the closest brick for ball reflection
                     normal = c_normal;
                     coll_dist = brick_dist;
                 }
                 std.log.warn("COLLIDED", .{});
                 brick.destroyed = true;
+
+                game.collisions[game.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
+                game.collision_count += 1;
             }
             collided = collided or c;
         }
         if (collided) {
-            state.ball_pos = out;
-            state.ball_dir = m.reflect(state.ball_dir, normal);
+            game.ball_pos = out;
+            game.ball_dir = m.reflect(game.ball_dir, normal);
         }
     }
 
@@ -290,23 +314,23 @@ export fn frame() void {
 
     { // Has the ball hit the paddle?
         var r = @import("collision.zig").Rect{
-            .min = .{ state.paddle_pos[0] - paddle_w / 2, state.paddle_pos[1] - paddle_h / 2 },
-            .max = .{ state.paddle_pos[0] + paddle_w / 2, state.paddle_pos[1] + paddle_h / 2 },
+            .min = .{ game.paddle_pos[0] - paddle_w / 2, game.paddle_pos[1] - paddle_h / 2 },
+            .max = .{ game.paddle_pos[0] + paddle_w / 2, game.paddle_pos[1] + paddle_h / 2 },
         };
         r.grow(.{ ball_w / 2, ball_h / 2 });
         // TODO not sure we're using the right ball positions
         const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
         if (c) {
             std.log.warn("PADDLE", .{});
-            state.ball_pos = out;
-            state.ball_dir = paddle_reflect(state.paddle_pos[0], paddle_w, state.ball_pos, state.ball_dir);
+            game.ball_pos = out;
+            game.ball_dir = paddle_reflect(game.paddle_pos[0], paddle_w, game.ball_pos, game.ball_dir);
         }
     }
 
     { // Has the ball hit the right wall?
         const c = @import("collision.zig").line_intersection(
             old_ball_pos,
-            state.ball_pos,
+            game.ball_pos,
             .{ vw - ball_w / 2, 0 },
             .{ vw - ball_w / 2, vh },
             &out,
@@ -314,15 +338,15 @@ export fn frame() void {
         if (c) {
             std.log.warn("WALL", .{});
             normal = .{ -1, 0 };
-            state.ball_pos = out;
-            state.ball_dir = m.reflect(state.ball_dir, normal);
+            game.ball_pos = out;
+            game.ball_dir = m.reflect(game.ball_dir, normal);
         }
     }
 
     { // Has the ball hit the left wall?
         const c = @import("collision.zig").line_intersection(
             old_ball_pos,
-            state.ball_pos,
+            game.ball_pos,
             .{ ball_w / 2, 0 },
             .{ ball_w / 2, vh },
             &out,
@@ -330,14 +354,32 @@ export fn frame() void {
         if (c) {
             std.log.warn("WALL", .{});
             normal = .{ -1, 0 };
-            state.ball_pos = out;
-            state.ball_dir = m.reflect(state.ball_dir, normal);
+            game.ball_pos = out;
+            game.ball_dir = m.reflect(game.ball_dir, normal);
         }
     }
+}
+export fn frame() void {
+    const dt: f32 = @floatCast(sapp.frameDuration());
+
+    var game = &current_game;
+    if (state.debug) {
+        game = &history.items[history_index];
+    }
+
+    if (!state.debug) {
+        updateGame(game, dt) catch unreachable;
+        // Store the new state in history as a final step
+        // TODO only in debug builds
+        history.append(current_game) catch unreachable;
+        history_index = history.items.len - 1;
+    }
+
+    // * Render
 
     var verts: [max_verts]Vertex = undefined;
     var vert_index: usize = 0;
-    for (state.bricks.items) |brick| {
+    for (game.bricks) |brick| {
         if (brick.destroyed) continue;
         const x = brick.pos[0];
         const y = brick.pos[1];
@@ -356,8 +398,8 @@ export fn frame() void {
         .buf = verts[vert_index..],
         .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
         .dst = .{
-            .x = state.ball_pos[0] - ball_w / 2,
-            .y = state.ball_pos[1] - ball_h / 2,
+            .x = game.ball_pos[0] - ball_w / 2,
+            .y = game.ball_pos[1] - ball_h / 2,
             .w = ball_w,
             .h = ball_h,
         },
@@ -371,8 +413,8 @@ export fn frame() void {
         .buf = verts[vert_index..],
         .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
         .dst = .{
-            .x = state.paddle_pos[0] - paddle_w / 2,
-            .y = state.paddle_pos[1] - paddle_h / 2,
+            .x = game.paddle_pos[0] - paddle_w / 2,
+            .y = game.paddle_pos[1] - paddle_h / 2,
             .w = paddle_w,
             .h = paddle_h,
         },
@@ -392,10 +434,57 @@ export fn frame() void {
 
     //=== UI CODE STARTS HERE
     ig.igSetNextWindowPos(.{ .x = 10, .y = 10 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
-    ig.igSetNextWindowSize(.{ .x = 400, .y = 100 }, ig.ImGuiCond_Once);
+    ig.igSetNextWindowSize(.{ .x = 400, .y = 400 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Ball pos: %f %f", game.ball_pos[0], game.ball_pos[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+
+    const debug_pressed = ig.igButton("Debug", .{});
+    if (debug_pressed) {
+        state.debug = true;
+    }
+    if (state.debug) {
+        _ = ig.igText("Collisions: %d", game.collision_count);
+        if (ig.igButton("Prev frame", .{})) {
+            if (history_index > 0) history_index -= 1;
+        }
+
+        if (ig.igButton("Next frame", .{})) {
+            if (history_index < history.items.len - 1) history_index += 1;
+        }
+        if (game.collision_count > 0) {
+            _ = ig.igBeginListBox("Collisions", .{});
+            for (game.collisions[0..game.collision_count], 0..) |_, i| {
+                var buf: [128]u8 = undefined;
+                const label = std.fmt.bufPrintZ(&buf, "Collision {}", .{ i }) catch unreachable;
+                if (ig.igSelectable_Bool(label, i == dbg_selected_coll, ig.ImGuiSelectableFlags_None, .{})) {
+                    dbg_selected_coll = i;
+                }
+            }
+            _ = ig.igEndListBox();
+
+            const coll = game.collisions[@min(dbg_selected_coll, game.collision_count - 1)];
+            _ = ig.igText("Brick: %d", coll.brick);
+            _ = ig.igText("Loc: (%f, %f)", coll.loc[0], coll.loc[1]);
+            _ = ig.igText("Normal: (%f, %f)", coll.normal[0], coll.normal[1]);
+
+            const scale = .{
+                @as(f32, @floatFromInt(state.window_size[0])) / @as(f32, @floatFromInt(viewport_size[0])),
+                @as(f32, @floatFromInt(state.window_size[1])) / @as(f32, @floatFromInt(viewport_size[1])),
+            };
+            const drawlist = ig.igGetBackgroundDrawList_Nil();
+            const normal = m.vmul(coll.normal, 20);
+            ig.ImDrawList_AddLine(
+                drawlist,
+                .{ .x = coll.loc[0] * scale[0], .y = coll.loc[1] * scale[1] },
+                .{ .x = (coll.loc[0] + normal[0]) * scale[0], .y = (coll.loc[1] + normal[1]) * scale[1] },
+                0xFFFFFFFF,
+                1,
+            );
+        }
+    }
+
     ig.igEnd();
     //=== UI CODE ENDS HERE
 
@@ -432,14 +521,19 @@ fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir
 }
 
 export fn event(ev: [*c]const sapp.Event) void {
+    // forward input events to sokol-imgui
+    _ = simgui.handleEvent(ev.*);
+
+    if (state.debug) return;
+
     switch (ev.*.type) {
         .KEY_DOWN => {
             switch (ev.*.key_code) {
                 .LEFT => {
-                    state.input.left_down = true;
+                    current_game.input.left_down = true;
                 },
                 .RIGHT => {
-                    state.input.right_down = true;
+                    current_game.input.right_down = true;
                 },
                 else => {},
             }
@@ -447,10 +541,10 @@ export fn event(ev: [*c]const sapp.Event) void {
         .KEY_UP => {
             switch (ev.*.key_code) {
                 .LEFT => {
-                    state.input.left_down = false;
+                    current_game.input.left_down = false;
                 },
                 .RIGHT => {
-                    state.input.right_down = false;
+                    current_game.input.right_down = false;
                 },
                 else => {},
             }
@@ -463,9 +557,6 @@ export fn event(ev: [*c]const sapp.Event) void {
         },
         else => {},
     }
-
-    // forward input events to sokol-imgui
-    _ = simgui.handleEvent(ev.*);
 }
 
 export fn cleanup() void {

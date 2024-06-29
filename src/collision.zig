@@ -44,7 +44,7 @@ pub fn box_intersection(p0: [2]f32, p1: [2]f32, box: Rect, out: ?*[2]f32, normal
         const nt = m.magnitude(m.vsub(out.?.*, p0));
         if (nt < t) {
             t = nt;
-            if (normal) |n| n.* = .{ 0, 1 };
+            if (normal) |n| n.* = .{ 0, -1 };
             collided = true;
         }
     }
@@ -71,7 +71,7 @@ pub fn box_intersection(p0: [2]f32, p1: [2]f32, box: Rect, out: ?*[2]f32, normal
         const nt = m.magnitude(m.vsub(out.?.*, p0));
         if (nt < t) {
             t = nt;
-            if (normal) |n| n.* = .{ 0, -1 };
+            if (normal) |n| n.* = .{ 0, 1 };
             collided = true;
         }
     }
