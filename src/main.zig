@@ -43,6 +43,7 @@ const num_bricks = 10;
 const num_rows = 5;
 const brick_w = 16;
 const brick_h = 8;
+const brick_start_y = 8;
 
 const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
 
@@ -209,7 +210,7 @@ export fn init() void {
         for (0..num_bricks) |x| {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
-            current_game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, fy * brick_h } };
+            current_game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
         }
     }
     m.normalize(&current_game.ball_dir);
@@ -358,6 +359,21 @@ fn updateGame(game: *GameState, dt: f32) !void {
             game.ball_dir = m.reflect(game.ball_dir, normal);
         }
     }
+
+    { // Has the ball hit the floor?
+        const c = @import("collision.zig").line_intersection(
+            old_ball_pos,
+            game.ball_pos,
+            .{ 0, vh - ball_h / 2 },
+            .{ vw, vh - ball_h / 2 },
+            &out,
+        );
+        if (c) {
+            std.log.warn("DEAD!", .{});
+            game.ball_pos = initial_ball_pos;
+            game.ball_dir = initial_ball_dir;
+        }
+    }
 }
 export fn frame() void {
     const dt: f32 = @floatCast(sapp.frameDuration());
@@ -423,6 +439,33 @@ export fn frame() void {
     });
     vert_index += 6;
 
+    // top bar
+    // TODO refactor
+    quad(.{
+        .buf = verts[vert_index..],
+        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+        .dst = .{ .x = 2, .y = 2, .w = ball_w, .h = ball_h },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
+    });
+    vert_index += 6;
+    quad(.{
+        .buf = verts[vert_index..],
+        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+        .dst = .{ .x = 2 + ball_w + 2, .y = 2, .w = ball_w, .h = ball_h },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
+    });
+    vert_index += 6;
+    quad(.{
+        .buf = verts[vert_index..],
+        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+        .dst = .{ .x = 2 + 2*(ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+        .tw = @floatFromInt(state.texture.desc.width),
+        .th = @floatFromInt(state.texture.desc.height),
+    });
+    vert_index += 6;
+
     sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(&verts));
 
     simgui.newFrame(.{
@@ -457,7 +500,7 @@ export fn frame() void {
             _ = ig.igBeginListBox("Collisions", .{});
             for (game.collisions[0..game.collision_count], 0..) |_, i| {
                 var buf: [128]u8 = undefined;
-                const label = std.fmt.bufPrintZ(&buf, "Collision {}", .{ i }) catch unreachable;
+                const label = std.fmt.bufPrintZ(&buf, "Collision {}", .{i}) catch unreachable;
                 if (ig.igSelectable_Bool(label, i == dbg_selected_coll, ig.ImGuiSelectableFlags_None, .{})) {
                     dbg_selected_coll = i;
                 }
