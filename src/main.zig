@@ -99,6 +99,8 @@ const BallState = enum {
 const GameState = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
+    lives: u8 = 3,
+
     paddle_pos: [2]f32 = initial_paddle_pos,
     ball_pos: [2]f32 = initial_ball_pos,
     ball_dir: [2]f32 = initial_ball_dir,
@@ -392,10 +394,15 @@ fn updateGame(game: *GameState, dt: f32) !void {
         );
         if (c) {
             std.log.warn("DEAD!", .{});
-            updateIdleBall(game);
-            game.ball_dir = initial_ball_dir;
-            m.normalize(&game.ball_dir);
-            game.ball_state = .idle;
+            if (game.lives == 0) {
+                std.log.warn("GAME OVER", .{});
+            } else {
+                game.lives -= 1;
+                updateIdleBall(game);
+                game.ball_dir = initial_ball_dir;
+                m.normalize(&game.ball_dir);
+                game.ball_state = .idle;
+            }
         }
     }
 }
@@ -464,31 +471,17 @@ export fn frame() void {
     vert_index += 6;
 
     // top bar
-    // TODO refactor
-    quad(.{
-        .buf = verts[vert_index..],
-        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-        .dst = .{ .x = 2, .y = 2, .w = ball_w, .h = ball_h },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
-    });
-    vert_index += 6;
-    quad(.{
-        .buf = verts[vert_index..],
-        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-        .dst = .{ .x = 2 + ball_w + 2, .y = 2, .w = ball_w, .h = ball_h },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
-    });
-    vert_index += 6;
-    quad(.{
-        .buf = verts[vert_index..],
-        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-        .dst = .{ .x = 2 + 2 * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
-    });
-    vert_index += 6;
+    for (0..game.lives) |i| {
+        const fi: f32 = @floatFromInt(i);
+        quad(.{
+            .buf = verts[vert_index..],
+            .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+            .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+            .tw = @floatFromInt(state.texture.desc.width),
+            .th = @floatFromInt(state.texture.desc.height),
+        });
+        vert_index += 6;
+    }
 
     sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(&verts));
 
