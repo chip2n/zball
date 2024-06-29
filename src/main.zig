@@ -91,16 +91,23 @@ const state = struct {
     var debug: bool = false;
 };
 
+const BallState = enum {
+    alive, // ball is flying around wreaking all sorts of havoc
+    idle, // ball is on paddle and waiting to be shot
+};
+
 const GameState = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
     paddle_pos: [2]f32 = initial_paddle_pos,
     ball_pos: [2]f32 = initial_ball_pos,
     ball_dir: [2]f32 = initial_ball_dir,
+    ball_state: BallState = .idle,
 
     input: struct {
         left_down: bool = false,
         right_down: bool = false,
+        space_down: bool = false,
     } = .{},
 
     collisions: [8]struct {
@@ -250,6 +257,11 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
+fn updateIdleBall(game: *GameState) void {
+    game.ball_pos[0] = game.paddle_pos[0];
+    game.ball_pos[1] = game.paddle_pos[1] - 5 * ball_h / 3;
+}
+
 fn updateGame(game: *GameState, dt: f32) !void {
     // Reset data from previous frame
     game.collision_count = 0;
@@ -265,10 +277,20 @@ fn updateGame(game: *GameState, dt: f32) !void {
         game.paddle_pos[0] += paddle_dx * paddle_speed * dt;
     }
 
+    // Fire ball when pressing space
+    if (game.input.space_down and game.ball_state == .idle) {
+        game.ball_state = .alive;
+    }
+
     const old_ball_pos = game.ball_pos;
-    { // Move ball
-        game.ball_pos[0] += game.ball_dir[0] * ball_speed * dt;
-        game.ball_pos[1] += game.ball_dir[1] * ball_speed * dt;
+    switch (game.ball_state) {
+        .idle => {
+            updateIdleBall(game);
+        },
+        .alive => {
+            game.ball_pos[0] += game.ball_dir[0] * ball_speed * dt;
+            game.ball_pos[1] += game.ball_dir[1] * ball_speed * dt;
+        },
     }
     const new_ball_pos = game.ball_pos;
 
@@ -370,8 +392,9 @@ fn updateGame(game: *GameState, dt: f32) !void {
         );
         if (c) {
             std.log.warn("DEAD!", .{});
-            game.ball_pos = initial_ball_pos;
+            updateIdleBall(game);
             game.ball_dir = initial_ball_dir;
+            game.ball_state = .idle;
         }
     }
 }
@@ -460,7 +483,7 @@ export fn frame() void {
     quad(.{
         .buf = verts[vert_index..],
         .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-        .dst = .{ .x = 2 + 2*(ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+        .dst = .{ .x = 2 + 2 * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
         .tw = @floatFromInt(state.texture.desc.width),
         .th = @floatFromInt(state.texture.desc.height),
     });
@@ -578,6 +601,9 @@ export fn event(ev: [*c]const sapp.Event) void {
                 .RIGHT => {
                     current_game.input.right_down = true;
                 },
+                .SPACE => {
+                    current_game.input.space_down = true;
+                },
                 else => {},
             }
         },
@@ -588,6 +614,9 @@ export fn event(ev: [*c]const sapp.Event) void {
                 },
                 .RIGHT => {
                     current_game.input.right_down = false;
+                },
+                .SPACE => {
+                    current_game.input.space_down = false;
                 },
                 else => {},
             }
