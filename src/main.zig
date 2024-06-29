@@ -38,7 +38,7 @@ const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
     initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
 };
-const initial_ball_dir: [2]f32 = .{ 1, -1 };
+const initial_ball_dir: [2]f32 = .{ 0.3, -1 };
 const num_bricks = 10;
 const num_rows = 5;
 const brick_w = 16;
@@ -394,6 +394,7 @@ fn updateGame(game: *GameState, dt: f32) !void {
             std.log.warn("DEAD!", .{});
             updateIdleBall(game);
             game.ball_dir = initial_ball_dir;
+            m.normalize(&game.ball_dir);
             game.ball_state = .idle;
         }
     }
