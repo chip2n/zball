@@ -49,6 +49,7 @@ pub fn build(b: *Build) void {
     tool_fontpack_run_step.dependOn(&tool_fontpack_run.step);
     tool_fontpack_run.addFileArg(b.path("assets/04b09.ttf"));
     const tool_fontpack_output = tool_fontpack_run.addOutputFileArg("font.zig");
+    _ = tool_fontpack_run.addOutputFileArg("font.png");
 
     const deps = CoreDependencies{
         .sokol = dep_sokol,

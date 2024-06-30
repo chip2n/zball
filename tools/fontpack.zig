@@ -15,9 +15,10 @@ pub fn main() !void {
     defer arena.deinit();
 
     const args = try std.process.argsAlloc(arena.allocator());
-    if (args.len != 3) return error.InvalidArguments;
+    if (args.len != 4) return error.InvalidArguments;
     const font_path = args[1];
-    const output_file_path = args[2];
+    const output_path = args[2];
+    const img_path = args[3];
 
     const font_data = try std.fs.cwd().readFileAlloc(arena.allocator(), font_path, 1 << 20);
 
@@ -30,13 +31,15 @@ pub fn main() !void {
 
     try pack(font_data, &bitmap, bw, &glyphs, chars);
 
-    if (c.stbi_write_png("/tmp/out.png", bw, bh, 1, &bitmap, bw) == 0) {
+    if (c.stbi_write_png(img_path, bw, bh, 1, &bitmap, bw) == 0) {
         return error.ImageWriteFailed;
     }
 
-    var output_file = try std.fs.cwd().createFile(output_file_path, .{});
+    var output_file = try std.fs.cwd().createFile(output_path, .{});
     defer output_file.close();
     const out = output_file.writer();
+
+    try out.print("pub const image = @embedFile(\"{s}\");", .{img_path});
 
     _ = try out.write("pub const glyphs = .{\n");
     for (glyphs) |glyph| {
@@ -45,21 +48,6 @@ pub fn main() !void {
     _ = try out.write("};");
 
     _ = try out.write("\n\n");
-
-    _ = try out.write("pub const image = .{\n");
-    _ = try out.write("    ");
-    var i: usize = 0;
-    for (bitmap) |b| {
-        try out.print("0x{x:0>2},", .{b});
-        i += 1;
-        if (i > 16) {
-            i = 0;
-            _ = try out.write("\n    ");
-        } else {
-            _ = try out.write(" ");
-        }
-    }
-    _ = try out.write("};");
 
     return std.process.cleanExit();
 }
