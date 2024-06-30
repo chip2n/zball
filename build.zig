@@ -5,6 +5,16 @@ const OptimizeMode = std.builtin.OptimizeMode;
 
 const sokol = @import("sokol");
 
+const CoreDependencies = struct {
+    sokol: *Build.Dependency,
+    cimgui: *Build.Dependency,
+    stb: *Build.Dependency,
+    zmath: *Build.Dependency,
+
+    shader_path: Build.LazyPath,
+    font_path: Build.LazyPath,
+};
+
 pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -24,32 +34,61 @@ pub fn build(b: *Build) void {
 
     // Shader compilation step
     const shdc = dep_sokol_tools.path("bin/linux/sokol-shdc").getPath(b);
-    const shader_cmd = b.addSystemCommand(&.{
-        shdc,
-        "--input=src/shaders/main.glsl",
-        "--output=src/shaders/main.glsl.zig",
+    var shader_cmd = b.addSystemCommand(&.{shdc});
+    shader_cmd.addPrefixedFileArg("--input=", b.path("src/shaders/main.glsl"));
+    const shader_output = shader_cmd.addPrefixedOutputFileArg("--output=", "main.glsl.zig");
+    shader_cmd.addArgs(&.{
         "--slang=glsl410:metal_macos:hlsl5:glsl300es:wgsl",
         "--format=sokol_zig",
     });
 
+    // Font packer
+    const tool_fontpack = try buildFontPackTool(b, optimize, dep_stb);
+    const tool_fontpack_run = b.addRunArtifact(tool_fontpack);
+    const tool_fontpack_run_step = b.step("fontpack", "Run the font packer");
+    tool_fontpack_run_step.dependOn(&tool_fontpack_run.step);
+    tool_fontpack_run.addFileArg(b.path("assets/04b09.ttf"));
+    const tool_fontpack_output = tool_fontpack_run.addOutputFileArg("font.zig");
+
+    const deps = CoreDependencies{
+        .sokol = dep_sokol,
+        .cimgui = dep_cimgui,
+        .stb = dep_stb,
+        .zmath = dep_zmath,
+        .shader_path = shader_output,
+        .font_path = tool_fontpack_output,
+    };
+
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        const lib = try buildWeb(b, target, optimize, dep_emsdk, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
-        lib.step.dependOn(&shader_cmd.step);
+        _ = try buildWeb(b, target, optimize, dep_emsdk, deps);
     } else {
-        const exe = try buildNative(b, target, optimize, dep_sokol, dep_cimgui, dep_stb, dep_zmath);
-        exe.step.dependOn(&shader_cmd.step);
+        _ = try buildNative(b, target, optimize, deps);
     }
+}
+
+fn buildFontPackTool(
+    b: *Build,
+    optimize: OptimizeMode,
+    dep_stb: *Build.Dependency,
+) !*Build.Step.Compile {
+    const tool_fontpack = b.addExecutable(.{
+        .name = "fontpack",
+        .root_source_file = b.path("tools/fontpack.zig"),
+        .target = b.host,
+        .optimize = optimize,
+    });
+    tool_fontpack.addIncludePath(dep_stb.path("."));
+    tool_fontpack.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });
+    tool_fontpack.linkLibC();
+    return tool_fontpack;
 }
 
 fn buildNative(
     b: *Build,
     target: Build.ResolvedTarget,
     optimize: OptimizeMode,
-    dep_sokol: *Build.Dependency,
-    dep_cimgui: *Build.Dependency,
-    dep_stb: *Build.Dependency,
-    dep_zmath: *Build.Dependency,
+    deps: CoreDependencies,
 ) !*Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "game",
@@ -59,17 +98,30 @@ fn buildNative(
     });
 
     // sokol
-    exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
+    const mod_sokol = deps.sokol.module("sokol");
+    exe.root_module.addImport("sokol", mod_sokol);
 
     // imgui
-    exe.root_module.addImport("cimgui", dep_cimgui.module("cimgui"));
+    const mod_cimgui = deps.cimgui.module("cimgui");
+    exe.root_module.addImport("cimgui", mod_cimgui);
 
     // stb
-    exe.addIncludePath(dep_stb.path("."));
+    exe.addIncludePath(deps.stb.path("."));
     exe.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
 
     // zmath
-    exe.root_module.addImport("zmath", dep_zmath.module("root"));
+    const mod_zmath = deps.zmath.module("root");
+    exe.root_module.addImport("zmath", mod_zmath);
+
+    // tools
+    exe.root_module.addAnonymousImport("shader", .{
+        .root_source_file = deps.shader_path,
+        .imports = &.{
+            .{ .name = "sokol", .module = mod_sokol },
+            .{ .name = "zmath", .module = mod_zmath },
+        },
+    });
+    exe.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
 
     b.installArtifact(exe);
 
@@ -90,10 +142,7 @@ fn buildWeb(
     target: Build.ResolvedTarget,
     optimize: OptimizeMode,
     dep_emsdk: *Build.Dependency,
-    dep_sokol: *Build.Dependency,
-    dep_cimgui: *Build.Dependency,
-    dep_stb: *Build.Dependency,
-    dep_zmath: *Build.Dependency,
+    deps: CoreDependencies,
 ) !*Build.Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "game",
@@ -103,17 +152,30 @@ fn buildWeb(
     });
 
     // sokol
-    lib.root_module.addImport("sokol", dep_sokol.module("sokol"));
+    const mod_sokol = deps.sokol.module("sokol");
+    lib.root_module.addImport("sokol", mod_sokol);
 
     // imgui
-    lib.root_module.addImport("cimgui", dep_cimgui.module("cimgui"));
+    const mod_cimgui = deps.cimgui.module("cimgui");
+    lib.root_module.addImport("cimgui", mod_cimgui);
 
     // stb
-    lib.addIncludePath(dep_stb.path("."));
+    lib.addIncludePath(deps.stb.path("."));
     lib.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
 
     // zmath
-    lib.root_module.addImport("zmath", dep_zmath.module("root"));
+    const mod_zmath = deps.zmath.module("root");
+    lib.root_module.addImport("zmath", mod_zmath);
+
+    // tools
+    lib.root_module.addAnonymousImport("shader", .{
+        .root_source_file = deps.shader_path,
+        .imports = &.{
+            .{ .name = "sokol", .module = mod_sokol },
+            .{ .name = "zmath", .module = mod_zmath },
+        },
+    });
+    lib.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
@@ -121,9 +183,9 @@ fn buildWeb(
     // need to inject the Emscripten system header include path into
     // the cimgui C library otherwise the C/C++ code won't find
     // C stdlib headers
-    dep_cimgui.artifact("cimgui_clib").addSystemIncludePath(emsdk_sysroot);
+    deps.cimgui.artifact("cimgui_clib").addSystemIncludePath(emsdk_sysroot);
 
-    const emsdk = dep_sokol.builder.dependency("emsdk", .{});
+    const emsdk = deps.sokol.builder.dependency("emsdk", .{});
     const link_step = try sokol.emLinkStep(b, .{
         .lib_main = lib,
         .target = target,

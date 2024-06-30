@@ -7,7 +7,8 @@ const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 const simgui = sokol.imgui;
-const shd = @import("shaders/main.glsl.zig");
+
+const shd = @import("shader");
 
 const ig = @import("cimgui");
 // TODO
