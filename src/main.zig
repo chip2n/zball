@@ -9,6 +9,7 @@ const sglue = sokol.glue;
 const simgui = sokol.imgui;
 
 const shd = @import("shader");
+const font = @import("font");
 
 const ig = @import("cimgui");
 // TODO
@@ -46,7 +47,7 @@ const brick_w = 16;
 const brick_h = 8;
 const brick_start_y = 8;
 
-const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
+const Rect = m.Rect;
 
 const Brick = struct {
     pos: [2]f32,
@@ -82,7 +83,9 @@ const state = struct {
     };
 
     var texture: Texture = undefined;
+    var font_texture: Texture = undefined;
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
+    var textures: std.AutoHashMap(usize, sg.Image) = undefined;
 
     var window_size: [2]i32 = initial_screen_size;
 
@@ -101,6 +104,7 @@ const GameState = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
     lives: u8 = 3,
+    score: u32 = 0,
 
     paddle_pos: [2]f32 = initial_paddle_pos,
     ball_pos: [2]f32 = initial_ball_pos,
@@ -129,6 +133,9 @@ var history_index: usize = 0;
 var dbg_selected_coll: usize = 0;
 
 export fn init() void {
+    state.arena = std.heap.ArenaAllocator.init(state.allocator);
+    errdefer state.arena.deinit();
+
     sg.setup(.{
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
@@ -162,8 +169,11 @@ export fn init() void {
     createOffscreenAttachments(viewport_size[0], viewport_size[1]);
 
     state.texture = Texture.init(img);
+    state.font_texture = Texture.init(font.image);
 
-    state.offscreen.bind.fs.images[shd.SLOT_tex] = sg.makeImage(state.texture.desc);
+    state.textures = std.AutoHashMap(usize, sg.Image).init(state.arena.allocator());
+    state.textures.put(state.texture.id, sg.makeImage(state.texture.desc)) catch unreachable;
+    state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc)) catch unreachable;
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 
     // create a shader and pipeline object
@@ -177,10 +187,16 @@ export fn init() void {
             .write_enabled = false,
         },
         .color_count = 1,
+        // .blend_color = .{ .r = 1, .g = 0, .b = 0, .a = 1},
     };
     pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
     pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
     pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
+    pip_desc.colors[0].blend = .{
+        .enabled = true,
+        .src_factor_rgb = .SRC_ALPHA,
+        .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+    };
 
     state.offscreen.pip = sg.makePipeline(pip_desc);
 
@@ -213,9 +229,6 @@ export fn init() void {
     state.fsq.bind.fs.samplers[0] = smp;
 
     // initialize game state
-    state.arena = std.heap.ArenaAllocator.init(state.allocator);
-    errdefer state.arena.deinit();
-
     for (0..num_rows) |y| {
         for (0..num_bricks) |x| {
             const fx: f32 = @floatFromInt(x);
@@ -323,6 +336,7 @@ fn updateGame(game: *GameState, dt: f32) !void {
                 }
                 std.log.warn("COLLIDED", .{});
                 brick.destroyed = true;
+                game.score += 100;
 
                 game.collisions[game.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
                 game.collision_count += 1;
@@ -425,25 +439,24 @@ export fn frame() void {
 
     // * Render
 
-    var verts: [max_verts]Vertex = undefined;
-    var vert_index: usize = 0;
+    // TODO frame arena?
+    var batch = @import("batch.zig").BatchRenderer.init();
+
+    batch.setTexture(state.texture);
+
+    // Render all bricks
     for (game.bricks) |brick| {
         if (brick.destroyed) continue;
         const x = brick.pos[0];
         const y = brick.pos[1];
-        quad(.{
-            .buf = verts[vert_index..],
+        batch.render(.{
             .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
-            .tw = @floatFromInt(state.texture.desc.width),
-            .th = @floatFromInt(state.texture.desc.height),
         });
-        vert_index += 6;
     }
 
-    // ball
-    quad(.{
-        .buf = verts[vert_index..],
+    // Render ball
+    batch.render(.{
         .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
         .dst = .{
             .x = game.ball_pos[0] - ball_w / 2,
@@ -451,14 +464,10 @@ export fn frame() void {
             .w = ball_w,
             .h = ball_h,
         },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
     });
-    vert_index += 6;
 
-    // paddle
-    quad(.{
-        .buf = verts[vert_index..],
+    // Render paddle
+    batch.render(.{
         .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
         .dst = .{
             .x = game.paddle_pos[0] - paddle_w / 2,
@@ -466,25 +475,27 @@ export fn frame() void {
             .w = paddle_w,
             .h = paddle_h,
         },
-        .tw = @floatFromInt(state.texture.desc.width),
-        .th = @floatFromInt(state.texture.desc.height),
     });
-    vert_index += 6;
 
-    // top bar
+    // Top status bar
     for (0..game.lives) |i| {
         const fi: f32 = @floatFromInt(i);
-        quad(.{
-            .buf = verts[vert_index..],
+        batch.render(.{
             .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
             .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
-            .tw = @floatFromInt(state.texture.desc.width),
-            .th = @floatFromInt(state.texture.desc.height),
         });
-        vert_index += 6;
     }
 
-    sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(&verts));
+    { // Text
+        batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+        var text_renderer = @import("ttf.zig").TextRenderer{};
+        var buf: [32]u8 = undefined;
+        const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{game.score}) catch unreachable;
+        text_renderer.render(&batch, label, 32, 0);
+    }
+
+    const result = batch.commit();
+    sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
     simgui.newFrame(.{
         .width = sapp.width(),
@@ -554,9 +565,12 @@ export fn frame() void {
 
     sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
     sg.applyPipeline(state.offscreen.pip);
-    sg.applyBindings(state.offscreen.bind);
     sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-    sg.draw(0, verts.len, 1);
+    for (result.batches) |b| {
+        state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex.id).?;
+        sg.applyBindings(state.offscreen.bind);
+        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+    }
     sg.endPass();
 
     sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });

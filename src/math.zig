@@ -1,3 +1,5 @@
+pub const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
+
 pub fn normalize(v: *[2]f32) void {
     const mag = magnitude(v.*);
     v[0] /= mag;

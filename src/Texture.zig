@@ -5,6 +5,9 @@ const c = @cImport({
     @cInclude("stb_image.h");
 });
 
+var g_id: usize = 0;
+
+id: usize,
 desc: sg.ImageDesc,
 
 pub fn init(data: []const u8) @This() {
@@ -19,5 +22,8 @@ pub fn init(data: []const u8) @This() {
         .pixel_format = .RGBA8,
     };
     desc.data.subimage[0][0] = sg.asRange(img_data[0..size]);
-    return .{ .desc = desc };
+
+    const id = g_id;
+    g_id += 1;
+    return .{ .id = id, .desc = desc };
 }
