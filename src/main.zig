@@ -91,8 +91,6 @@ const state = struct {
 
     var allocator = std.heap.c_allocator;
     var arena: std.heap.ArenaAllocator = undefined;
-
-    var debug: bool = false;
 };
 
 const BallState = enum {
@@ -125,12 +123,8 @@ const GameState = struct {
     collision_count: usize = 0,
 };
 
-var current_game: GameState = .{};
+var game: GameState = .{};
 
-// Debug stuff
-var history: std.ArrayList(GameState) = undefined;
-var history_index: usize = 0;
-var dbg_selected_coll: usize = 0;
 var batch = @import("batch.zig").BatchRenderer.init();
 
 export fn init() void {
@@ -234,12 +228,10 @@ export fn init() void {
         for (0..num_bricks) |x| {
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
-            current_game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
+            game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
         }
     }
-    m.normalize(&current_game.ball_dir);
-
-    history = std.ArrayList(GameState).init(state.arena.allocator());
+    m.normalize(&game.ball_dir);
 }
 
 const QuadOptions = struct {
@@ -274,12 +266,12 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
-fn updateIdleBall(game: *GameState) void {
+fn updateIdleBall() void {
     game.ball_pos[0] = game.paddle_pos[0];
     game.ball_pos[1] = game.paddle_pos[1] - 5 * ball_h / 3;
 }
 
-fn updateGame(game: *GameState, dt: f32) !void {
+fn updateGame(dt: f32) void {
     // Reset data from previous frame
     game.collision_count = 0;
 
@@ -302,7 +294,7 @@ fn updateGame(game: *GameState, dt: f32) !void {
     const old_ball_pos = game.ball_pos;
     switch (game.ball_state) {
         .idle => {
-            updateIdleBall(game);
+            updateIdleBall();
         },
         .alive => {
             game.ball_pos[0] += game.ball_dir[0] * ball_speed * dt;
@@ -414,7 +406,7 @@ fn updateGame(game: *GameState, dt: f32) !void {
                 std.log.warn("GAME OVER", .{});
             } else {
                 game.lives -= 1;
-                updateIdleBall(game);
+                updateIdleBall();
                 game.ball_dir = initial_ball_dir;
                 m.normalize(&game.ball_dir);
                 game.ball_state = .idle;
@@ -422,21 +414,10 @@ fn updateGame(game: *GameState, dt: f32) !void {
         }
     }
 }
+
 export fn frame() void {
     const dt: f32 = @floatCast(sapp.frameDuration());
-
-    var game = &current_game;
-    if (state.debug) {
-        game = &history.items[history_index];
-    }
-
-    if (!state.debug) {
-        updateGame(game, dt) catch unreachable;
-        // Store the new state in history as a final step
-        // TODO only in debug builds
-        history.append(current_game) catch unreachable;
-        history_index = history.items.len - 1;
-    }
+    updateGame(dt);
 
     // * Render
 
@@ -503,57 +484,13 @@ export fn frame() void {
     });
 
     //=== UI CODE STARTS HERE
-    ig.igSetNextWindowPos(.{ .x = 10, .y = 10 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
+    ig.igSetNextWindowPos(.{ .x = 100, .y = 200 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
     ig.igSetNextWindowSize(.{ .x = 400, .y = 400 }, ig.ImGuiCond_Once);
-    _ = ig.igBegin("Hello Dear ImGui!", 0, ig.ImGuiWindowFlags_None);
+    _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
     _ = ig.igText("Ball pos: %f %f", game.ball_pos[0], game.ball_pos[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
-
-    const debug_pressed = ig.igButton("Debug", .{});
-    if (debug_pressed) {
-        state.debug = true;
-    }
-    if (state.debug) {
-        _ = ig.igText("Collisions: %d", game.collision_count);
-        if (ig.igButton("Prev frame", .{})) {
-            if (history_index > 0) history_index -= 1;
-        }
-
-        if (ig.igButton("Next frame", .{})) {
-            if (history_index < history.items.len - 1) history_index += 1;
-        }
-        if (game.collision_count > 0) {
-            _ = ig.igBeginListBox("Collisions", .{});
-            for (game.collisions[0..game.collision_count], 0..) |_, i| {
-                var buf: [128]u8 = undefined;
-                const label = std.fmt.bufPrintZ(&buf, "Collision {}", .{i}) catch unreachable;
-                if (ig.igSelectable_Bool(label, i == dbg_selected_coll, ig.ImGuiSelectableFlags_None, .{})) {
-                    dbg_selected_coll = i;
-                }
-            }
-            _ = ig.igEndListBox();
-
-            const coll = game.collisions[@min(dbg_selected_coll, game.collision_count - 1)];
-            _ = ig.igText("Brick: %d", coll.brick);
-            _ = ig.igText("Loc: (%f, %f)", coll.loc[0], coll.loc[1]);
-            _ = ig.igText("Normal: (%f, %f)", coll.normal[0], coll.normal[1]);
-
-            const scale = .{
-                @as(f32, @floatFromInt(state.window_size[0])) / @as(f32, @floatFromInt(viewport_size[0])),
-                @as(f32, @floatFromInt(state.window_size[1])) / @as(f32, @floatFromInt(viewport_size[1])),
-            };
-            const drawlist = ig.igGetBackgroundDrawList_Nil();
-            const normal = m.vmul(coll.normal, 20);
-            ig.ImDrawList_AddLine(
-                drawlist,
-                .{ .x = coll.loc[0] * scale[0], .y = coll.loc[1] * scale[1] },
-                .{ .x = (coll.loc[0] + normal[0]) * scale[0], .y = (coll.loc[1] + normal[1]) * scale[1] },
-                0xFFFFFFFF,
-                1,
-            );
-        }
-    }
 
     ig.igEnd();
     //=== UI CODE ENDS HERE
@@ -597,19 +534,17 @@ export fn event(ev: [*c]const sapp.Event) void {
     // forward input events to sokol-imgui
     _ = simgui.handleEvent(ev.*);
 
-    if (state.debug) return;
-
     switch (ev.*.type) {
         .KEY_DOWN => {
             switch (ev.*.key_code) {
                 .LEFT => {
-                    current_game.input.left_down = true;
+                    game.input.left_down = true;
                 },
                 .RIGHT => {
-                    current_game.input.right_down = true;
+                    game.input.right_down = true;
                 },
                 .SPACE => {
-                    current_game.input.space_down = true;
+                    game.input.space_down = true;
                 },
                 else => {},
             }
@@ -617,13 +552,13 @@ export fn event(ev: [*c]const sapp.Event) void {
         .KEY_UP => {
             switch (ev.*.key_code) {
                 .LEFT => {
-                    current_game.input.left_down = false;
+                    game.input.left_down = false;
                 },
                 .RIGHT => {
-                    current_game.input.right_down = false;
+                    game.input.right_down = false;
                 },
                 .SPACE => {
-                    current_game.input.space_down = false;
+                    game.input.space_down = false;
                 },
                 else => {},
             }
