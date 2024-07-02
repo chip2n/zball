@@ -131,6 +131,7 @@ var current_game: GameState = .{};
 var history: std.ArrayList(GameState) = undefined;
 var history_index: usize = 0;
 var dbg_selected_coll: usize = 0;
+var batch = @import("batch.zig").BatchRenderer.init();
 
 export fn init() void {
     state.arena = std.heap.ArenaAllocator.init(state.allocator);
@@ -439,9 +440,6 @@ export fn frame() void {
 
     // * Render
 
-    // TODO frame arena?
-    var batch = @import("batch.zig").BatchRenderer.init();
-
     batch.setTexture(state.texture);
 
     // Render all bricks
@@ -567,7 +565,7 @@ export fn frame() void {
     sg.applyPipeline(state.offscreen.pip);
     sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
     for (result.batches) |b| {
-        state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex.id).?;
+        state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
         sg.applyBindings(state.offscreen.bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }

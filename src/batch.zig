@@ -12,7 +12,9 @@ const max_tex = 8;
 const TextureId = usize;
 
 const RenderCommand = struct {
-    tex: Texture,
+    tex: usize,
+    tw: f32,
+    th: f32,
     src: ?Rect = null,
     dst: Rect,
 };
@@ -25,7 +27,7 @@ pub const BatchResult = struct {
 pub const Batch = struct {
     offset: usize,
     len: usize,
-    tex: Texture, // TODO only store id instead?
+    tex: usize,
 };
 
 pub const BatchRenderer = struct {
@@ -47,14 +49,19 @@ pub const BatchRenderer = struct {
 
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         std.debug.assert(self.tex != null);
-        self.buf[self.idx] = .{ .tex = self.tex.?, .src = v.src, .dst = v.dst };
+        self.buf[self.idx] = .{
+            .tex = self.tex.?.id,
+            .tw = @floatFromInt(self.tex.?.desc.width),
+            .th = @floatFromInt(self.tex.?.desc.height),
+            .src = v.src,
+            .dst = v.dst,
+        };
         self.idx += 1;
         std.debug.assert(self.idx < self.buf.len);
     }
 
     pub fn commit(self: *BatchRenderer) BatchResult {
         const buf = self.buf[0..self.idx];
-        std.mem.sort(RenderCommand, buf, @as(usize, 0), sortLessThanFn);
 
         var i: usize = 0;
         var batch_idx: usize = 0;
@@ -64,7 +71,7 @@ pub const BatchRenderer = struct {
         self.batches[0].len = 0;
         self.batches[0].tex = tex;
         for (buf) |cmd| {
-            if (cmd.tex.id != tex.id) {
+            if (cmd.tex != tex) {
                 batch_idx += 1;
                 self.batches[batch_idx].offset = i;
                 self.batches[batch_idx].len = 0;
@@ -77,13 +84,16 @@ pub const BatchRenderer = struct {
                 .buf = self.verts[i..],
                 .src = cmd.src,
                 .dst = cmd.dst,
-                .tw = @floatFromInt(cmd.tex.desc.width),
-                .th = @floatFromInt(cmd.tex.desc.height),
+                .tw = cmd.tw,
+                .th = cmd.th,
             });
 
             self.batches[batch_idx].len += 6;
             i += 6;
         }
+
+        self.idx = 0;
+        self.tex = null;
 
         return .{ .verts = self.verts[0..i], .batches = self.batches[0..batch_count] };
     }
