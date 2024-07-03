@@ -11,12 +11,15 @@ const simgui = sokol.imgui;
 const shd = @import("shader");
 const font = @import("font");
 
+const TextRenderer = @import("ttf.zig").TextRenderer;
+
 const ig = @import("cimgui");
 // TODO
 const m = @import("math.zig");
 const zm = @import("zmath");
 
 const img = @embedFile("spritesheet.png");
+const titlescreen = @embedFile("titlescreen.png");
 const Texture = @import("Texture.zig");
 
 const offscreen_sample_count = 1;
@@ -31,11 +34,12 @@ const paddle_h: f32 = 8;
 const paddle_speed: f32 = 80;
 const ball_w: f32 = 4;
 const ball_h: f32 = 4;
-const ball_speed: f32 = 40;
+const ball_speed: f32 = 70;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
     viewport_size[1] - 10,
 };
+
 const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
     initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
@@ -83,6 +87,7 @@ const state = struct {
     };
 
     var texture: Texture = undefined;
+    var titlescreen_texture: Texture = undefined;
     var font_texture: Texture = undefined;
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
     var textures: std.AutoHashMap(usize, sg.Image) = undefined;
@@ -91,6 +96,8 @@ const state = struct {
 
     var allocator = std.heap.c_allocator;
     var arena: std.heap.ArenaAllocator = undefined;
+
+    var scene: Scene = .{ .title = .{} };
 };
 
 const BallState = enum {
@@ -98,7 +105,116 @@ const BallState = enum {
     idle, // ball is on paddle and waiting to be shot
 };
 
-const GameState = struct {
+const Scene = union(enum) {
+    title: TitleScene,
+    game: GameScene,
+
+    const count = std.enums.values(@typeInfo(Scene).Union.tag_type.?).len;
+
+    fn update(scene: *Scene, dt: f32) void {
+        switch (scene.*) {
+            .title => scene.title.update(dt),
+            .game => scene.game.update(dt),
+        }
+    }
+
+    fn render(scene: Scene) void {
+        switch (scene) {
+            .title => scene.title.render(),
+            .game => scene.game.render(),
+        }
+    }
+
+    fn input(scene: *Scene, ev: [*c]const sapp.Event) void {
+        switch (scene.*) {
+            .title => scene.title.input(ev),
+            .game => scene.game.input(ev),
+        }
+    }
+};
+
+const TitleScene = struct {
+    idx: usize = 0,
+
+    fn update(scene: *TitleScene, dt: f32) void {
+        _ = scene;
+        _ = dt;
+    }
+
+    fn render(scene: TitleScene) void {
+        batch.setTexture(state.titlescreen_texture);
+
+        batch.render(.{
+            .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+        });
+
+        { // Text
+            batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+
+            var y = @as(f32, @floatFromInt(viewport_size[1])) / 2;
+            { // Start
+                var text_renderer = TextRenderer{};
+                var buf: [32]u8 = undefined;
+                const label = std.fmt.bufPrint(&buf, "{s} start", .{if (scene.idx == 0) ">" else " "}) catch unreachable;
+                const measure = TextRenderer.measure(label);
+                text_renderer.render(&batch, label, (viewport_size[0] - measure[0]) / 2, y);
+                y += measure[1] + 4;
+            }
+            { // Quit
+                var text_renderer = TextRenderer{};
+                var buf: [32]u8 = undefined;
+                const label = std.fmt.bufPrint(&buf, "{s} quit", .{if (scene.idx == 1) ">" else " "}) catch unreachable;
+                const measure = TextRenderer.measure(label);
+                text_renderer.render(&batch, label, (viewport_size[0] - measure[0]) / 2, y);
+            }
+        }
+
+        const result = batch.commit();
+        sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
+
+        const vs_params = computeVsParams();
+
+        sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        for (result.batches) |b| {
+            state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
+            sg.applyBindings(state.offscreen.bind);
+            sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+        }
+        sg.endPass();
+    }
+
+    fn input(scene: *TitleScene, ev: [*c]const sapp.Event) void {
+        switch (ev.*.type) {
+            .KEY_DOWN => {
+                switch (ev.*.key_code) {
+                    .DOWN => {
+                        scene.idx = @mod(scene.idx + 1, Scene.count);
+                    },
+                    .UP => {
+                        if (scene.idx == 0) {
+                            scene.idx = Scene.count - 1;
+                        } else {
+                            scene.idx -= 1;
+                        }
+                    },
+                    .ENTER, .SPACE => {
+                        if (scene.idx == 0) {
+                            state.scene = Scene{ .game = GameScene.init() };
+                        } else if (scene.idx == 1) {
+                            sapp.quit();
+                        }
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+};
+
+const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
     lives: u8 = 3,
@@ -109,7 +225,7 @@ const GameState = struct {
     ball_dir: [2]f32 = initial_ball_dir,
     ball_state: BallState = .idle,
 
-    input: struct {
+    inputs: struct {
         left_down: bool = false,
         right_down: bool = false,
         space_down: bool = false,
@@ -121,9 +237,288 @@ const GameState = struct {
         normal: [2]f32,
     } = undefined,
     collision_count: usize = 0,
-};
 
-var game: GameState = .{};
+    fn init() GameScene {
+        var scene = GameScene{};
+        m.normalize(&scene.ball_dir);
+
+        // initialize bricks
+        for (0..num_rows) |y| {
+            for (0..num_bricks) |x| {
+                const fx: f32 = @floatFromInt(x);
+                const fy: f32 = @floatFromInt(y);
+                scene.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
+            }
+        }
+
+        return scene;
+    }
+
+    fn update(scene: *GameScene, dt: f32) void {
+        // Reset data from previous frame
+        scene.collision_count = 0;
+
+        { // Move paddle
+            var paddle_dx: f32 = 0;
+            if (scene.inputs.left_down) {
+                paddle_dx -= 1;
+            }
+            if (scene.inputs.right_down) {
+                paddle_dx += 1;
+            }
+            scene.paddle_pos[0] += paddle_dx * paddle_speed * dt;
+        }
+
+        // Fire ball when pressing space
+        if (scene.inputs.space_down and scene.ball_state == .idle) {
+            scene.ball_state = .alive;
+        }
+
+        const old_ball_pos = scene.ball_pos;
+        switch (scene.ball_state) {
+            .idle => {
+                scene.updateIdleBall();
+            },
+            .alive => {
+                scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
+                scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
+            },
+        }
+        const new_ball_pos = scene.ball_pos;
+
+        var out: [2]f32 = undefined;
+        var normal: [2]f32 = undefined;
+
+        { // Has the ball hit any bricks?
+            var collided = false;
+            var coll_dist = std.math.floatMax(f32);
+            for (&scene.bricks, 0..) |*brick, i| {
+                if (brick.destroyed) continue;
+
+                var r = @import("collision.zig").Rect{
+                    .min = .{ brick.pos[0], brick.pos[1] },
+                    .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                };
+                r.grow(.{ ball_w / 2, ball_h / 2 });
+                var c_normal: [2]f32 = undefined;
+                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                if (c) {
+                    // always use the normal of the closest brick for ball reflection
+                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] / brick_h / 2 };
+                    const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
+                    if (brick_dist < coll_dist) {
+                        normal = c_normal;
+                        coll_dist = brick_dist;
+                    }
+                    std.log.warn("COLLIDED", .{});
+                    brick.destroyed = true;
+                    scene.score += 100;
+
+                    scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
+                    scene.collision_count += 1;
+                }
+                collided = collided or c;
+            }
+            if (collided) {
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        const vw: f32 = @floatFromInt(viewport_size[0]);
+        const vh: f32 = @floatFromInt(viewport_size[1]);
+
+        { // Has the ball hit the paddle?
+            var r = @import("collision.zig").Rect{
+                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h / 2 },
+                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] + paddle_h / 2 },
+            };
+            r.grow(.{ ball_w / 2, ball_h / 2 });
+            // TODO not sure we're using the right ball positions
+            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+            if (c) {
+                std.log.warn("PADDLE", .{});
+                scene.ball_pos = out;
+                scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
+            }
+        }
+
+        { // Has the ball hit the right wall?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ vw - ball_w / 2, 0 },
+                .{ vw - ball_w / 2, vh },
+                &out,
+            );
+            if (c) {
+                std.log.warn("WALL", .{});
+                normal = .{ -1, 0 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        { // Has the ball hit the left wall?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ ball_w / 2, 0 },
+                .{ ball_w / 2, vh },
+                &out,
+            );
+            if (c) {
+                std.log.warn("WALL", .{});
+                normal = .{ -1, 0 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        { // Has the ball hit the floor?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ 0, vh - ball_h / 2 },
+                .{ vw, vh - ball_h / 2 },
+                &out,
+            );
+            if (c) {
+                std.log.warn("DEAD!", .{});
+                if (scene.lives == 0) {
+                    std.log.warn("GAME OVER", .{});
+                    state.scene = Scene{ .title = .{} };
+                } else {
+                    scene.lives -= 1;
+                    scene.updateIdleBall();
+                    scene.ball_dir = initial_ball_dir;
+                    m.normalize(&scene.ball_dir);
+                    scene.ball_state = .idle;
+                }
+            }
+        }
+    }
+
+    fn updateIdleBall(scene: *GameScene) void {
+        scene.ball_pos[0] = scene.paddle_pos[0];
+        scene.ball_pos[1] = scene.paddle_pos[1] - 5 * ball_h / 3;
+    }
+
+    fn render(scene: GameScene) void {
+        batch.setTexture(state.texture);
+
+        // Render all bricks
+        for (scene.bricks) |brick| {
+            if (brick.destroyed) continue;
+            const x = brick.pos[0];
+            const y = brick.pos[1];
+            batch.render(.{
+                .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+                .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
+            });
+        }
+
+        // Render ball
+        batch.render(.{
+            .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+            .dst = .{
+                .x = scene.ball_pos[0] - ball_w / 2,
+                .y = scene.ball_pos[1] - ball_h / 2,
+                .w = ball_w,
+                .h = ball_h,
+            },
+        });
+
+        // Render paddle
+        batch.render(.{
+            .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
+            .dst = .{
+                .x = scene.paddle_pos[0] - paddle_w / 2,
+                .y = scene.paddle_pos[1] - paddle_h / 2,
+                .w = paddle_w,
+                .h = paddle_h,
+            },
+        });
+
+        // Top status bar
+        for (0..scene.lives) |i| {
+            const fi: f32 = @floatFromInt(i);
+            batch.render(.{
+                .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+                .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+            });
+        }
+
+        { // Text
+            batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            var text_renderer = TextRenderer{};
+            var buf: [32]u8 = undefined;
+            const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
+            text_renderer.render(&batch, label, 32, 0);
+        }
+
+        const result = batch.commit();
+        sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
+
+        //=== UI CODE STARTS HERE
+        ig.igSetNextWindowPos(.{ .x = 100, .y = 200 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
+        ig.igSetNextWindowSize(.{ .x = 400, .y = 400 }, ig.ImGuiCond_Once);
+        _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
+        _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+        _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
+        _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
+        _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+
+        ig.igEnd();
+        //=== UI CODE ENDS HERE
+
+        const vs_params = computeVsParams();
+
+        sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        for (result.batches) |b| {
+            state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
+            sg.applyBindings(state.offscreen.bind);
+            sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+        }
+        sg.endPass();
+    }
+
+    fn input(scene: *GameScene, ev: [*c]const sapp.Event) void {
+        switch (ev.*.type) {
+            .KEY_DOWN => {
+                switch (ev.*.key_code) {
+                    .LEFT => {
+                        scene.inputs.left_down = true;
+                    },
+                    .RIGHT => {
+                        scene.inputs.right_down = true;
+                    },
+                    .SPACE => {
+                        scene.inputs.space_down = true;
+                    },
+                    else => {},
+                }
+            },
+            .KEY_UP => {
+                switch (ev.*.key_code) {
+                    .LEFT => {
+                        scene.inputs.left_down = false;
+                    },
+                    .RIGHT => {
+                        scene.inputs.right_down = false;
+                    },
+                    .SPACE => {
+                        scene.inputs.space_down = false;
+                    },
+                    else => {},
+                }
+            },
+            else => {},
+        }
+    }
+};
 
 var batch = @import("batch.zig").BatchRenderer.init();
 
@@ -164,10 +559,12 @@ export fn init() void {
     createOffscreenAttachments(viewport_size[0], viewport_size[1]);
 
     state.texture = Texture.init(img);
+    state.titlescreen_texture = Texture.init(titlescreen);
     state.font_texture = Texture.init(font.image);
 
     state.textures = std.AutoHashMap(usize, sg.Image).init(state.arena.allocator());
     state.textures.put(state.texture.id, sg.makeImage(state.texture.desc)) catch unreachable;
+    state.textures.put(state.titlescreen_texture.id, sg.makeImage(state.titlescreen_texture.desc)) catch unreachable;
     state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc)) catch unreachable;
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 
@@ -182,7 +579,6 @@ export fn init() void {
             .write_enabled = false,
         },
         .color_count = 1,
-        // .blend_color = .{ .r = 1, .g = 0, .b = 0, .a = 1},
     };
     pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
     pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
@@ -222,16 +618,6 @@ export fn init() void {
     // offscreen render target textures
     state.fsq.bind.vertex_buffers[0] = quad_vbuf;
     state.fsq.bind.fs.samplers[0] = smp;
-
-    // initialize game state
-    for (0..num_rows) |y| {
-        for (0..num_bricks) |x| {
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
-            game.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
-        }
-    }
-    m.normalize(&game.ball_dir);
 }
 
 const QuadOptions = struct {
@@ -266,215 +652,9 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
-fn updateIdleBall() void {
-    game.ball_pos[0] = game.paddle_pos[0];
-    game.ball_pos[1] = game.paddle_pos[1] - 5 * ball_h / 3;
-}
-
-fn updateGame(dt: f32) void {
-    // Reset data from previous frame
-    game.collision_count = 0;
-
-    { // Move paddle
-        var paddle_dx: f32 = 0;
-        if (game.input.left_down) {
-            paddle_dx -= 1;
-        }
-        if (game.input.right_down) {
-            paddle_dx += 1;
-        }
-        game.paddle_pos[0] += paddle_dx * paddle_speed * dt;
-    }
-
-    // Fire ball when pressing space
-    if (game.input.space_down and game.ball_state == .idle) {
-        game.ball_state = .alive;
-    }
-
-    const old_ball_pos = game.ball_pos;
-    switch (game.ball_state) {
-        .idle => {
-            updateIdleBall();
-        },
-        .alive => {
-            game.ball_pos[0] += game.ball_dir[0] * ball_speed * dt;
-            game.ball_pos[1] += game.ball_dir[1] * ball_speed * dt;
-        },
-    }
-    const new_ball_pos = game.ball_pos;
-
-    var out: [2]f32 = undefined;
-    var normal: [2]f32 = undefined;
-
-    { // Has the ball hit any bricks?
-        var collided = false;
-        var coll_dist = std.math.floatMax(f32);
-        for (&game.bricks, 0..) |*brick, i| {
-            if (brick.destroyed) continue;
-
-            var r = @import("collision.zig").Rect{
-                .min = .{ brick.pos[0], brick.pos[1] },
-                .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
-            };
-            r.grow(.{ ball_w / 2, ball_h / 2 });
-            var c_normal: [2]f32 = undefined;
-            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
-            if (c) {
-                // always use the normal of the closest brick for ball reflection
-                const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] / brick_h / 2 };
-                const brick_dist = m.magnitude(m.vsub(brick_pos, game.ball_pos));
-                if (brick_dist < coll_dist) {
-                    normal = c_normal;
-                    coll_dist = brick_dist;
-                }
-                std.log.warn("COLLIDED", .{});
-                brick.destroyed = true;
-                game.score += 100;
-
-                game.collisions[game.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
-                game.collision_count += 1;
-            }
-            collided = collided or c;
-        }
-        if (collided) {
-            game.ball_pos = out;
-            game.ball_dir = m.reflect(game.ball_dir, normal);
-        }
-    }
-
-    const vw: f32 = @floatFromInt(viewport_size[0]);
-    const vh: f32 = @floatFromInt(viewport_size[1]);
-
-    { // Has the ball hit the paddle?
-        var r = @import("collision.zig").Rect{
-            .min = .{ game.paddle_pos[0] - paddle_w / 2, game.paddle_pos[1] - paddle_h / 2 },
-            .max = .{ game.paddle_pos[0] + paddle_w / 2, game.paddle_pos[1] + paddle_h / 2 },
-        };
-        r.grow(.{ ball_w / 2, ball_h / 2 });
-        // TODO not sure we're using the right ball positions
-        const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-        if (c) {
-            std.log.warn("PADDLE", .{});
-            game.ball_pos = out;
-            game.ball_dir = paddle_reflect(game.paddle_pos[0], paddle_w, game.ball_pos, game.ball_dir);
-        }
-    }
-
-    { // Has the ball hit the right wall?
-        const c = @import("collision.zig").line_intersection(
-            old_ball_pos,
-            game.ball_pos,
-            .{ vw - ball_w / 2, 0 },
-            .{ vw - ball_w / 2, vh },
-            &out,
-        );
-        if (c) {
-            std.log.warn("WALL", .{});
-            normal = .{ -1, 0 };
-            game.ball_pos = out;
-            game.ball_dir = m.reflect(game.ball_dir, normal);
-        }
-    }
-
-    { // Has the ball hit the left wall?
-        const c = @import("collision.zig").line_intersection(
-            old_ball_pos,
-            game.ball_pos,
-            .{ ball_w / 2, 0 },
-            .{ ball_w / 2, vh },
-            &out,
-        );
-        if (c) {
-            std.log.warn("WALL", .{});
-            normal = .{ -1, 0 };
-            game.ball_pos = out;
-            game.ball_dir = m.reflect(game.ball_dir, normal);
-        }
-    }
-
-    { // Has the ball hit the floor?
-        const c = @import("collision.zig").line_intersection(
-            old_ball_pos,
-            game.ball_pos,
-            .{ 0, vh - ball_h / 2 },
-            .{ vw, vh - ball_h / 2 },
-            &out,
-        );
-        if (c) {
-            std.log.warn("DEAD!", .{});
-            if (game.lives == 0) {
-                std.log.warn("GAME OVER", .{});
-            } else {
-                game.lives -= 1;
-                updateIdleBall();
-                game.ball_dir = initial_ball_dir;
-                m.normalize(&game.ball_dir);
-                game.ball_state = .idle;
-            }
-        }
-    }
-}
-
 export fn frame() void {
     const dt: f32 = @floatCast(sapp.frameDuration());
-    updateGame(dt);
-
-    // * Render
-
-    batch.setTexture(state.texture);
-
-    // Render all bricks
-    for (game.bricks) |brick| {
-        if (brick.destroyed) continue;
-        const x = brick.pos[0];
-        const y = brick.pos[1];
-        batch.render(.{
-            .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-            .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
-        });
-    }
-
-    // Render ball
-    batch.render(.{
-        .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-        .dst = .{
-            .x = game.ball_pos[0] - ball_w / 2,
-            .y = game.ball_pos[1] - ball_h / 2,
-            .w = ball_w,
-            .h = ball_h,
-        },
-    });
-
-    // Render paddle
-    batch.render(.{
-        .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
-        .dst = .{
-            .x = game.paddle_pos[0] - paddle_w / 2,
-            .y = game.paddle_pos[1] - paddle_h / 2,
-            .w = paddle_w,
-            .h = paddle_h,
-        },
-    });
-
-    // Top status bar
-    for (0..game.lives) |i| {
-        const fi: f32 = @floatFromInt(i);
-        batch.render(.{
-            .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-            .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
-        });
-    }
-
-    { // Text
-        batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
-        var text_renderer = @import("ttf.zig").TextRenderer{};
-        var buf: [32]u8 = undefined;
-        const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{game.score}) catch unreachable;
-        text_renderer.render(&batch, label, 32, 0);
-    }
-
-    const result = batch.commit();
-    sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
+    state.scene.update(dt);
 
     simgui.newFrame(.{
         .width = sapp.width(),
@@ -483,31 +663,9 @@ export fn frame() void {
         .dpi_scale = sapp.dpiScale(),
     });
 
-    //=== UI CODE STARTS HERE
-    ig.igSetNextWindowPos(.{ .x = 100, .y = 200 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
-    ig.igSetNextWindowSize(.{ .x = 400, .y = 400 }, ig.ImGuiCond_Once);
-    _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
-    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
-    _ = ig.igText("Ball pos: %f %f", game.ball_pos[0], game.ball_pos[1]);
-    _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+    state.scene.render();
 
-    ig.igEnd();
-    //=== UI CODE ENDS HERE
-
-    const vs_params = computeVsParams();
     const fsq_params = computeFSQParams();
-
-    sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
-    sg.applyPipeline(state.offscreen.pip);
-    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-    for (result.batches) |b| {
-        state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
-        sg.applyBindings(state.offscreen.bind);
-        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
-    }
-    sg.endPass();
-
     sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
     sg.applyPipeline(state.fsq.pip);
     sg.applyBindings(state.fsq.bind);
@@ -535,41 +693,15 @@ export fn event(ev: [*c]const sapp.Event) void {
     _ = simgui.handleEvent(ev.*);
 
     switch (ev.*.type) {
-        .KEY_DOWN => {
-            switch (ev.*.key_code) {
-                .LEFT => {
-                    game.input.left_down = true;
-                },
-                .RIGHT => {
-                    game.input.right_down = true;
-                },
-                .SPACE => {
-                    game.input.space_down = true;
-                },
-                else => {},
-            }
-        },
-        .KEY_UP => {
-            switch (ev.*.key_code) {
-                .LEFT => {
-                    game.input.left_down = false;
-                },
-                .RIGHT => {
-                    game.input.right_down = false;
-                },
-                .SPACE => {
-                    game.input.space_down = false;
-                },
-                else => {},
-            }
-        },
         .RESIZED => {
             const width = ev.*.window_width;
             const height = ev.*.window_height;
             state.window_size = .{ width, height };
             createOffscreenAttachments(viewport_size[0], viewport_size[1]);
         },
-        else => {},
+        else => {
+            state.scene.input(ev);
+        },
     }
 }
 

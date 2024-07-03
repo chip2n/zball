@@ -26,6 +26,18 @@ pub const TextRenderer = struct {
         }
     }
 
+    pub fn measure(text: []const u8) [2]f32 {
+        var width: f32 = 0;
+        var height: f32 = 0;
+        for (text) |ch| {
+            const glyph = findGlyph(ch).?;
+            const gh: f32 = @floatFromInt(glyph.h);
+            width += @floatFromInt(glyph.advance);
+            height = @max(height, gh);
+        }
+        return .{ width, height };
+    }
+
     fn findGlyph(ch: u8) ?font.Glyph {
         // TODO inefficient - make a lookup table
         for (font.glyphs) |g| {

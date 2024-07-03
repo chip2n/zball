@@ -64,7 +64,11 @@ pub fn build(b: *Build) void {
         const dep_emsdk = b.dependency("emsdk", .{});
         _ = try buildWeb(b, target, optimize, dep_emsdk, deps);
     } else {
-        _ = try buildNative(b, target, optimize, deps);
+        _ = try buildNative(b, target, optimize, deps, true);
+        const check_exe = try buildNative(b, target, optimize, deps, false);
+        // Used with ZLS for better analysis of comptime shenanigans
+        const check = b.step("check", "Check if game compiles");
+        check.dependOn(&check_exe.step);
     }
 }
 
@@ -90,6 +94,7 @@ fn buildNative(
     target: Build.ResolvedTarget,
     optimize: OptimizeMode,
     deps: CoreDependencies,
+    install: bool,
 ) !*Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "game",
@@ -124,16 +129,18 @@ fn buildNative(
     });
     exe.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
 
-    b.installArtifact(exe);
+    if (install) {
+        b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.setCwd(b.path("zig-out/bin/"));
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.setCwd(b.path("zig-out/bin/"));
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+        const run_step = b.step("run", "Run the game");
+        run_step.dependOn(&run_cmd.step);
     }
-    const run_step = b.step("run", "Run the game");
-    run_step.dependOn(&run_cmd.step);
 
     return exe;
 }

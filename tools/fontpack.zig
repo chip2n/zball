@@ -26,7 +26,7 @@ pub fn main() !void {
     const font_data = try std.fs.cwd().readFileAlloc(arena.allocator(), font_path, 1 << 20);
 
     // TODO do entire ascii table
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 :;@";
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 :;@>";
     var glyphs: [chars.len]GlyphData = undefined;
 
     const bw = 64;
