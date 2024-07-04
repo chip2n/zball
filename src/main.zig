@@ -266,7 +266,8 @@ const GameScene = struct {
             if (scene.inputs.right_down) {
                 paddle_dx += 1;
             }
-            scene.paddle_pos[0] += paddle_dx * paddle_speed * dt;
+            const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+            scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
         }
 
         // Fire ball when pressing space
