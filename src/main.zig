@@ -343,6 +343,22 @@ const GameScene = struct {
             }
         }
 
+        { // Has the ball hit the ceiling?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ 0, brick_start_y },
+                .{ vw - ball_w / 2, brick_start_y },
+                &out,
+            );
+            if (c) {
+                std.log.warn("CEILING", .{});
+                normal = .{ 0, 1 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
         { // Has the ball hit the right wall?
             const c = @import("collision.zig").line_intersection(
                 old_ball_pos,
