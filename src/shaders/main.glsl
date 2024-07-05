@@ -1,6 +1,8 @@
 @header const zm = @import("zmath")
 @ctype mat4 zm.Mat
 
+//* main shader
+
 @vs vs
 uniform vs_params {
     mat4 mvp;
@@ -35,7 +37,8 @@ void main() {
 
 @program main vs fs
 
-// shaders for rendering a fullscreen-quad in default pass
+//* fullscreen quad shader
+
 @vs vs_fsq
 @glsl_options flip_vert_y
 
@@ -68,3 +71,69 @@ void main() {
 @end
 
 @program fsq vs_fsq fs_fsq
+
+//* background shader
+
+@vs vs_bg
+
+in vec2 pos;
+
+void main() {
+    gl_Position = vec4(pos * 2, 0, 1);
+}
+@end
+
+@fs fs_bg
+uniform fs_bg_params {
+    float time;
+};
+
+out vec4 frag_color;
+
+vec3 palette(float t) {
+    vec3 a = vec3(0.5, 0.5, 0.5);
+    vec3 b = vec3(0.5, 0.5, 0.5);
+    vec3 c = vec3(1.0, 1.0, 1.0);
+    vec3 d = vec3(0.263, 0.416, 0.557);
+    return a + b * cos(6.28318 * (c * t + d));
+}
+
+void main() {
+    // TODO pass in?
+    vec2 res = vec2(160, 120);
+
+    // calculate clip space coords
+    vec2 uv = gl_FragCoord.xy / res;
+    uv.y = 1 - uv.y;
+    uv = 2 * uv - 1;
+
+    vec2 uv0 = uv;
+
+    vec3 final_color = vec3(0);
+
+    for (float i = 0.0; i < 4.0; i++) {
+
+        // compensate for non-square aspect ratio
+        uv.x *= res.x / res.y;
+
+        uv = fract(uv * 1.5) - 0.5;
+
+        float d = length(uv) * exp(-length(uv0));
+
+        vec3 col = palette(length(uv0) + i * 0.4 + time * 0.4);
+        d = sin(d*8 + time)/8;
+        d = abs(d);
+        // d = smoothstep(0.0, 0.1, d);
+        d = pow(0.01 / d, 1.2);
+
+        final_color += col * d;
+    }
+
+    // frag_color = vec4(uv.x, uv.y, 0, 1);
+    frag_color = vec4(final_color, 1);
+
+    // frag_color = vec4(1, 0, 0, 1);
+}
+@end
+
+@program bg vs_bg fs_bg

@@ -79,6 +79,10 @@ const state = struct {
         var pip: sg.Pipeline = .{};
         var bind: sg.Bindings = .{};
     };
+    const bg = struct {
+        var pip: sg.Pipeline = .{};
+        var bind: sg.Bindings = .{};
+    };
     const ui = struct {
         var pass_action: sg.PassAction = .{};
     };
@@ -217,6 +221,7 @@ const TitleScene = struct {
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
+    time: f32 = 0,
     lives: u8 = 3,
     score: u32 = 0,
 
@@ -255,6 +260,8 @@ const GameScene = struct {
     }
 
     fn update(scene: *GameScene, dt: f32) void {
+        scene.time += dt;
+
         // Reset data from previous frame
         scene.collision_count = 0;
 
@@ -416,6 +423,14 @@ const GameScene = struct {
         }
     }
 
+    // The angle depends on how far the ball is from the center of the paddle
+    fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir: [2]f32) [2]f32 {
+        const p = (paddle_pos - ball_pos[0]) / paddle_width;
+        var new_dir = [_]f32{ -p, -ball_dir[1] };
+        m.normalize(&new_dir);
+        return new_dir;
+    }
+
     fn updateIdleBall(scene: *GameScene) void {
         scene.ball_pos[0] = scene.paddle_pos[0];
         scene.ball_pos[1] = scene.paddle_pos[1] - 5 * ball_h / 3;
@@ -492,6 +507,17 @@ const GameScene = struct {
         const vs_params = computeVsParams();
 
         sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
+
+        // render background
+        sg.applyPipeline(state.bg.pip);
+        const bg_params = shd.FsBgParams{
+            .time = scene.time,
+        };
+        sg.applyUniforms(.FS, shd.SLOT_fs_bg_params, sg.asRange(&bg_params));
+        sg.applyBindings(state.bg.bind);
+        sg.draw(0, 4, 1);
+
+        // render game scene
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
         for (result.batches) |b| {
@@ -499,6 +525,7 @@ const GameScene = struct {
             sg.applyBindings(state.offscreen.bind);
             sg.draw(@intCast(b.offset), @intCast(b.len), 1);
         }
+
         sg.endPass();
     }
 
@@ -635,6 +662,21 @@ export fn init() void {
     // offscreen render target textures
     state.fsq.bind.vertex_buffers[0] = quad_vbuf;
     state.fsq.bind.fs.samplers[0] = smp;
+
+    // background shader
+    var bg_pip_desc: sg.PipelineDesc = .{
+        .shader = sg.makeShader(shd.bgShaderDesc(sg.queryBackend())),
+        .primitive_type = .TRIANGLE_STRIP,
+        .depth = .{
+            .pixel_format = .DEPTH,
+            .compare = .LESS_EQUAL,
+            .write_enabled = false,
+        },
+    };
+    bg_pip_desc.layout.attrs[shd.ATTR_vs_bg_pos].format = .FLOAT2;
+    state.bg.pip = sg.makePipeline(bg_pip_desc);
+    // the background shader uses same quad buffer as fsq
+    state.bg.bind.vertex_buffers[0] = quad_vbuf;
 }
 
 const QuadOptions = struct {
@@ -660,12 +702,12 @@ fn quad(v: QuadOptions) void {
     const uv1 = .{ src.x / tw, src.y / th };
     const uv2 = .{ (src.x + src.w) / tw, (src.y + src.h) / th };
     // zig fmt: off
-    buf[0] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[1] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
-    buf[2] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[3] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[4] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[5] = .{ .x = x + w,  .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
+    buf[0] = .{ .x = x,      .y = y,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[1] = .{ .x = x,      .y = y + h,  .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
+    buf[2] = .{ .x = x + w,  .y = y + h,  .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
+    buf[3] = .{ .x = x,      .y = y,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
+    buf[4] = .{ .x = x + w,  .y = y + h,  .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
+    buf[5] = .{ .x = x + w,  .y = y,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
     // zig fmt: on
 }
 
@@ -695,14 +737,6 @@ export fn frame() void {
     sg.endPass();
 
     sg.commit();
-}
-
-// The angle depends on how far the ball is from the center of the paddle
-fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir: [2]f32) [2]f32 {
-    const p = (paddle_pos - ball_pos[0]) / paddle_width;
-    var new_dir = [_]f32{ -p, -ball_dir[1] };
-    m.normalize(&new_dir);
-    return new_dir;
 }
 
 export fn event(ev: [*c]const sapp.Event) void {
@@ -794,5 +828,5 @@ fn createOffscreenAttachments(width: i32, height: i32) void {
     state.offscreen.attachments = sg.makeAttachments(state.offscreen.attachments_desc);
 
     // update the fullscreen-quad texture bindings
-    state.fsq.bind.fs.images[0] = state.offscreen.attachments_desc.colors[0].image;
+    state.fsq.bind.fs.images[shd.SLOT_tex] = state.offscreen.attachments_desc.colors[0].image;
 }
