@@ -15,9 +15,20 @@ const CoreDependencies = struct {
     font_path: Build.LazyPath,
 };
 
-pub fn build(b: *Build) void {
+pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // Whether to dynamically load background shader from a shared library, thus
+    // allowing for shader reload. If false, the shader will be compiled in to the
+    // binary.
+    const shader_reload = b.option(bool, "shader-reload", "Enable automatic shader reloading") orelse false;
+    if (target.result.isWasm() and shader_reload) {
+        std.log.err("Web builds does not support shader reloading.", .{});
+        return error.InvalidConfiguration;
+    }
+    const options = b.addOptions();
+    options.addOption(bool, "shader_reload", shader_reload);
 
     const dep_sokol = b.dependency("sokol", .{
         .target = target,
@@ -31,6 +42,7 @@ pub fn build(b: *Build) void {
     dep_sokol.artifact("sokol_clib").addIncludePath(cimgui_root);
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
+    const dep_fwatch = b.dependency("zig_file_watch", .{ .target = target, .optimize = optimize });
 
     // Shader compilation step
     const shdc = dep_sokol_tools.path("bin/linux/sokol-shdc").getPath(b);
@@ -41,6 +53,32 @@ pub fn build(b: *Build) void {
         "--slang=glsl410:metal_macos:hlsl5:glsl300es:wgsl",
         "--format=sokol_zig",
     });
+
+    { // Build shaders as a shared library so we can hot reload them
+        const lib_shd = b.addSharedLibrary(.{
+            .name = "shd",
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("tools/shd.zig"),
+        });
+        const mod_sokol = dep_sokol.module("sokol");
+        lib_shd.root_module.addImport("sokol", mod_sokol);
+
+        // zmath
+        const mod_zmath = dep_zmath.module("root");
+        lib_shd.root_module.addImport("zmath", mod_zmath);
+
+        lib_shd.root_module.addAnonymousImport("shd", .{
+            .root_source_file = shader_output,
+            .imports = &.{
+                .{ .name = "sokol", .module = mod_sokol },
+                .{ .name = "zmath", .module = mod_zmath },
+            },
+        });
+        const lib_shd_step = b.step("shd", "Compile shaders as a shared library");
+        const lib_shd_install = b.addInstallArtifact(lib_shd, .{ .dest_dir = .{ .override = .bin }});
+        lib_shd_step.dependOn(&lib_shd_install.step);
+    }
 
     // Font packer
     const tool_fontpack = try buildFontPackTool(b, optimize, dep_stb);
@@ -62,9 +100,14 @@ pub fn build(b: *Build) void {
 
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        _ = try buildWeb(b, target, optimize, dep_emsdk, deps);
+        const lib = try buildWeb(b, target, optimize, dep_emsdk, deps);
+        lib.root_module.addOptions("config", options);
     } else {
-        _ = try buildNative(b, target, optimize, deps, true);
+        const exe = try buildNative(b, target, optimize, deps, true);
+        exe.root_module.addOptions("config", options);
+        // TODO debug only
+        exe.root_module.addImport("fwatch", dep_fwatch.module("fwatch"));
+
         const check_exe = try buildNative(b, target, optimize, deps, false);
         // Used with ZLS for better analysis of comptime shenanigans
         const check = b.step("check", "Check if game compiles");

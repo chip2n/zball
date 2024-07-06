@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+const config = @import("config");
 const assert = std.debug.assert;
 
 const sokol = @import("sokol");
@@ -7,11 +9,14 @@ const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 const simgui = sokol.imgui;
-
 const shd = @import("shader");
 const font = @import("font");
+const fwatch = @import("fwatch");
 
+const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
+
+const utils = @import("utils.zig");
 
 const ig = @import("cimgui");
 // TODO
@@ -67,6 +72,11 @@ const Vertex = extern struct {
     v: f32,
 };
 
+const debug = if (builtin.os.tag == .linux) struct {
+    var watcher: *fwatch.FileWatcher(void) = undefined;
+    var reload: bool = false;
+} else struct {};
+
 const state = struct {
     const offscreen = struct {
         var pass_action: sg.PassAction = .{};
@@ -79,10 +89,7 @@ const state = struct {
         var pip: sg.Pipeline = .{};
         var bind: sg.Bindings = .{};
     };
-    const bg = struct {
-        var pip: sg.Pipeline = .{};
-        var bind: sg.Bindings = .{};
-    };
+    var bg: Pipeline = undefined;
     const ui = struct {
         var pass_action: sg.PassAction = .{};
     };
@@ -102,6 +109,8 @@ const state = struct {
     var arena: std.heap.ArenaAllocator = undefined;
 
     var scene: Scene = .{ .title = .{} };
+
+    var batch = @import("batch.zig").BatchRenderer.init();
 };
 
 const BallState = enum {
@@ -146,14 +155,14 @@ const TitleScene = struct {
     }
 
     fn render(scene: TitleScene) void {
-        batch.setTexture(state.titlescreen_texture);
+        state.batch.setTexture(state.titlescreen_texture);
 
-        batch.render(.{
+        state.batch.render(.{
             .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
         });
 
         { // Text
-            batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
 
             var y = @as(f32, @floatFromInt(viewport_size[1])) / 2;
             { // Start
@@ -161,7 +170,7 @@ const TitleScene = struct {
                 var buf: [32]u8 = undefined;
                 const label = std.fmt.bufPrint(&buf, "{s} start", .{if (scene.idx == 0) ">" else " "}) catch unreachable;
                 const measure = TextRenderer.measure(label);
-                text_renderer.render(&batch, label, (viewport_size[0] - measure[0]) / 2, y);
+                text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
                 y += measure[1] + 4;
             }
             { // Quit
@@ -169,11 +178,11 @@ const TitleScene = struct {
                 var buf: [32]u8 = undefined;
                 const label = std.fmt.bufPrint(&buf, "{s} quit", .{if (scene.idx == 1) ">" else " "}) catch unreachable;
                 const measure = TextRenderer.measure(label);
-                text_renderer.render(&batch, label, (viewport_size[0] - measure[0]) / 2, y);
+                text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
             }
         }
 
-        const result = batch.commit();
+        const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
         const vs_params = computeVsParams();
@@ -437,21 +446,21 @@ const GameScene = struct {
     }
 
     fn render(scene: GameScene) void {
-        batch.setTexture(state.texture);
+        state.batch.setTexture(state.texture);
 
         // Render all bricks
         for (scene.bricks) |brick| {
             if (brick.destroyed) continue;
             const x = brick.pos[0];
             const y = brick.pos[1];
-            batch.render(.{
+            state.batch.render(.{
                 .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
                 .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
             });
         }
 
         // Render ball
-        batch.render(.{
+        state.batch.render(.{
             .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
             .dst = .{
                 .x = scene.ball_pos[0] - ball_w / 2,
@@ -462,7 +471,7 @@ const GameScene = struct {
         });
 
         // Render paddle
-        batch.render(.{
+        state.batch.render(.{
             .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
             .dst = .{
                 .x = scene.paddle_pos[0] - paddle_w / 2,
@@ -475,21 +484,21 @@ const GameScene = struct {
         // Top status bar
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
-            batch.render(.{
+            state.batch.render(.{
                 .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
                 .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
             });
         }
 
         { // Text
-            batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
             var text_renderer = TextRenderer{};
             var buf: [32]u8 = undefined;
             const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
-            text_renderer.render(&batch, label, 32, 0);
+            text_renderer.render(&state.batch, label, 32, 0);
         }
 
-        const result = batch.commit();
+        const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
         //=== UI CODE STARTS HERE
@@ -500,6 +509,12 @@ const GameScene = struct {
         _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
         _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
         _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+
+        if (config.shader_reload) {
+            if (ig.igButton("Load shader", .{})) {
+                debug.reload = true;
+            }
+        }
 
         ig.igEnd();
         //=== UI CODE ENDS HERE
@@ -564,11 +579,11 @@ const GameScene = struct {
     }
 };
 
-var batch = @import("batch.zig").BatchRenderer.init();
-
-export fn init() void {
+fn initializeGame() !void {
     state.arena = std.heap.ArenaAllocator.init(state.allocator);
     errdefer state.arena.deinit();
+
+    const allocator = state.arena.allocator();
 
     sg.setup(.{
         .environment = sglue.environment(),
@@ -606,10 +621,10 @@ export fn init() void {
     state.titlescreen_texture = Texture.init(titlescreen);
     state.font_texture = Texture.init(font.image);
 
-    state.textures = std.AutoHashMap(usize, sg.Image).init(state.arena.allocator());
-    state.textures.put(state.texture.id, sg.makeImage(state.texture.desc)) catch unreachable;
-    state.textures.put(state.titlescreen_texture.id, sg.makeImage(state.titlescreen_texture.desc)) catch unreachable;
-    state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc)) catch unreachable;
+    state.textures = std.AutoHashMap(usize, sg.Image).init(allocator);
+    try state.textures.put(state.texture.id, sg.makeImage(state.texture.desc));
+    try state.textures.put(state.titlescreen_texture.id, sg.makeImage(state.titlescreen_texture.desc));
+    try state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc));
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 
     // create a shader and pipeline object
@@ -664,18 +679,20 @@ export fn init() void {
     state.fsq.bind.fs.samplers[0] = smp;
 
     // background shader
-    var bg_pip_desc: sg.PipelineDesc = .{
-        .shader = sg.makeShader(shd.bgShaderDesc(sg.queryBackend())),
-        .primitive_type = .TRIANGLE_STRIP,
-        .depth = .{
-            .pixel_format = .DEPTH,
-            .compare = .LESS_EQUAL,
-            .write_enabled = false,
-        },
-    };
-    bg_pip_desc.layout.attrs[shd.ATTR_vs_bg_pos].format = .FLOAT2;
-    state.bg.pip = sg.makePipeline(bg_pip_desc);
-    // the background shader uses same quad buffer as fsq
+    if (config.shader_reload) {
+        const path = try utils.getExecutablePath(allocator);
+        const dir = std.fs.path.dirname(path).?;
+        const shader_path = try std.fs.path.join(allocator, &.{ dir, "libshd.so" });
+        state.bg = try Pipeline.load(shader_path, "bgShaderDesc");
+
+        debug.watcher = try fwatch.FileWatcher(void).init(allocator, onFileEvent);
+        errdefer debug.watcher.deinit();
+
+        try debug.watcher.start();
+        try debug.watcher.add(shader_path, {});
+    } else {
+        state.bg = try Pipeline.init();
+    }
     state.bg.bind.vertex_buffers[0] = quad_vbuf;
 }
 
@@ -709,70 +726,6 @@ fn quad(v: QuadOptions) void {
     buf[4] = .{ .x = x + w,  .y = y + h,  .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
     buf[5] = .{ .x = x + w,  .y = y,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
     // zig fmt: on
-}
-
-export fn frame() void {
-    const dt: f32 = @floatCast(sapp.frameDuration());
-    state.scene.update(dt);
-
-    simgui.newFrame(.{
-        .width = sapp.width(),
-        .height = sapp.height(),
-        .delta_time = sapp.frameDuration(),
-        .dpi_scale = sapp.dpiScale(),
-    });
-
-    state.scene.render();
-
-    const fsq_params = computeFSQParams();
-    sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
-    sg.applyPipeline(state.fsq.pip);
-    sg.applyBindings(state.fsq.bind);
-    sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
-    sg.draw(0, 4, 1);
-    sg.endPass();
-
-    sg.beginPass(.{ .action = state.ui.pass_action, .swapchain = sglue.swapchain() });
-    simgui.render();
-    sg.endPass();
-
-    sg.commit();
-}
-
-export fn event(ev: [*c]const sapp.Event) void {
-    // forward input events to sokol-imgui
-    _ = simgui.handleEvent(ev.*);
-
-    switch (ev.*.type) {
-        .RESIZED => {
-            const width = ev.*.window_width;
-            const height = ev.*.window_height;
-            state.window_size = .{ width, height };
-            createOffscreenAttachments(viewport_size[0], viewport_size[1]);
-        },
-        else => {
-            state.scene.input(ev);
-        },
-    }
-}
-
-export fn cleanup() void {
-    sg.shutdown();
-    state.arena.deinit();
-}
-
-pub fn main() !void {
-    sapp.run(.{
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup,
-        .event_cb = event,
-        .width = initial_screen_size[0],
-        .height = initial_screen_size[1],
-        .icon = .{ .sokol_default = true },
-        .window_title = "Game",
-        .logger = .{ .func = slog.func },
-    });
 }
 
 fn computeVsParams() shd.VsParams {
@@ -829,4 +782,87 @@ fn createOffscreenAttachments(width: i32, height: i32) void {
 
     // update the fullscreen-quad texture bindings
     state.fsq.bind.fs.images[shd.SLOT_tex] = state.offscreen.attachments_desc.colors[0].image;
+}
+
+fn onFileEvent(event_type: fwatch.FileEventType, path: []const u8, _: void) !void {
+    std.log.info("File event ({}): {s}", .{ event_type, path });
+    debug.reload = true;
+}
+
+// * Sokol
+
+export fn sokolInit() void {
+    initializeGame() catch unreachable;
+}
+
+export fn sokolFrame() void {
+    const dt: f32 = @floatCast(sapp.frameDuration());
+    state.scene.update(dt);
+
+    if (config.shader_reload and debug.reload) {
+        state.bg.reload() catch unreachable;
+        debug.reload = false;
+    }
+
+    simgui.newFrame(.{
+        .width = sapp.width(),
+        .height = sapp.height(),
+        .delta_time = sapp.frameDuration(),
+        .dpi_scale = sapp.dpiScale(),
+    });
+
+    state.scene.render();
+
+    const fsq_params = computeFSQParams();
+    sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
+    sg.applyPipeline(state.fsq.pip);
+    sg.applyBindings(state.fsq.bind);
+    sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
+    sg.draw(0, 4, 1);
+    sg.endPass();
+
+    sg.beginPass(.{ .action = state.ui.pass_action, .swapchain = sglue.swapchain() });
+    simgui.render();
+    sg.endPass();
+
+    sg.commit();
+}
+
+export fn sokolEvent(ev: [*c]const sapp.Event) void {
+    // forward input events to sokol-imgui
+    _ = simgui.handleEvent(ev.*);
+
+    switch (ev.*.type) {
+        .RESIZED => {
+            const width = ev.*.window_width;
+            const height = ev.*.window_height;
+            state.window_size = .{ width, height };
+            createOffscreenAttachments(viewport_size[0], viewport_size[1]);
+        },
+        else => {
+            state.scene.input(ev);
+        },
+    }
+}
+
+export fn sokolCleanup() void {
+    sg.shutdown();
+    state.arena.deinit();
+    if (config.shader_reload) {
+        debug.watcher.deinit();
+    }
+}
+
+pub fn main() !void {
+    sapp.run(.{
+        .init_cb = sokolInit,
+        .frame_cb = sokolFrame,
+        .cleanup_cb = sokolCleanup,
+        .event_cb = sokolEvent,
+        .width = initial_screen_size[0],
+        .height = initial_screen_size[1],
+        .icon = .{ .sokol_default = true },
+        .window_title = "Game",
+        .logger = .{ .func = slog.func },
+    });
 }

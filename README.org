@@ -1,23 +1,24 @@
-* janet-sokol
+* sokol-breakout
 
-** Building
-
-#+begin_src bash
-gcc -I. -Isokol -lm -lGL -lglfw -o game main.c janet.c
-#+end_src
-
-Examples:
+** Building for desktop
 
 #+begin_src bash
-gcc -I. -lGL -lX11 -lXcursor -lXi -o example example.c
+zig build
 #+end_src
+
+** Building for web
 
 #+begin_src bash
-gcc -I. -lGL -lglfw -o example2 example2.c glfw_glue.c
+zig build -Dtarget=wasm32-emscripten
 #+end_src
 
-** Compiling shaders
+** Shader hot reload (linux only)
+
+You can enable shader reloading by setting the `shader-reload` flag to true:
 
 #+begin_src bash
-~/dev/sokol-tools-bin/bin/linux/sokol-shdc --input src/shaders/main.glsl --output src/shaders/main.glsl.zig --slang glsl410:metal_macos:hlsl5:glsl300es:wgsl --format=sokol_zig
+zig build -Dshader-reload=true
 #+end_src
+
+Every time you want to reload the shader, rebuild it with ~zig build shd~. The
+project uses ~inotify~ to detect when the resulting ~libshd.so~ is modified.
