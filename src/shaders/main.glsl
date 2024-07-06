@@ -91,47 +91,65 @@ uniform fs_bg_params {
 out vec4 frag_color;
 
 vec3 palette(float t) {
-    vec3 a = vec3(0.5, 0.5, 0.5);
-    vec3 b = vec3(0.5, 0.5, 0.5);
-    vec3 c = vec3(1.0, 1.0, 1.0);
-    vec3 d = vec3(0.263, 0.416, 0.557);
+    vec3 a = vec3(0.408, 0.5, 0.5);
+    vec3 b = vec3(-0.602, 0.5, 0.5);
+    vec3 c = vec3(0.222, 1.0, 1.0);
+    vec3 d = vec3(0.0, 0.333, 0.667);
     return a + b * cos(6.28318 * (c * t + d));
+}
+
+float sdHexagon(in vec2 p, in float r) {
+    const vec3 k = vec3(-0.866025404,0.5,0.577350269);
+    p = abs(p);
+    p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+    p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+    return length(p)*sign(p.y);
 }
 
 void main() {
     // TODO pass in?
     vec2 res = vec2(160, 120);
 
-    // calculate clip space coords
     vec2 uv = gl_FragCoord.xy / res;
     uv.y = 1 - uv.y;
     uv = 2 * uv - 1;
 
-    vec2 uv0 = uv;
+    vec2 ndc = uv;
+
+    // compensate for non-square aspect ratio
+    uv.x *= res.x / res.y;
+
+    uv *= 0.4;
+    uv.x -= 0.05 * sin(time * 0.8 + uv.y * 3);
+
+    float theta = 0.2 * time;
+    float x = uv.x * cos(theta) - uv.y * sin(theta);
+    float y = uv.x * sin(theta) + uv.y * cos(theta);
+    uv.x = x;
+    uv.y = y;
 
     vec3 final_color = vec3(0);
 
-    for (float i = 0.0; i < 4.0; i++) {
 
-        // compensate for non-square aspect ratio
-        uv.x *= res.x / res.y;
+    for (float i = 0.0; i < 3.0; i++) {
+        uv = fract(uv * 2) - 0.5;
 
-        uv = fract(uv * 1.5) - 0.5;
-
-        float d = length(uv) * exp(-length(uv0));
-
-        vec3 col = palette(length(uv0) + i * 0.4 + time * 0.4);
-        d = sin(d*8 + time)/8;
+        // float d = length(uv) + 0.8;
+        float d = 0;
+        if (i < 2) {
+            d = length(uv) + 0.8;
+        } else {
+            d = sdHexagon(uv, 1.8);
+        }
+        d = sin(d*20 + time);
         d = abs(d);
-        // d = smoothstep(0.0, 0.1, d);
-        d = pow(0.01 / d, 1.2);
 
-        final_color += col * d;
+        vec3 col = palette(length(ndc) + length(uv) / 2 + i * 0.4 + time * 0.2);
+        final_color += col * vec3(d) * 0.1;
     }
 
-    // frag_color = vec4(uv.x, uv.y, 0, 1);
     frag_color = vec4(final_color, 1);
-
+    // frag_color = vec4(d, d, 0, 1);
     // frag_color = vec4(1, 0, 0, 1);
 }
 @end

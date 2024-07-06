@@ -40,6 +40,7 @@ pub const StaticPipeline = struct {
 pub const DynamicPipeline = struct {
     pip: sg.Pipeline,
     pip_desc: sg.PipelineDesc,
+    shader_desc: sg.ShaderDesc,
     bind: sg.Bindings,
     path: []const u8,
     name: [:0]const u8,
@@ -67,6 +68,7 @@ pub const DynamicPipeline = struct {
         return Pipeline{
             .pip = pip,
             .pip_desc = pip_desc,
+            .shader_desc = desc,
             .bind = .{},
             .path = path,
             .name = name,
@@ -81,8 +83,17 @@ pub const DynamicPipeline = struct {
         const desc = out.desc;
         const pos_attr = out.pos;
 
+        if (desc.fs.uniform_blocks[0].size != self.shader_desc.fs.uniform_blocks[0].size) {
+            std.log.warn("Uniforms changed - cannot reload shader", .{});
+            return error.ShaderReloadFailed;
+        }
+
+        sg.destroyPipeline(self.pip);
+        sg.destroyShader(self.pip_desc.shader);
+
         self.pip_desc.shader = sg.makeShader(desc);
         self.pip_desc.layout.attrs[pos_attr].format = .FLOAT2;
+        self.shader_desc = desc;
 
         self.pip = sg.makePipeline(self.pip_desc);
     }

@@ -800,7 +800,7 @@ export fn sokolFrame() void {
     state.scene.update(dt);
 
     if (config.shader_reload and debug.reload) {
-        state.bg.reload() catch unreachable;
+        state.bg.reload() catch {};
         debug.reload = false;
     }
 
