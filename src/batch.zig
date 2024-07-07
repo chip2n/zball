@@ -4,7 +4,7 @@ const m = @import("math.zig");
 const Rect = m.Rect;
 
 // TODO copied
-const max_quads = 256;
+const max_quads = 512;
 const max_verts = max_quads * 6;
 const max_cmds = max_quads;
 const max_tex = 8;

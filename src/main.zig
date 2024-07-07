@@ -15,6 +15,8 @@ const fwatch = @import("fwatch");
 
 const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
+const ParticleSystem = @import("particle.zig").ParticleSystem;
+const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const utils = @import("utils.zig");
 
@@ -29,6 +31,7 @@ const Texture = @import("Texture.zig");
 
 const offscreen_sample_count = 1;
 
+// TODO reuse in batch
 const max_quads = 256;
 const max_verts = max_quads * 6; // TODO use index buffers
 
@@ -52,15 +55,24 @@ const initial_ball_pos: [2]f32 = .{
 const initial_ball_dir: [2]f32 = .{ 0.3, -1 };
 const num_bricks = 10;
 const num_rows = 5;
-const brick_w = 16;
-const brick_h = 8;
+pub const brick_w = 16;
+pub const brick_h = 8;
 const brick_start_y = 8;
 
 const Rect = m.Rect;
 
 const Brick = struct {
     pos: [2]f32,
+    sprite: usize,
     destroyed: bool = false,
+};
+
+pub const sprites = [_]Rect{
+    .{ .x = 0 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+    .{ .x = 1 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+    .{ .x = 2 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+    .{ .x = 3 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+    .{ .x = 4 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
 };
 
 const Vertex = extern struct {
@@ -110,7 +122,8 @@ const state = struct {
 
     var scene: Scene = .{ .title = .{} };
 
-    var batch = @import("batch.zig").BatchRenderer.init();
+    var batch = BatchRenderer.init();
+    var particles = ParticleSystem{};
 };
 
 const BallState = enum {
@@ -261,7 +274,10 @@ const GameScene = struct {
             for (0..num_bricks) |x| {
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
-                scene.bricks[y * num_bricks + x] = .{ .pos = .{ fx * brick_w, brick_start_y + fy * brick_h } };
+                scene.bricks[y * num_bricks + x] = .{
+                    .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
+                    .sprite = y,
+                };
             }
         }
 
@@ -321,7 +337,7 @@ const GameScene = struct {
                 const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
                 if (c) {
                     // always use the normal of the closest brick for ball reflection
-                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] / brick_h / 2 };
+                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
                     const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
                     if (brick_dist < coll_dist) {
                         normal = c_normal;
@@ -329,6 +345,7 @@ const GameScene = struct {
                     }
                     std.log.warn("COLLIDED", .{});
                     brick.destroyed = true;
+                    state.particles.emit(brick_pos, 10, brick.sprite);
                     scene.score += 100;
 
                     scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
@@ -430,6 +447,8 @@ const GameScene = struct {
                 }
             }
         }
+
+        state.particles.update(dt);
     }
 
     // The angle depends on how far the ball is from the center of the paddle
@@ -454,7 +473,7 @@ const GameScene = struct {
             const x = brick.pos[0];
             const y = brick.pos[1];
             state.batch.render(.{
-                .src = .{ .x = y * brick_w, .y = 0, .w = brick_w, .h = brick_h },
+                .src = sprites[brick.sprite],
                 .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
             });
         }
@@ -481,6 +500,9 @@ const GameScene = struct {
             },
         });
 
+        // Render particles
+        state.particles.render(&state.batch);
+
         // Top status bar
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
@@ -502,8 +524,8 @@ const GameScene = struct {
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
         //=== UI CODE STARTS HERE
-        ig.igSetNextWindowPos(.{ .x = 100, .y = 200 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
-        ig.igSetNextWindowSize(.{ .x = 400, .y = 400 }, ig.ImGuiCond_Once);
+        ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
+        ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
         _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
         _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
         _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
