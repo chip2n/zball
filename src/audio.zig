@@ -5,11 +5,10 @@ const sokol = @import("sokol");
 const saudio = sokol.audio;
 
 const g_volume = 1;
-
-// * Audio system
-
-const num_samples = 81920; // TODO
-// const num_samples = 1000;
+const num_channels = 2;
+const sample_buf_length = 81920; // TODO
+const sample_rate = 44100; // TODO
+// const samples_buf_length = 1000;
 
 const AudioHandle = usize;
 
@@ -25,12 +24,12 @@ const clips = std.enums.EnumArray(AudioClip, WavData).init(audio_data);
 
 pub const AudioSystem = struct {
     time: f64 = 0,
-    samples: [num_samples]f32 = undefined,
+    samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
 
     const AudioTrack = struct {
         clip: ?AudioClip = null,
-        curr: usize = 0,
+        frame: usize = 0,
         loop: bool = false,
     };
 
@@ -38,7 +37,7 @@ pub const AudioSystem = struct {
         for (&sys.playing) |*p| {
             if (p.clip != null) continue;
             p.clip = clip;
-            p.curr = 0;
+            p.frame = 0;
             p.loop = loop;
             break;
         } else {
@@ -55,18 +54,10 @@ pub const AudioSystem = struct {
     }
 
     pub fn update(sys: *AudioSystem, time: f64) void {
-        // const num_frames = saudio.expect();
-
-        // Calculate the number of samples to write this frame
-        const sample_rate = 44100; // TODO
         const num_frames: i32 = @intFromFloat(@floor(sample_rate * (time - sys.time)));
-        sys.time = time;
+        // const num_samples: i32 = num_frames * num_channels;
 
-        // Example: 3 audio clips are playing at the same time
-        // 1. Sort the clips in ascending order of length
-        // 2. Write the samples of all three clips in region from 0 to the length of the shortest clip, and divide them by 3
-        // 3. Write the samples of clip 2 and 3 in region from end of clip 1 to length of clip 2, and divide them by 2
-        // 4. Write the samples of clip 3 in region from end of clip 2 to end of clip 3, and do not divide
+        sys.time = time;
 
         const Sorter = struct {
             fn lessThanFn(_: void, lhs: AudioTrack, rhs: AudioTrack) bool {
@@ -76,21 +67,19 @@ pub const AudioSystem = struct {
                 const cb = clips.get(rhs.clip.?);
                 const samples_a = clipSamples(ca);
                 const samples_b = clipSamples(cb);
-                return samples_a.len - lhs.curr < samples_b.len - rhs.curr;
+                return samples_a.len - lhs.frame < samples_b.len - rhs.frame;
             }
         };
         std.mem.sort(AudioTrack, &sys.playing, {}, Sorter.lessThanFn);
 
+        // Calculate how many clips are currently playing
         var num_concurrent_clips: usize = 0;
         for (sys.playing) |p| {
             if (p.clip == null) continue;
             num_concurrent_clips += 1;
         }
 
-        const clip_index = 0;
-        _ = clip_index; // autofix
-
-        // TODO sanity check
+        // TODO: Sanity check - have we sorted clips correctly?
         for (0..num_concurrent_clips) |i| {
             const p = sys.playing[i];
             std.debug.assert(p.clip != null);
@@ -103,32 +92,24 @@ pub const AudioSystem = struct {
         var dst: []f32 = &sys.samples;
         for (0..num_concurrent_clips) |i| {
             var num_written_temp: usize = 0;
-            // var j: usize = 0;
-            // for (sys.playing[0 .. num_concurrent_clips - i]) |*p| {
             for (i..num_concurrent_clips) |j| {
                 var p = &sys.playing[j];
                 if (p.clip == null) continue;
                 std.debug.assert(p.clip != null);
-                // defer j += 1;
 
-                // std.log.warn("j: {}", .{(num_concurrent_clips - i) - j - 1});
                 const clip = clips.get(p.clip.?);
                 const volume = 1 / @as(f32, @floatFromInt(num_concurrent_clips - i));
-                // const count = writeSamples(clip, p.curr, @intCast(num_frames), dst, 1 / @as(f32, @floatFromInt(num_concurrent_clips - i)));
-                const count = writeSamples(clip, p.curr, @as(usize, @intCast(num_frames - num_written)), dst, volume);
-                std.log.warn("clip {}: curr: {}, count: {}, vol: {}", .{ j, p.curr, count, volume });
-                p.curr += count;
+                const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames - num_written)), dst, volume);
+
+                std.log.warn("clip {}: frame: {}, count: {}, vol: {}", .{ j, p.frame, count, volume });
+
+                p.frame += count;
 
                 const clip_samples = clipSamples(clip); // TODO also done in writeSamples
-                if (p.curr >= clip_samples.len) {
+                if (p.frame >= clip_samples.len) {
                     std.log.warn("done", .{});
-                    if (p.loop) {
-                        // TODO this is probably not quite right
-                        p.curr = 0;
-                    } else {
-                        p.clip = null;
-                        p.curr = 0;
-                    }
+                    p.clip = null;
+                    p.frame = 0;
                 }
                 num_written_temp = @max(num_written_temp, count);
             }
@@ -141,103 +122,46 @@ pub const AudioSystem = struct {
             std.log.warn("----", .{});
         }
 
-        // TODO new loopy boi
-        // for (&sys.playing) |*p| {
-        //     if (p.clip == null) continue;
-        //     const clip = clips.get(p.clip.?);
-        //     const clip_samples = clipSamples(clip);
-
-        //     const samples_left = clip_samples.len - p.curr;
-        //     const samples_to_write = @min(num_samples, @min(@as(usize, @intCast(num_frames)), samples_left));
-        //     num_written += @intCast(samples_to_write);
-
-        //     const src = clip_samples[p.curr .. p.curr + samples_to_write];
-        //     const dst = sys.samples[num_written .. num_written + samples_to_write];
-
-        //     clip_index += 1;
-        // }
-
-        // var num_clips: usize = 0;
-        // for (&sys.playing) |*p| {
-        //     if (p.clip == null) continue;
-        //     const clip = clips.get(p.clip.?);
-        //     const clip_samples = clipSamples(clip);
-
-        //     const samples_left = clip_samples.len - p.curr;
-        //     const samples_to_write = @min(num_samples, @min(@as(usize, @intCast(num_frames)), samples_left));
-        //     num_written += @intCast(samples_to_write);
-        //     const src = clip_samples[p.curr .. p.curr + samples_to_write];
-        //     std.log.warn("{} - {} - {} - {}", .{ num_frames, samples_to_write, p.curr, clip_samples.len });
-        //     // TODO this cast depends on header
-        //     const dst = sys.samples[0..samples_to_write];
-        //     p.curr += samples_to_write;
-        //     if (p.curr >= clip_samples.len) {
-        //         std.log.warn("done", .{});
-        //         p.clip = null;
-        //         p.curr = 0;
-        //     }
-        //     // TODO check audio format and handle correctly (PCM = signed, float etc)
-        //     for (src, dst) |s, *d| {
-        //         const fs: f32 = @floatFromInt(s);
-        //         // const result = (fs / @as(f32, @floatFromInt(std.math.pow(u16, 2, clip.header.bitsPerSample - 1)))) - 1;
-        //         const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
-        //         std.debug.assert(-1 <= result and result <= 1);
-        //         std.debug.assert(-0.25 <= result and result <= 0.25); // TODO based on bounce sample
-        //         // std.log.warn("result: {}", .{result});
-        //         if (num_clips == 0) {
-        //             d.* = result * volume;
-        //         } else {
-        //             // TODO this is probably wrong
-        //             d.* = (d.* + result * volume) / 2;
-        //         }
-        //     }
-        //     num_clips += 1;
-        //     // @memcpy(sys.samples[0..samples_to_write], clip.samples[p.curr..p.curr+samples_to_write]);
-        //     // std.log.warn("-------", .{});
-        //     // break; // TODO
-        // } else {}
-
-        // TODO need to do this in a loop I guess, if num_frames is large
-        // if (num_written > 0) {
-        // _ = saudio.push(&(sys.samples[0]), num_written);
         _ = saudio.push(&(sys.samples[0]), num_frames);
-        // }
-
-        // TODO
-        // Write silence
-        // if (num_frames - num_written > 0) {
-        //     for (&sys.samples) |*s| {
-        //         s.* = 0.0;
-        //     }
-        //     _ = saudio.push(&(sys.samples[0]), num_frames - num_written);
-        // }
     }
 
     fn writeSamples(
         clip: WavData,
-        offset: usize,
+        frame_offset: usize,
         count: usize,
         output: []f32,
         volume: f32,
     ) usize {
         const clip_samples = clipSamples(clip);
 
-        const samples_left = clip_samples.len - offset;
-        const samples_to_write = @min(num_samples, @min(count, samples_left));
-        //std.log.warn("offset: {}, samples_to_write: {}, count: {}", .{ offset, samples_to_write, count });
+        const sample_offset = frame_offset * clip.header.nbrChannels;
 
-        const src = clip_samples[offset .. offset + samples_to_write];
-        const dst = output[0..samples_to_write];
+        const frames_left = clip_samples.len - frame_offset; // TODO this doesn't support 2 channels
+        const frames_to_write = @min(sample_buf_length, @min(count, frames_left)); // TODO rename sample_buf_length?
 
-        for (src, dst) |s, *d| {
+        //std.log.warn("frame_offset: {}, samples_to_write: {}, count: {}", .{ frame_offset, samples_to_write, count });
+
+        const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
+        const dst = output[0..frames_to_write * num_channels];
+
+        // TODO 2 channels - right now we're reading src as 1 channel
+        for (src, 0..) |s, i| {
             const fs: f32 = @floatFromInt(s);
             const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
             std.debug.assert(-1 <= result and result <= 1);
             std.debug.assert(-0.25 <= result and result <= 0.25); // TODO based on bounce sample
-            d.* += result * volume * g_volume;
+            dst[i * num_channels + 0] = result * volume * g_volume;
+            dst[i * num_channels + 1] = result * volume * g_volume;
         }
+        // for (src, dst) |s, *d| {
+        //     const fs: f32 = @floatFromInt(s);
+        //     const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
+        //     std.debug.assert(-1 <= result and result <= 1);
+        //     std.debug.assert(-0.25 <= result and result <= 0.25); // TODO based on bounce sample
+        //     d.* += result * volume * g_volume;
+        // }
 
-        return samples_to_write;
+        return frames_to_write;
     }
 };
 

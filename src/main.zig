@@ -648,6 +648,7 @@ fn initializeGame() !void {
     errdefer sg.shutdown();
 
     saudio.setup(.{
+        .num_channels = 2,
         .logger = .{ .func = slog.func },
     });
     errdefer saudio.shutdown();
@@ -873,24 +874,7 @@ export fn sokolFrame() void {
         debug.reload = false;
     }
 
-    // std.log.warn("dt: {}", .{dt});
     state.audio.update(time);
-
-    { // Test audio
-        // const num_frames = saudio.expect();
-        // var i: i32 = 0;
-        // while (i < num_frames) : ({
-        //     i += 1;
-        //     state.audio.even_odd += 1;
-        //     state.audio.sample_pos += 1;
-        // }) {
-        //     if (state.audio.sample_pos == num_audio_samples) {
-        //         state.audio.sample_pos = 0;
-        //         _ = saudio.push(&(state.audio.samples[0]), num_audio_samples);
-        //     }
-        //     state.audio.samples[state.audio.sample_pos] = if (0 != (state.audio.even_odd & 0x20)) 0.1 else -0.1;
-        // }
-    }
 
     simgui.newFrame(.{
         .width = sapp.width(),
