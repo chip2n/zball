@@ -4,7 +4,7 @@ const root = @import("root");
 const sokol = @import("sokol");
 const saudio = sokol.audio;
 
-const g_volume = 1;
+const g_volume = 0.3;
 const num_channels = 2;
 const sample_buf_length = 81920; // TODO
 const sample_rate = 44100; // TODO
@@ -31,26 +31,26 @@ pub const AudioSystem = struct {
         clip: ?AudioClip = null,
         frame: usize = 0,
         loop: bool = false,
+        volume: f32 = 1.0,
     };
 
-    pub fn play(sys: *AudioSystem, clip: AudioClip, loop: bool) void {
+    const PlayOptions = struct {
+        clip: AudioClip,
+        loop: bool = false,
+        volume: f32 = 1.0,
+    };
+    pub fn play(sys: *AudioSystem, v: PlayOptions) void {
         for (&sys.playing) |*p| {
             if (p.clip != null) continue;
-            p.clip = clip;
+            p.clip = v.clip;
             p.frame = 0;
-            p.loop = loop;
+            p.loop = v.loop;
+            p.volume = v.volume;
             break;
         } else {
             std.log.warn("Cannot play clip - too many audio clips is playing at the same time.", .{});
             return;
         }
-    }
-
-    fn clipSamples(clip: WavData) []const i16 {
-        // TODO depends on header
-        const clip_samples_ptr: [*]const i16 = @alignCast(@ptrCast(clip.samples.ptr));
-        const clip_samples = clip_samples_ptr[0 .. clip.header.dataSize / @sizeOf(i16)];
-        return clip_samples;
     }
 
     pub fn update(sys: *AudioSystem, time: f64) void {
@@ -65,8 +65,8 @@ pub const AudioSystem = struct {
                 if (rhs.clip == null) return true;
                 const ca = clips.get(lhs.clip.?);
                 const cb = clips.get(rhs.clip.?);
-                const samples_a = clipSamples(ca);
-                const samples_b = clipSamples(cb);
+                const samples_a = ca.samples();
+                const samples_b = cb.samples();
                 return samples_a.len - lhs.frame < samples_b.len - rhs.frame;
             }
         };
@@ -99,14 +99,13 @@ pub const AudioSystem = struct {
 
                 const clip = clips.get(p.clip.?);
                 const volume = 1 / @as(f32, @floatFromInt(num_concurrent_clips - i));
-                const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames - num_written)), dst, volume);
+                const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames - num_written)), dst, volume * p.volume);
 
                 std.log.warn("clip {}: frame: {}, count: {}, vol: {}", .{ j, p.frame, count, volume });
 
                 p.frame += count;
 
-                const clip_samples = clipSamples(clip); // TODO also done in writeSamples
-                if (p.frame >= clip_samples.len) {
+                if (p.frame >= clip.frameCount()) {
                     std.log.warn("done", .{});
                     p.clip = null;
                     p.frame = 0;
@@ -128,38 +127,38 @@ pub const AudioSystem = struct {
     fn writeSamples(
         clip: WavData,
         frame_offset: usize,
-        count: usize,
+        frame_count: usize,
         output: []f32,
         volume: f32,
     ) usize {
-        const clip_samples = clipSamples(clip);
+        const clip_samples = clip.samples();
+        // std.debug.assert(std.math.mod(usize, clip_samples.len, clip.header.nbrChannels) catch unreachable == 0);
 
         const sample_offset = frame_offset * clip.header.nbrChannels;
 
-        const frames_left = clip_samples.len - frame_offset; // TODO this doesn't support 2 channels
-        const frames_to_write = @min(sample_buf_length, @min(count, frames_left)); // TODO rename sample_buf_length?
+        const frames_left = @divExact(clip_samples.len, clip.header.nbrChannels) - frame_offset; // TODO this doesn't support 2 channels
+        const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left)); // TODO rename sample_buf_length?
 
-        //std.log.warn("frame_offset: {}, samples_to_write: {}, count: {}", .{ frame_offset, samples_to_write, count });
+        //std.log.warn("frame_offset: {}, samples_to_write: {}, frame_count: {}", .{ frame_offset, samples_to_write, frame_count });
 
         const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
-        const dst = output[0..frames_to_write * num_channels];
+        const dst = output[0 .. frames_to_write * num_channels];
+        // const dst = output[0..];
 
         // TODO 2 channels - right now we're reading src as 1 channel
         for (src, 0..) |s, i| {
             const fs: f32 = @floatFromInt(s);
-            const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
+            const div: usize = if (fs < 0) @abs(std.math.minInt(i16)) else std.math.maxInt(i16);
+            const result = (fs / @as(f32, @floatFromInt(div)));
+            // const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
             std.debug.assert(-1 <= result and result <= 1);
-            std.debug.assert(-0.25 <= result and result <= 0.25); // TODO based on bounce sample
-            dst[i * num_channels + 0] = result * volume * g_volume;
-            dst[i * num_channels + 1] = result * volume * g_volume;
+            if (clip.header.nbrChannels == 1) {
+                dst[i * num_channels + 0] += result * volume * g_volume;
+                dst[i * num_channels + 1] += result * volume * g_volume;
+            } else if (clip.header.nbrChannels == 2) {
+                dst[i] += result * volume * g_volume;
+            } else unreachable;
         }
-        // for (src, dst) |s, *d| {
-        //     const fs: f32 = @floatFromInt(s);
-        //     const result = (fs / @as(f32, @floatFromInt(std.math.maxInt(i16))));
-        //     std.debug.assert(-1 <= result and result <= 1);
-        //     std.debug.assert(-0.25 <= result and result <= 0.25); // TODO based on bounce sample
-        //     d.* += result * volume * g_volume;
-        // }
 
         return frames_to_write;
     }
@@ -205,7 +204,16 @@ const WavHeader = packed struct {
 
 pub const WavData = struct {
     header: WavHeader,
-    samples: []const u8,
+    data: []const u8,
+
+    fn frameCount(self: WavData) usize {
+        return @divExact(self.samples().len, self.header.nbrChannels);
+    }
+
+    fn samples(self: WavData) []align(1) const i16 {
+        // TODO depends on header
+        return std.mem.bytesAsSlice(i16, self.data);
+    }
 };
 
 pub fn parse(data: []const u8) error{InvalidWav}!WavData {
@@ -220,7 +228,7 @@ pub fn parse(data: []const u8) error{InvalidWav}!WavData {
     if (header.bytePerBloc != header.nbrChannels * header.bitsPerSample / 8) return error.InvalidWav;
 
     const samples = data[WavHeader.byte_size .. WavHeader.byte_size + header.dataSize];
-    return .{ .header = header, .samples = samples };
+    return .{ .header = header, .data = samples };
 }
 
 pub fn embed(comptime path: []const u8) WavData {
@@ -251,11 +259,4 @@ test "parse wav" {
     };
     try std.testing.expectEqual(expected, header);
     try std.testing.expectEqual(15904, samples.len);
-}
-
-test "temp" {
-    const data = @embedFile("assets/music.wav");
-    const result = try parse(data);
-    const header = result.header;
-    try std.testing.expectEqual(header.blocSize, 16);
 }

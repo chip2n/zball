@@ -362,7 +362,7 @@ const GameScene = struct {
                     std.log.warn("COLLIDED", .{});
                     brick.destroyed = true;
                     state.particles.emit(brick_pos, 10, brick.sprite);
-                    state.audio.play(.bounce, false);
+                    state.audio.play(.{ .clip = .bounce, .loop = false });
                     scene.score += 100;
 
                     scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
@@ -611,19 +611,19 @@ fn renderGui() void {
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
 
     if (ig.igButton("Play sound", .{})) {
-        state.audio.play(.bounce, false);
+        state.audio.play(.{ .clip = .bounce, .loop = false });
     }
     if (ig.igButton("Play sound twice", .{})) {
-        state.audio.play(.bounce, false);
-        state.audio.play(.bounce, false);
+        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce, .loop = false });
     }
     if (ig.igButton("Play sound thrice", .{})) {
-        state.audio.play(.bounce, false);
-        state.audio.play(.bounce, false);
-        state.audio.play(.bounce, false);
+        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce, .loop = false });
     }
     if (ig.igButton("Play music", .{})) {
-        state.audio.play(.music, false);
+        state.audio.play(.{ .clip = .music, .loop = false, .volume = 0.2 });
     }
 
     if (config.shader_reload) {
@@ -648,7 +648,11 @@ fn initializeGame() !void {
     errdefer sg.shutdown();
 
     saudio.setup(.{
+        // TODO: The sample_rate and num_channels parameters are only hints for
+        // the audio backend, it isn't guaranteed that those are the values used
+        // for actual playback.
         .num_channels = 2,
+
         .logger = .{ .func = slog.func },
     });
     errdefer saudio.shutdown();
