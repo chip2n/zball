@@ -76,7 +76,7 @@ pub fn build(b: *Build) !void {
             },
         });
         const lib_shd_step = b.step("shd", "Compile shaders as a shared library");
-        const lib_shd_install = b.addInstallArtifact(lib_shd, .{ .dest_dir = .{ .override = .bin }});
+        const lib_shd_install = b.addInstallArtifact(lib_shd, .{ .dest_dir = .{ .override = .bin } });
         lib_shd_step.dependOn(&lib_shd_install.step);
     }
 
@@ -105,6 +105,7 @@ pub fn build(b: *Build) !void {
     } else {
         const exe = try buildNative(b, target, optimize, deps, true);
         exe.root_module.addOptions("config", options);
+        addAssets(b, exe);
         // TODO debug only
         exe.root_module.addImport("fwatch", dep_fwatch.module("fwatch"));
 
@@ -112,7 +113,31 @@ pub fn build(b: *Build) !void {
         // Used with ZLS for better analysis of comptime shenanigans
         const check = b.step("check", "Check if game compiles");
         check.dependOn(&check_exe.step);
+
+        // Tests
+        const tests = b.addTest(.{
+            .root_source_file = b.path("src/audio.zig"), // TODO
+            .target = target,
+            .optimize = optimize,
+        });
+
+        addAssets(b, tests);
+        const run_tests = b.addRunArtifact(tests);
+        const test_step = b.step("test", "Run tests");
+        test_step.dependOn(&run_tests.step);
     }
+}
+
+fn addAssets(b: *Build, step: *Build.Step.Compile) void {
+    step.root_module.addAnonymousImport("assets/bounce.wav", .{
+        .root_source_file = b.path("assets/bounce.wav"),
+    });
+    step.root_module.addAnonymousImport("assets/shoot.wav", .{
+        .root_source_file = b.path("assets/shoot.wav"),
+    });
+    step.root_module.addAnonymousImport("assets/music.wav", .{
+        .root_source_file = b.path("assets/music.wav"),
+    });
 }
 
 fn buildFontPackTool(

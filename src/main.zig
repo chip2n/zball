@@ -5,6 +5,8 @@ const assert = std.debug.assert;
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
+const saudio = sokol.audio;
+const stm = sokol.time;
 const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
@@ -17,6 +19,7 @@ const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const ParticleSystem = @import("particle.zig").ParticleSystem;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
+const AudioSystem = @import("audio.zig").AudioSystem;
 
 const utils = @import("utils.zig");
 
@@ -27,9 +30,13 @@ const zm = @import("zmath");
 
 const img = @embedFile("spritesheet.png");
 const titlescreen = @embedFile("titlescreen.png");
+const audio_bounce = @import("audio.zig").embed("assets/bounce.wav");
+
 const Texture = @import("Texture.zig");
 
 const offscreen_sample_count = 1;
+
+const num_audio_samples = 32;
 
 // TODO reuse in batch
 const max_quads = 256;
@@ -109,6 +116,8 @@ const state = struct {
         var pass_action: sg.PassAction = .{};
     };
 
+    var time: f64 = 0;
+
     var texture: Texture = undefined;
     var titlescreen_texture: Texture = undefined;
     var font_texture: Texture = undefined;
@@ -124,6 +133,13 @@ const state = struct {
 
     var batch = BatchRenderer.init();
     var particles = ParticleSystem{};
+
+    // const audio = struct {
+    //     var even_odd: u32 = 0;
+    //     var sample_pos: usize = 0;
+    //     var samples: [num_audio_samples]f32 = undefined;
+    // };
+    var audio = AudioSystem{};
 };
 
 const BallState = enum {
@@ -346,6 +362,7 @@ const GameScene = struct {
                     std.log.warn("COLLIDED", .{});
                     brick.destroyed = true;
                     state.particles.emit(brick_pos, 10, brick.sprite);
+                    state.audio.play(.bounce, false);
                     scene.score += 100;
 
                     scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
@@ -523,24 +540,6 @@ const GameScene = struct {
         const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
-        //=== UI CODE STARTS HERE
-        ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
-        ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
-        _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
-        _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-        _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
-        _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
-        _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
-
-        if (config.shader_reload) {
-            if (ig.igButton("Load shader", .{})) {
-                debug.reload = true;
-            }
-        }
-
-        ig.igEnd();
-        //=== UI CODE ENDS HERE
-
         const vs_params = computeVsParams();
 
         sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
@@ -601,6 +600,41 @@ const GameScene = struct {
     }
 };
 
+fn renderGui() void {
+    //=== UI CODE STARTS HERE
+    ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
+    ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
+    _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
+    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
+    // _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
+    _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+
+    if (ig.igButton("Play sound", .{})) {
+        state.audio.play(.bounce, false);
+    }
+    if (ig.igButton("Play sound twice", .{})) {
+        state.audio.play(.bounce, false);
+        state.audio.play(.bounce, false);
+    }
+    if (ig.igButton("Play sound thrice", .{})) {
+        state.audio.play(.bounce, false);
+        state.audio.play(.bounce, false);
+        state.audio.play(.bounce, false);
+    }
+    if (ig.igButton("Play music", .{})) {
+        state.audio.play(.music, false);
+    }
+
+    if (config.shader_reload) {
+        if (ig.igButton("Load shader", .{})) {
+            debug.reload = true;
+        }
+    }
+
+    ig.igEnd();
+}
+
 fn initializeGame() !void {
     state.arena = std.heap.ArenaAllocator.init(state.allocator);
     errdefer state.arena.deinit();
@@ -611,6 +645,15 @@ fn initializeGame() !void {
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
+    errdefer sg.shutdown();
+
+    saudio.setup(.{
+        .logger = .{ .func = slog.func },
+    });
+    errdefer saudio.shutdown();
+
+    stm.setup();
+
     simgui.setup(.{
         .logger = .{ .func = slog.func },
     });
@@ -818,12 +861,35 @@ export fn sokolInit() void {
 }
 
 export fn sokolFrame() void {
+    const ticks = stm.now();
+    const time = stm.sec(ticks);
+    state.time = time;
+
     const dt: f32 = @floatCast(sapp.frameDuration());
     state.scene.update(dt);
 
     if (config.shader_reload and debug.reload) {
         state.bg.reload() catch {};
         debug.reload = false;
+    }
+
+    // std.log.warn("dt: {}", .{dt});
+    state.audio.update(time);
+
+    { // Test audio
+        // const num_frames = saudio.expect();
+        // var i: i32 = 0;
+        // while (i < num_frames) : ({
+        //     i += 1;
+        //     state.audio.even_odd += 1;
+        //     state.audio.sample_pos += 1;
+        // }) {
+        //     if (state.audio.sample_pos == num_audio_samples) {
+        //         state.audio.sample_pos = 0;
+        //         _ = saudio.push(&(state.audio.samples[0]), num_audio_samples);
+        //     }
+        //     state.audio.samples[state.audio.sample_pos] = if (0 != (state.audio.even_odd & 0x20)) 0.1 else -0.1;
+        // }
     }
 
     simgui.newFrame(.{
@@ -834,6 +900,8 @@ export fn sokolFrame() void {
     });
 
     state.scene.render();
+
+    renderGui();
 
     const fsq_params = computeFSQParams();
     sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
@@ -868,6 +936,7 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 }
 
 export fn sokolCleanup() void {
+    saudio.shutdown();
     sg.shutdown();
     state.arena.deinit();
     if (config.shader_reload) {
