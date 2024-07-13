@@ -102,11 +102,11 @@ pub fn build(b: *Build) !void {
         const dep_emsdk = b.dependency("emsdk", .{});
         const lib = try buildWeb(b, target, optimize, dep_emsdk, deps);
         lib.root_module.addOptions("config", options);
-        addAssets(b, lib);
+        try addAssets(b, lib);
     } else {
         const exe = try buildNative(b, target, optimize, deps, true);
         exe.root_module.addOptions("config", options);
-        addAssets(b, exe);
+        try addAssets(b, exe);
         // TODO debug only
         exe.root_module.addImport("fwatch", dep_fwatch.module("fwatch"));
 
@@ -122,23 +122,24 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
         });
 
-        addAssets(b, tests);
+        try addAssets(b, tests);
         const run_tests = b.addRunArtifact(tests);
         const test_step = b.step("test", "Run tests");
         test_step.dependOn(&run_tests.step);
     }
 }
 
-fn addAssets(b: *Build, step: *Build.Step.Compile) void {
-    step.root_module.addAnonymousImport("assets/bounce.wav", .{
-        .root_source_file = b.path("assets/bounce.wav"),
-    });
-    step.root_module.addAnonymousImport("assets/shoot.wav", .{
-        .root_source_file = b.path("assets/shoot.wav"),
-    });
-    step.root_module.addAnonymousImport("assets/music.wav", .{
-        .root_source_file = b.path("assets/music.wav"),
-    });
+fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
+    var dir = try std.fs.cwd().openDir("assets", .{ .iterate = true });
+    defer dir.close();
+
+    var iter = dir.iterate();
+    while (try iter.next()) |f| {
+        if (f.kind != .file) continue;
+        if (!std.mem.eql(u8, ".wav", std.fs.path.extension(f.name))) continue;
+        const name = b.pathJoin(&.{ "assets", f.name });
+        step.root_module.addAnonymousImport(name, .{ .root_source_file = b.path(name) });
+    }
 }
 
 fn buildFontPackTool(

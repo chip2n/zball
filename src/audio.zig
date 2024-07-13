@@ -13,7 +13,7 @@ const AudioHandle = usize;
 
 pub const audio_data = .{
     .bounce = embed("assets/bounce.wav"),
-    .shoot = embed("assets/shoot.wav"),
+    .explode = embed("assets/explode.wav"),
     .music = embed("assets/music.wav"),
 };
 
