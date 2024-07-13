@@ -54,7 +54,7 @@ pub const AudioSystem = struct {
     }
 
     pub fn update(sys: *AudioSystem, time: f64) void {
-        const num_frames: i32 = @intFromFloat(@floor(sample_rate * (time - sys.time)));
+        const num_frames: i32 = @intFromFloat(@ceil(sample_rate * (time - sys.time)));
         // const num_samples: i32 = num_frames * num_channels;
 
         sys.time = time;
@@ -101,27 +101,34 @@ pub const AudioSystem = struct {
                 const volume = 1 / @as(f32, @floatFromInt(num_concurrent_clips - i));
                 const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames - num_written)), dst, volume * p.volume);
 
-                std.log.warn("clip {}: frame: {}, count: {}, vol: {}", .{ j, p.frame, count, volume });
+                // std.log.warn("clip {}: frame: {}, count: {}, vol: {}", .{ j, p.frame, count, volume });
 
                 p.frame += count;
 
                 if (p.frame >= clip.frameCount()) {
-                    std.log.warn("done", .{});
-                    p.clip = null;
-                    p.frame = 0;
+                    if (p.loop) {
+                        // TODO I don't think this is a perfect loop - we end with just a few samples and not fill all the frames
+                        std.log.warn("looping clip", .{});
+                        p.frame = 0;
+                    } else {
+                        std.log.warn("done", .{});
+                        p.clip = null;
+                        p.frame = 0;
+                    }
                 }
                 num_written_temp = @max(num_written_temp, count);
             }
-            std.log.warn(":::", .{});
             num_written += @intCast(num_written_temp);
             dst = sys.samples[@intCast(num_written_temp)..];
         }
-        if (num_written > 0) {
-            std.log.warn("num: {}", .{num_written});
-            std.log.warn("----", .{});
-        }
+        // if (num_written > 0) {
+        //     std.log.warn("num: {}", .{num_written});
+        //     std.log.warn("----", .{});
+        // }
 
-        _ = saudio.push(&(sys.samples[0]), num_frames);
+        if (num_frames > 0) {
+            _ = saudio.push(&(sys.samples[0]), num_frames);
+        }
     }
 
     fn writeSamples(

@@ -623,7 +623,7 @@ fn renderGui() void {
         state.audio.play(.{ .clip = .bounce, .loop = false });
     }
     if (ig.igButton("Play music", .{})) {
-        state.audio.play(.{ .clip = .music, .loop = false, .volume = 0.2 });
+        state.audio.play(.{ .clip = .music, .loop = true, .volume = 0.4 });
     }
 
     if (config.shader_reload) {
@@ -652,7 +652,7 @@ fn initializeGame() !void {
         // the audio backend, it isn't guaranteed that those are the values used
         // for actual playback.
         .num_channels = 2,
-
+        .buffer_frames = 512, // lowers audio latency (TODO shitty on web though)
         .logger = .{ .func = slog.func },
     });
     errdefer saudio.shutdown();

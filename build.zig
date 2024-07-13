@@ -102,6 +102,7 @@ pub fn build(b: *Build) !void {
         const dep_emsdk = b.dependency("emsdk", .{});
         const lib = try buildWeb(b, target, optimize, dep_emsdk, deps);
         lib.root_module.addOptions("config", options);
+        addAssets(b, lib);
     } else {
         const exe = try buildNative(b, target, optimize, deps, true);
         exe.root_module.addOptions("config", options);
