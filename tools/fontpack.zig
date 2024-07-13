@@ -7,6 +7,7 @@ const c = @cImport({
 const GlyphData = struct {
     pos: [2]usize,
     size: [2]usize,
+    bbox: [4]i32,
     ch: u8,
     advance: usize,
 };
@@ -52,25 +53,30 @@ pub fn main() !void {
     try out.print("pub const ascent = {};\n", .{ascent});
     try out.print("pub const descent = {};\n\n", .{descent});
 
-    _ = try out.write("pub const Glyph = struct {");
-    _ = try out.write("    ch: u8,");
-    _ = try out.write("    x: usize,");
-    _ = try out.write("    y: usize,");
-    _ = try out.write("    w: usize,");
-    _ = try out.write("    h: usize,");
-    _ = try out.write("    advance: usize,");
-    _ = try out.write("};");
+    _ = try out.write("pub const Glyph = struct {\n");
+    _ = try out.write("    ch: u8,\n");
+    _ = try out.write("    x: usize,\n");
+    _ = try out.write("    y: usize,\n");
+    _ = try out.write("    w: usize,\n");
+    _ = try out.write("    h: usize,\n");
+    _ = try out.write("    bbox: [4]i32,\n");
+    _ = try out.write("    advance: usize,\n");
+    _ = try out.write("};\n");
 
     _ = try out.write("pub const glyphs = [_]Glyph{\n");
     for (glyphs) |glyph| {
         try out.print(
-            "    .{{ .ch = '{c}', .x = {}, .y = {}, .w = {}, .h = {}, .advance = {} }},\n",
+            "    .{{ .ch = '{c}', .x = {}, .y = {}, .w = {}, .h = {}, .bbox = .{{ {}, {}, {}, {} }}, .advance = {} }},\n",
             .{
                 glyph.ch,
                 glyph.pos[0],
                 glyph.pos[1],
                 glyph.size[0],
                 glyph.size[1],
+                glyph.bbox[0],
+                glyph.bbox[1],
+                glyph.bbox[2],
+                glyph.bbox[3],
                 glyph.advance,
             },
         );
@@ -130,8 +136,10 @@ pub fn pack(
         }
         c.stbtt_MakeCodepointBitmap(&font, bitmap[y * stride + x ..].ptr, x2 - x1, y2 - y1, @intCast(stride), scale, scale, ch);
         glyphs[i] = .{
+            // TODO refactor these params to make it clear that they are tex coords
             .pos = .{ x, y },
             .size = .{ @intCast(x2 - x1), @intCast(y2 - y1) },
+            .bbox = .{ @intCast(x1), @intCast(y1), @intCast(x2), @intCast(y2) },
             .ch = ch,
             .advance = advance,
         };

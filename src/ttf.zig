@@ -18,12 +18,14 @@ pub const TextRenderer = struct {
             const gy: f32 = @floatFromInt(glyph.y);
             const gw: f32 = @floatFromInt(glyph.w);
             const gh: f32 = @floatFromInt(glyph.h);
+            const baseline_offset: f32 = @floatFromInt(glyph.bbox[1]);
             batch.render(.{
                 .src = .{ .x = gx, .y = gy, .w = gw, .h = gh },
-                .dst = .{ .x = self.cursor_x + x, .y = y + font.ascent - gh, .w = gw, .h = gh },
+                .dst = .{ .x = self.cursor_x + x, .y = y + font.ascent + baseline_offset, .w = gw, .h = gh },
             });
             self.cursor_x += @floatFromInt(glyph.advance);
         }
+        self.cursor_x = 0;
     }
 
     pub fn measure(text: []const u8) [2]f32 {
