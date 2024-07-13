@@ -362,7 +362,7 @@ const GameScene = struct {
                     std.log.warn("COLLIDED", .{});
                     brick.destroyed = true;
                     state.particles.emit(brick_pos, 10, brick.sprite);
-                    state.audio.play(.{ .clip = .bounce, .loop = false });
+                    state.audio.play(.{ .clip = .explode });
                     scene.score += 100;
 
                     scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
@@ -388,7 +388,7 @@ const GameScene = struct {
             // TODO not sure we're using the right ball positions
             const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
             if (c) {
-                std.log.warn("PADDLE", .{});
+                state.audio.play(.{ .clip = .bounce });
                 scene.ball_pos = out;
                 scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
             }
@@ -611,16 +611,16 @@ fn renderGui() void {
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
 
     if (ig.igButton("Play sound", .{})) {
-        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play sound twice", .{})) {
-        state.audio.play(.{ .clip = .bounce, .loop = false });
-        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce });
+        state.audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play sound thrice", .{})) {
-        state.audio.play(.{ .clip = .bounce, .loop = false });
-        state.audio.play(.{ .clip = .bounce, .loop = false });
-        state.audio.play(.{ .clip = .bounce, .loop = false });
+        state.audio.play(.{ .clip = .bounce });
+        state.audio.play(.{ .clip = .bounce });
+        state.audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play music", .{})) {
         state.audio.play(.{ .clip = .music, .loop = true, .volume = 0.4 });
