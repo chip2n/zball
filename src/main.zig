@@ -31,10 +31,6 @@ const zm = @import("zmath");
 
 const spritesheet = @embedFile("assets/sprites.png");
 
-// TODO remove
-const img = @embedFile("spritesheet.png");
-const titlescreen = @embedFile("titlescreen.png");
-
 const audio_bounce = @import("audio.zig").embed("assets/bounce.wav");
 
 const Texture = @import("Texture.zig");
@@ -115,9 +111,7 @@ const state = struct {
 
     var time: f64 = 0;
 
-    var texture: Texture = undefined;
     var spritesheet_texture: Texture = undefined;
-    var titlescreen_texture: Texture = undefined;
     var font_texture: Texture = undefined;
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
     var textures: std.AutoHashMap(usize, sg.Image) = undefined;
@@ -182,9 +176,10 @@ const TitleScene = struct {
     }
 
     fn render(scene: TitleScene) void {
-        state.batch.setTexture(state.titlescreen_texture);
+        state.batch.setTexture(state.spritesheet_texture);
 
         state.batch.render(.{
+            .src = sprite.sprites.title.bounds,
             .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
         });
 
@@ -504,42 +499,27 @@ const GameScene = struct {
             });
         }
 
-        { // Render ball
-            const slice = sprite.get(.ball);
-            state.batch.render(.{
-                .src = .{
-                    .x = @floatFromInt(slice.bounds.x),
-                    .y = @floatFromInt(slice.bounds.y),
-                    .w = @floatFromInt(slice.bounds.w),
-                    .h = @floatFromInt(slice.bounds.h),
-                },
-                .dst = .{
-                    .x = scene.ball_pos[0] - ball_w / 2,
-                    .y = scene.ball_pos[1] - ball_h / 2,
-                    .w = ball_w,
-                    .h = ball_h,
-                },
-            });
-        }
+        // Render ball
+        state.batch.render(.{
+            .src = sprite.sprites.ball.bounds,
+            .dst = .{
+                .x = scene.ball_pos[0] - ball_w / 2,
+                .y = scene.ball_pos[1] - ball_h / 2,
+                .w = ball_w,
+                .h = ball_h,
+            },
+        });
 
-        { // Render paddle
-            const slice = sprite.get(.paddle);
-            state.batch.render(.{
-                .src = .{
-                    .x = @floatFromInt(slice.bounds.x),
-                    .y = @floatFromInt(slice.bounds.y),
-                    .w = @floatFromInt(slice.bounds.w),
-                    .h = @floatFromInt(slice.bounds.h),
-                },
-                .dst = .{
-                    .x = scene.paddle_pos[0] - paddle_w / 2,
-                    .y = scene.paddle_pos[1] - paddle_h,
-                    // .y = scene.paddle_pos[1] - paddle_h / 2,
-                    .w = paddle_w,
-                    .h = paddle_h,
-                },
-            });
-        }
+        // Render paddle
+        state.batch.render(.{
+            .src = sprite.sprites.paddle.bounds,
+            .dst = .{
+                .x = scene.paddle_pos[0] - paddle_w / 2,
+                .y = scene.paddle_pos[1] - paddle_h,
+                .w = paddle_w,
+                .h = paddle_h,
+            },
+        });
 
         // Render particles
         state.particles.render(&state.batch);
@@ -563,7 +543,7 @@ const GameScene = struct {
 
         // Render pause menu
         if (scene.pause) {
-            state.batch.setTexture(state.texture);
+            state.batch.setTexture(state.spritesheet_texture);
             state.batch.render(.{
                 .src = .{ .x = 10, .y = 10, .w = 8, .h = 8 },
                 .dst = .{ .x = 0, .y = 0, .w = 128, .h = 128 },
@@ -728,14 +708,10 @@ fn initializeGame() !void {
     // this will also be called when the window resizes
     createOffscreenAttachments(viewport_size[0], viewport_size[1]);
 
-    state.texture = Texture.init(img);
-    state.titlescreen_texture = Texture.init(titlescreen);
     state.spritesheet_texture = Texture.init(spritesheet);
     state.font_texture = Texture.init(font.image);
 
     state.textures = std.AutoHashMap(usize, sg.Image).init(allocator);
-    try state.textures.put(state.texture.id, sg.makeImage(state.texture.desc));
-    try state.textures.put(state.titlescreen_texture.id, sg.makeImage(state.titlescreen_texture.desc));
     try state.textures.put(state.spritesheet_texture.id, sg.makeImage(state.spritesheet_texture.desc));
     try state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc));
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
