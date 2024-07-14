@@ -57,12 +57,12 @@ const ball_h: f32 = 4;
 const ball_speed: f32 = 70;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
-    viewport_size[1] - 10,
+    viewport_size[1] - 4,
 };
 
 const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
-    initial_paddle_pos[1] - paddle_h / 2 - ball_h / 2,
+    initial_paddle_pos[1] - paddle_h - ball_h / 2,
 };
 const initial_ball_dir: [2]f32 = .{ 0.3, -1 };
 const num_bricks = 10;
@@ -257,6 +257,8 @@ const TitleScene = struct {
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
+    pause: bool = false,
+
     time: f32 = 0,
     lives: u8 = 3,
     score: u32 = 0,
@@ -300,171 +302,173 @@ const GameScene = struct {
     }
 
     fn update(scene: *GameScene, dt: f32) void {
-        scene.time += dt;
-
         // Reset data from previous frame
         scene.collision_count = 0;
 
-        { // Move paddle
-            var paddle_dx: f32 = 0;
-            if (scene.inputs.left_down) {
-                paddle_dx -= 1;
+        if (!scene.pause) {
+            scene.time += dt;
+
+            { // Move paddle
+                var paddle_dx: f32 = 0;
+                if (scene.inputs.left_down) {
+                    paddle_dx -= 1;
+                }
+                if (scene.inputs.right_down) {
+                    paddle_dx += 1;
+                }
+                const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+                scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
             }
-            if (scene.inputs.right_down) {
-                paddle_dx += 1;
+
+            // Fire ball when pressing space
+            if (scene.inputs.space_down and scene.ball_state == .idle) {
+                scene.ball_state = .alive;
             }
-            const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
-            scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
-        }
 
-        // Fire ball when pressing space
-        if (scene.inputs.space_down and scene.ball_state == .idle) {
-            scene.ball_state = .alive;
-        }
+            const old_ball_pos = scene.ball_pos;
+            switch (scene.ball_state) {
+                .idle => {
+                    scene.updateIdleBall();
+                },
+                .alive => {
+                    scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
+                    scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
+                },
+            }
+            const new_ball_pos = scene.ball_pos;
 
-        const old_ball_pos = scene.ball_pos;
-        switch (scene.ball_state) {
-            .idle => {
-                scene.updateIdleBall();
-            },
-            .alive => {
-                scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
-                scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
-            },
-        }
-        const new_ball_pos = scene.ball_pos;
+            var out: [2]f32 = undefined;
+            var normal: [2]f32 = undefined;
 
-        var out: [2]f32 = undefined;
-        var normal: [2]f32 = undefined;
+            { // Has the ball hit any bricks?
+                var collided = false;
+                var coll_dist = std.math.floatMax(f32);
+                for (&scene.bricks, 0..) |*brick, i| {
+                    if (brick.destroyed) continue;
 
-        { // Has the ball hit any bricks?
-            var collided = false;
-            var coll_dist = std.math.floatMax(f32);
-            for (&scene.bricks, 0..) |*brick, i| {
-                if (brick.destroyed) continue;
+                    var r = @import("collision.zig").Rect{
+                        .min = .{ brick.pos[0], brick.pos[1] },
+                        .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                    };
+                    r.grow(.{ ball_w / 2, ball_h / 2 });
+                    var c_normal: [2]f32 = undefined;
+                    const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                    if (c) {
+                        // always use the normal of the closest brick for ball reflection
+                        const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+                        const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
+                        if (brick_dist < coll_dist) {
+                            normal = c_normal;
+                            coll_dist = brick_dist;
+                        }
+                        std.log.warn("COLLIDED", .{});
+                        brick.destroyed = true;
+                        state.particles.emit(brick_pos, 10, brick.sprite);
+                        state.audio.play(.{ .clip = .explode });
+                        scene.score += 100;
 
+                        scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
+                        scene.collision_count += 1;
+                    }
+                    collided = collided or c;
+                }
+                if (collided) {
+                    scene.ball_pos = out;
+                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
+                }
+            }
+
+            const vw: f32 = @floatFromInt(viewport_size[0]);
+            const vh: f32 = @floatFromInt(viewport_size[1]);
+
+            { // Has the ball hit the paddle?
                 var r = @import("collision.zig").Rect{
-                    .min = .{ brick.pos[0], brick.pos[1] },
-                    .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                    .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                    .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
                 };
                 r.grow(.{ ball_w / 2, ball_h / 2 });
-                var c_normal: [2]f32 = undefined;
-                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                // TODO not sure we're using the right ball positions
+                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
                 if (c) {
-                    // always use the normal of the closest brick for ball reflection
-                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-                    const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
-                    if (brick_dist < coll_dist) {
-                        normal = c_normal;
-                        coll_dist = brick_dist;
+                    state.audio.play(.{ .clip = .bounce });
+                    scene.ball_pos = out;
+                    scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
+                }
+            }
+
+            { // Has the ball hit the ceiling?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    scene.ball_pos,
+                    .{ 0, brick_start_y },
+                    .{ vw - ball_w / 2, brick_start_y },
+                    &out,
+                );
+                if (c) {
+                    std.log.warn("CEILING", .{});
+                    normal = .{ 0, 1 };
+                    scene.ball_pos = out;
+                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
+                }
+            }
+
+            { // Has the ball hit the right wall?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    scene.ball_pos,
+                    .{ vw - ball_w / 2, 0 },
+                    .{ vw - ball_w / 2, vh },
+                    &out,
+                );
+                if (c) {
+                    std.log.warn("WALL", .{});
+                    normal = .{ -1, 0 };
+                    scene.ball_pos = out;
+                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
+                }
+            }
+
+            { // Has the ball hit the left wall?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    scene.ball_pos,
+                    .{ ball_w / 2, 0 },
+                    .{ ball_w / 2, vh },
+                    &out,
+                );
+                if (c) {
+                    std.log.warn("WALL", .{});
+                    normal = .{ -1, 0 };
+                    scene.ball_pos = out;
+                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
+                }
+            }
+
+            { // Has the ball hit the floor?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    scene.ball_pos,
+                    .{ 0, vh - ball_h / 2 },
+                    .{ vw, vh - ball_h / 2 },
+                    &out,
+                );
+                if (c) {
+                    std.log.warn("DEAD!", .{});
+                    if (scene.lives == 0) {
+                        std.log.warn("GAME OVER", .{});
+                        state.scene = Scene{ .title = .{} };
+                    } else {
+                        scene.lives -= 1;
+                        scene.updateIdleBall();
+                        scene.ball_dir = initial_ball_dir;
+                        m.normalize(&scene.ball_dir);
+                        scene.ball_state = .idle;
                     }
-                    std.log.warn("COLLIDED", .{});
-                    brick.destroyed = true;
-                    state.particles.emit(brick_pos, 10, brick.sprite);
-                    state.audio.play(.{ .clip = .explode });
-                    scene.score += 100;
-
-                    scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
-                    scene.collision_count += 1;
-                }
-                collided = collided or c;
-            }
-            if (collided) {
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
-
-        const vw: f32 = @floatFromInt(viewport_size[0]);
-        const vh: f32 = @floatFromInt(viewport_size[1]);
-
-        { // Has the ball hit the paddle?
-            var r = @import("collision.zig").Rect{
-                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h / 2 },
-                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] + paddle_h / 2 },
-            };
-            r.grow(.{ ball_w / 2, ball_h / 2 });
-            // TODO not sure we're using the right ball positions
-            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-            if (c) {
-                state.audio.play(.{ .clip = .bounce });
-                scene.ball_pos = out;
-                scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
-            }
-        }
-
-        { // Has the ball hit the ceiling?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ 0, brick_start_y },
-                .{ vw - ball_w / 2, brick_start_y },
-                &out,
-            );
-            if (c) {
-                std.log.warn("CEILING", .{});
-                normal = .{ 0, 1 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
-
-        { // Has the ball hit the right wall?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ vw - ball_w / 2, 0 },
-                .{ vw - ball_w / 2, vh },
-                &out,
-            );
-            if (c) {
-                std.log.warn("WALL", .{});
-                normal = .{ -1, 0 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
-
-        { // Has the ball hit the left wall?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ ball_w / 2, 0 },
-                .{ ball_w / 2, vh },
-                &out,
-            );
-            if (c) {
-                std.log.warn("WALL", .{});
-                normal = .{ -1, 0 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
-
-        { // Has the ball hit the floor?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ 0, vh - ball_h / 2 },
-                .{ vw, vh - ball_h / 2 },
-                &out,
-            );
-            if (c) {
-                std.log.warn("DEAD!", .{});
-                if (scene.lives == 0) {
-                    std.log.warn("GAME OVER", .{});
-                    state.scene = Scene{ .title = .{} };
-                } else {
-                    scene.lives -= 1;
-                    scene.updateIdleBall();
-                    scene.ball_dir = initial_ball_dir;
-                    m.normalize(&scene.ball_dir);
-                    scene.ball_state = .idle;
                 }
             }
-        }
 
-        state.particles.update(dt);
+            state.particles.update(dt);
+        }
     }
 
     // The angle depends on how far the ball is from the center of the paddle
@@ -477,7 +481,7 @@ const GameScene = struct {
 
     fn updateIdleBall(scene: *GameScene) void {
         scene.ball_pos[0] = scene.paddle_pos[0];
-        scene.ball_pos[1] = scene.paddle_pos[1] - 5 * ball_h / 3;
+        scene.ball_pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
     }
 
     fn render(scene: GameScene) void {
@@ -512,6 +516,7 @@ const GameScene = struct {
         });
 
         { // Render paddle
+            std.log.warn("{}", .{paddle_h});
             const slice = sprite.get(.paddle);
             state.batch.render(.{
                 .src = .{
@@ -522,7 +527,8 @@ const GameScene = struct {
                 },
                 .dst = .{
                     .x = scene.paddle_pos[0] - paddle_w / 2,
-                    .y = scene.paddle_pos[1] - paddle_h / 2,
+                    .y = scene.paddle_pos[1] - paddle_h,
+                    // .y = scene.paddle_pos[1] - paddle_h / 2,
                     .w = paddle_w,
                     .h = paddle_h,
                 },
@@ -547,6 +553,20 @@ const GameScene = struct {
             var buf: [32]u8 = undefined;
             const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
             text_renderer.render(&state.batch, label, 32, 0);
+        }
+
+        // Render pause menu
+        if (scene.pause) {
+            state.batch.setTexture(state.texture);
+            state.batch.render(.{
+                .src = .{ .x = 10, .y = 10, .w = 8, .h = 8 },
+                .dst = .{ .x = 0, .y = 0, .w = 128, .h = 128 },
+            });
+            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            var text_renderer = TextRenderer{};
+            text_renderer.render(&state.batch, "Continue", 32, 0);
+            text_renderer.render(&state.batch, "Settings", 32, 12);
+            text_renderer.render(&state.batch, "Quit", 32, 24);
         }
 
         const result = state.batch.commit();
@@ -589,6 +609,9 @@ const GameScene = struct {
                     },
                     .SPACE => {
                         scene.inputs.space_down = true;
+                    },
+                    .ESCAPE => {
+                        scene.pause = !scene.pause;
                     },
                     else => {},
                 }
