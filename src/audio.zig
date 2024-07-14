@@ -192,7 +192,7 @@ test "parse wav" {
     const data = @embedFile("assets/bounce.wav");
     const result = try parse(data);
     const header = result.header;
-    const samples = result.samples;
+    const samples = result.data;
 
     const expected = WavHeader{
         .fileTypeBlocID = riff_magic,

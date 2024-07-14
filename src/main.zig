@@ -13,6 +13,7 @@ const sglue = sokol.glue;
 const simgui = sokol.imgui;
 const shd = @import("shader");
 const font = @import("font");
+const sprite = @import("sprite");
 const fwatch = @import("fwatch");
 
 const Pipeline = @import("shader.zig").Pipeline;
@@ -28,8 +29,12 @@ const ig = @import("cimgui");
 const m = @import("math.zig");
 const zm = @import("zmath");
 
+const spritesheet = @embedFile("assets/sprites.png");
+
+// TODO remove
 const img = @embedFile("spritesheet.png");
 const titlescreen = @embedFile("titlescreen.png");
+
 const audio_bounce = @import("audio.zig").embed("assets/bounce.wav");
 
 const Texture = @import("Texture.zig");
@@ -44,8 +49,8 @@ const max_verts = max_quads * 6; // TODO use index buffers
 
 const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
-const paddle_w: f32 = 16;
-const paddle_h: f32 = 8;
+const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
+const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
 const paddle_speed: f32 = 80;
 const ball_w: f32 = 4;
 const ball_h: f32 = 4;
@@ -61,7 +66,7 @@ const initial_ball_pos: [2]f32 = .{
 };
 const initial_ball_dir: [2]f32 = .{ 0.3, -1 };
 const num_bricks = 10;
-const num_rows = 5;
+const num_rows = 4;
 pub const brick_w = 16;
 pub const brick_h = 8;
 const brick_start_y = 8;
@@ -70,16 +75,8 @@ const Rect = m.Rect;
 
 const Brick = struct {
     pos: [2]f32,
-    sprite: usize,
+    sprite: sprite.Sprite,
     destroyed: bool = false,
-};
-
-pub const sprites = [_]Rect{
-    .{ .x = 0 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-    .{ .x = 1 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-    .{ .x = 2 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-    .{ .x = 3 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
-    .{ .x = 4 * brick_w, .y = 0, .w = brick_w, .h = brick_h },
 };
 
 const Vertex = extern struct {
@@ -119,6 +116,7 @@ const state = struct {
     var time: f64 = 0;
 
     var texture: Texture = undefined;
+    var spritesheet_texture: Texture = undefined;
     var titlescreen_texture: Texture = undefined;
     var font_texture: Texture = undefined;
     var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
@@ -286,13 +284,14 @@ const GameScene = struct {
         m.normalize(&scene.ball_dir);
 
         // initialize bricks
+        const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
         for (0..num_rows) |y| {
             for (0..num_bricks) |x| {
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
                 scene.bricks[y * num_bricks + x] = .{
                     .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
-                    .sprite = y,
+                    .sprite = brick_sprites[y],
                 };
             }
         }
@@ -482,15 +481,21 @@ const GameScene = struct {
     }
 
     fn render(scene: GameScene) void {
-        state.batch.setTexture(state.texture);
+        state.batch.setTexture(state.spritesheet_texture);
 
         // Render all bricks
         for (scene.bricks) |brick| {
             if (brick.destroyed) continue;
             const x = brick.pos[0];
             const y = brick.pos[1];
+            const slice = sprite.get(brick.sprite);
             state.batch.render(.{
-                .src = sprites[brick.sprite],
+                .src = .{
+                    .x = @floatFromInt(slice.bounds.x),
+                    .y = @floatFromInt(slice.bounds.y),
+                    .w = @floatFromInt(slice.bounds.w),
+                    .h = @floatFromInt(slice.bounds.h),
+                },
                 .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
             });
         }
@@ -506,16 +511,23 @@ const GameScene = struct {
             },
         });
 
-        // Render paddle
-        state.batch.render(.{
-            .src = .{ .x = 0, .y = 0, .w = brick_w, .h = brick_h },
-            .dst = .{
-                .x = scene.paddle_pos[0] - paddle_w / 2,
-                .y = scene.paddle_pos[1] - paddle_h / 2,
-                .w = paddle_w,
-                .h = paddle_h,
-            },
-        });
+        { // Render paddle
+            const slice = sprite.get(.paddle);
+            state.batch.render(.{
+                .src = .{
+                    .x = @floatFromInt(slice.bounds.x),
+                    .y = @floatFromInt(slice.bounds.y),
+                    .w = @floatFromInt(slice.bounds.w),
+                    .h = @floatFromInt(slice.bounds.h),
+                },
+                .dst = .{
+                    .x = scene.paddle_pos[0] - paddle_w / 2,
+                    .y = scene.paddle_pos[1] - paddle_h / 2,
+                    .w = paddle_w,
+                    .h = paddle_h,
+                },
+            });
+        }
 
         // Render particles
         state.particles.render(&state.batch);
@@ -529,7 +541,7 @@ const GameScene = struct {
             });
         }
 
-        { // Text
+        { // Score
             state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
             var text_renderer = TextRenderer{};
             var buf: [32]u8 = undefined;
@@ -689,11 +701,13 @@ fn initializeGame() !void {
 
     state.texture = Texture.init(img);
     state.titlescreen_texture = Texture.init(titlescreen);
+    state.spritesheet_texture = Texture.init(spritesheet);
     state.font_texture = Texture.init(font.image);
 
     state.textures = std.AutoHashMap(usize, sg.Image).init(allocator);
     try state.textures.put(state.texture.id, sg.makeImage(state.texture.desc));
     try state.textures.put(state.titlescreen_texture.id, sg.makeImage(state.titlescreen_texture.desc));
+    try state.textures.put(state.spritesheet_texture.id, sg.makeImage(state.spritesheet_texture.desc));
     try state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc));
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 

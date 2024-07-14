@@ -1,7 +1,10 @@
 const std = @import("std");
 const root = @import("root");
+const sprites = @import("sprite");
 const m = @import("math.zig");
 const BatchRenderer = @import("batch.zig").BatchRenderer;
+
+const Sprite = sprites.Sprite;
 
 const max_emitters = 16;
 
@@ -11,7 +14,7 @@ const Emitter = struct {
     start_time: f32 = 0,
     origin: [2]f32 = .{ 0, 0 },
     count: usize = 0,
-    sprite: usize = 0,
+    sprite: ?Sprite = null,
     active: bool = false,
 
     /// Get position of particle N at time T
@@ -53,7 +56,7 @@ pub const ParticleSystem = struct {
     emitters: [max_emitters]Emitter = .{.{}} ** max_emitters,
     time: f32 = 0,
 
-    pub fn emit(sys: *ParticleSystem, origin: [2]f32, count: usize, sprite: usize) void {
+    pub fn emit(sys: *ParticleSystem, origin: [2]f32, count: usize, sprite: Sprite) void {
         for (&sys.emitters) |*em| {
             if (em.active) continue;
             em.* = .{
@@ -85,8 +88,15 @@ pub const ParticleSystem = struct {
             if (!em.active) continue;
             for (0..em.count) |n| {
                 const p = em.particle(n, sys.time);
+                const sprite = sprites.get(em.sprite.?);
                 batch.render(.{
-                    .src = root.sprites[em.sprite],
+                    // TODO I dislike this conversion
+                    .src = .{
+                        .x = @floatFromInt(sprite.bounds.x),
+                        .y = @floatFromInt(sprite.bounds.y),
+                        .w = @floatFromInt(sprite.bounds.w),
+                        .h = @floatFromInt(sprite.bounds.h),
+                    },
                     .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
                 });
             }

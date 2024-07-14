@@ -13,6 +13,7 @@ const CoreDependencies = struct {
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
+    sprite_path: Build.LazyPath,
 };
 
 pub fn build(b: *Build) !void {
@@ -89,6 +90,13 @@ pub fn build(b: *Build) !void {
     const tool_fontpack_output = tool_fontpack_run.addOutputFileArg("font.zig");
     _ = tool_fontpack_run.addOutputFileArg("font.png");
 
+    const tool_spritepack = try buildSpritePackTool(b, optimize);
+    const tool_spritepack_run = b.addRunArtifact(tool_spritepack);
+    const tool_spritepack_run_step = b.step("spritepack", "Run the sprite packer");
+    tool_spritepack_run_step.dependOn(&tool_spritepack_run.step);
+    tool_spritepack_run.addFileArg(b.path("assets/sprites.json"));
+    const tool_spritepack_output = tool_spritepack_run.addOutputFileArg("sprite.zig");
+
     const deps = CoreDependencies{
         .sokol = dep_sokol,
         .cimgui = dep_cimgui,
@@ -96,6 +104,7 @@ pub fn build(b: *Build) !void {
         .zmath = dep_zmath,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
+        .sprite_path = tool_spritepack_output,
     };
 
     if (target.result.isWasm()) {
@@ -117,7 +126,7 @@ pub fn build(b: *Build) !void {
 
         // Tests
         const tests = b.addTest(.{
-            .root_source_file = b.path("src/audio.zig"), // TODO
+            .root_source_file = b.path("src/test.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -136,10 +145,18 @@ fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
     var iter = dir.iterate();
     while (try iter.next()) |f| {
         if (f.kind != .file) continue;
-        if (!std.mem.eql(u8, ".wav", std.fs.path.extension(f.name))) continue;
+        if (!shouldIncludeAsset(f.name)) continue;
         const name = b.pathJoin(&.{ "assets", f.name });
         step.root_module.addAnonymousImport(name, .{ .root_source_file = b.path(name) });
     }
+}
+
+fn shouldIncludeAsset(name: []const u8) bool {
+    const ext = std.fs.path.extension(name);
+    if (std.mem.eql(u8, ".wav", ext)) return true;
+    if (std.mem.eql(u8, ".png", ext)) return true;
+    if (std.mem.eql(u8, ".json", ext)) return true;
+    return false;
 }
 
 fn buildFontPackTool(
@@ -147,16 +164,29 @@ fn buildFontPackTool(
     optimize: OptimizeMode,
     dep_stb: *Build.Dependency,
 ) !*Build.Step.Compile {
-    const tool_fontpack = b.addExecutable(.{
+    const exe = b.addExecutable(.{
         .name = "fontpack",
         .root_source_file = b.path("tools/fontpack.zig"),
         .target = b.host,
         .optimize = optimize,
     });
-    tool_fontpack.addIncludePath(dep_stb.path("."));
-    tool_fontpack.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });
-    tool_fontpack.linkLibC();
-    return tool_fontpack;
+    exe.addIncludePath(dep_stb.path("."));
+    exe.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });
+    exe.linkLibC();
+    return exe;
+}
+
+fn buildSpritePackTool(
+    b: *Build,
+    optimize: OptimizeMode,
+) !*Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = "spritepack",
+        .root_source_file = b.path("tools/spritepack.zig"),
+        .target = b.host,
+        .optimize = optimize,
+    });
+    return exe;
 }
 
 fn buildNative(
@@ -198,6 +228,7 @@ fn buildNative(
         },
     });
     exe.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
+    exe.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_path });
 
     if (install) {
         b.installArtifact(exe);
@@ -254,6 +285,7 @@ fn buildWeb(
         },
     });
     lib.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
+    lib.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_path });
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
