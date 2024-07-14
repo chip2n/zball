@@ -23,7 +23,8 @@
    { "name": "brick2", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 187, "y": 0, "w": 16, "h": 8 } }] },
    { "name": "brick3", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 204, "y": 0, "w": 16, "h": 8 } }] },
    { "name": "brick4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 221, "y": 0, "w": 16, "h": 8 } }] },
-   { "name": "paddle", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 9, "w": 24, "h": 7 } }] }
+   { "name": "paddle", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 9, "w": 24, "h": 7 } }] },
+   { "name": "ball", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 186, "y": 9, "w": 4, "h": 4 } }] }
   ]
  }
 }

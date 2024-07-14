@@ -52,8 +52,8 @@ const viewport_size: [2]i32 = .{ 160, 120 };
 const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
 const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
 const paddle_speed: f32 = 80;
-const ball_w: f32 = 4;
-const ball_h: f32 = 4;
+const ball_w: f32 = sprite.sprites.ball.bounds.w;
+const ball_h: f32 = sprite.sprites.ball.bounds.h;
 const ball_speed: f32 = 70;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
@@ -504,19 +504,25 @@ const GameScene = struct {
             });
         }
 
-        // Render ball
-        state.batch.render(.{
-            .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
-            .dst = .{
-                .x = scene.ball_pos[0] - ball_w / 2,
-                .y = scene.ball_pos[1] - ball_h / 2,
-                .w = ball_w,
-                .h = ball_h,
-            },
-        });
+        { // Render ball
+            const slice = sprite.get(.ball);
+            state.batch.render(.{
+                .src = .{
+                    .x = @floatFromInt(slice.bounds.x),
+                    .y = @floatFromInt(slice.bounds.y),
+                    .w = @floatFromInt(slice.bounds.w),
+                    .h = @floatFromInt(slice.bounds.h),
+                },
+                .dst = .{
+                    .x = scene.ball_pos[0] - ball_w / 2,
+                    .y = scene.ball_pos[1] - ball_h / 2,
+                    .w = ball_w,
+                    .h = ball_h,
+                },
+            });
+        }
 
         { // Render paddle
-            std.log.warn("{}", .{paddle_h});
             const slice = sprite.get(.paddle);
             state.batch.render(.{
                 .src = .{
