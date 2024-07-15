@@ -615,6 +615,15 @@ const GameScene = struct {
                             scene.pause_idx += 1;
                         }
                     },
+                    .ENTER => {
+                        if (!scene.pause) return;
+                        switch (scene.pause_idx) {
+                            0 => scene.pause = false,
+                            1 => {},
+                            2 => sapp.quit(),
+                            else => {},
+                        }
+                    },
                     .LEFT => {
                         scene.inputs.left_down = true;
                     },
