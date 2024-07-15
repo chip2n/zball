@@ -544,9 +544,10 @@ const GameScene = struct {
         // Render pause menu
         if (scene.pause) {
             state.batch.setTexture(state.spritesheet_texture);
-            state.batch.render(.{
-                .src = .{ .x = 10, .y = 10, .w = 8, .h = 8 },
-                .dst = .{ .x = 0, .y = 0, .w = 128, .h = 128 },
+            state.batch.renderNinePatch(.{
+                .src = sprite.sprites.dialog.bounds,
+                .center = sprite.sprites.dialog.center,
+                .dst = .{ .x = 10, .y = 10, .w = 32, .h = 32 },
             });
             state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
             var text_renderer = TextRenderer{};

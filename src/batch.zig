@@ -11,12 +11,21 @@ const max_tex = 8;
 
 const TextureId = usize;
 
-const RenderCommand = struct {
-    tex: usize,
-    tw: f32,
-    th: f32,
-    src: ?Rect = null,
-    dst: Rect,
+const RenderCommand = union(enum) {
+    switch_tex: struct {
+        tex: usize,
+        tw: f32,
+        th: f32,
+    },
+    sprite: struct {
+        src: ?Rect,
+        dst: Rect,
+    },
+    nine_patch: struct {
+        src: Rect,
+        center: Rect,
+        dst: Rect,
+    },
 };
 
 pub const BatchResult = struct {
@@ -35,72 +44,318 @@ pub const BatchRenderer = struct {
     batches: [max_tex]Batch = undefined,
     buf: [max_cmds]RenderCommand = undefined,
     idx: usize = 0,
-    tex: ?Texture = null,
 
     pub fn init() BatchRenderer {
         return .{};
     }
 
-    const RenderOptions = struct { src: ?Rect = null, dst: Rect };
-
     pub fn setTexture(self: *BatchRenderer, tex: Texture) void {
-        self.tex = tex;
-    }
-
-    pub fn render(self: *BatchRenderer, v: RenderOptions) void {
-        std.debug.assert(self.tex != null);
+        const tw: f32 = @floatFromInt(tex.desc.width);
+        const th: f32 = @floatFromInt(tex.desc.height);
         self.buf[self.idx] = .{
-            .tex = self.tex.?.id,
-            .tw = @floatFromInt(self.tex.?.desc.width),
-            .th = @floatFromInt(self.tex.?.desc.height),
-            .src = v.src,
-            .dst = v.dst,
+            .switch_tex = .{
+                .tex = tex.id,
+                .tw = tw,
+                .th = th,
+            },
         };
         self.idx += 1;
         std.debug.assert(self.idx < self.buf.len);
     }
 
+    const RenderOptions = struct { src: ?Rect = null, dst: Rect };
+    pub fn render(self: *BatchRenderer, v: RenderOptions) void {
+        self.buf[self.idx] = .{
+            .sprite = .{
+                .src = v.src,
+                .dst = v.dst,
+            },
+        };
+        self.idx += 1;
+        std.debug.assert(self.idx < self.buf.len);
+    }
+
+    const RenderNinePatchOptions = struct { src: Rect, center: Rect, dst: Rect };
+    pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
+        self.buf[self.idx] = .{
+            .nine_patch = .{
+                .src = v.src,
+                .center = v.center,
+                .dst = v.dst,
+            },
+        };
+        self.idx += 1;
+        std.debug.assert(self.idx < self.buf.len);
+    }
+
+    // TODO: Implement z-ordering and use sorting to avoid tex switches
     pub fn commit(self: *BatchRenderer) BatchResult {
         const buf = self.buf[0..self.idx];
+
+        // First command must be setting the texture
+        var tex = buf[0].switch_tex.tex;
+        var tw = buf[0].switch_tex.tw;
+        var th = buf[0].switch_tex.th;
 
         var i: usize = 0;
         var batch_idx: usize = 0;
         var batch_count: usize = 1;
-        var tex = self.buf[0].tex;
         self.batches[0].offset = 0;
         self.batches[0].len = 0;
         self.batches[0].tex = tex;
-        for (buf) |cmd| {
-            if (cmd.tex != tex) {
-                batch_idx += 1;
-                self.batches[batch_idx].offset = i;
-                self.batches[batch_idx].len = 0;
-                self.batches[batch_idx].tex = cmd.tex;
-                batch_count += 1;
-                tex = cmd.tex;
+        for (buf[1..]) |cmd| {
+            switch (cmd) {
+                .switch_tex => |c| {
+                    tex = c.tex;
+                    tw = c.tw;
+                    th = c.th;
+                    batch_idx += 1;
+                    batch_count += 1;
+                    self.batches[batch_idx].offset = i;
+                    self.batches[batch_idx].len = 0;
+                    self.batches[batch_idx].tex = c.tex;
+                },
+                .sprite => |c| {
+                    quad(.{
+                        .buf = self.verts[i..],
+                        .src = c.src,
+                        .dst = c.dst,
+                        .tw = tw,
+                        .th = th,
+                    });
+                    self.batches[batch_idx].len += 6;
+                    i += 6;
+                },
+                .nine_patch => |c| {
+                    { // top-left corner
+                        const w = c.center.x;
+                        const h = c.center.y;
+                        const src = .{ .x = c.src.x, .y = c.src.y, .w = w, .h = h };
+                        const dst = .{ .x = c.dst.x, .y = c.dst.y, .w = w, .h = h };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // top-right corner
+                        const w = c.src.w - c.center.x - c.center.w;
+                        const h = c.center.y;
+                        const src = .{
+                            .x = c.src.x + c.center.x + c.center.w,
+                            .y = c.src.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.dst.w - w,
+                            .y = c.dst.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // bottom-left corner
+                        const w = c.center.x;
+                        const h = c.src.h - c.center.y - c.center.h;
+                        const src = .{
+                            .x = c.src.x,
+                            .y = c.src.y + c.src.h - h,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x,
+                            .y = c.dst.y + c.dst.h - h,
+                            .w = w,
+                            .h = h,
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+                    { // bottom-right corner
+                        const w = c.src.w - c.center.x - c.center.w;
+                        const h = c.src.h - c.center.y - c.center.h;
+                        const src = .{
+                            .x = c.src.x + c.center.x + c.center.w,
+                            .y = c.src.y + c.src.h - h,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.dst.w - w,
+                            .y = c.dst.y + c.dst.h - h,
+                            .w = w,
+                            .h = h,
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // top edge
+                        const w = c.center.w;
+                        const h = c.center.y;
+                        const src = .{
+                            .x = c.src.x + c.center.x,
+                            .y = c.src.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.center.x,
+                            .y = c.dst.y,
+                            .w = c.dst.w - (c.src.w - c.center.w),
+                            .h = h,
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // right edge
+                        const w = c.src.w - c.center.x - c.center.w;
+                        const h = c.center.h;
+                        const src = .{
+                            .x = c.src.x + c.center.x + c.center.w,
+                            .y = c.src.y + c.center.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.dst.w - w,
+                            .y = c.dst.y + c.center.y,
+                            .w = w,
+                            .h = c.dst.h - (c.src.h - c.center.h),
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // bottom edge
+                        const w = c.center.w;
+                        const h = c.src.h - c.center.y - c.center.h;
+                        const src = .{
+                            .x = c.src.x + c.center.x,
+                            .y = c.src.y + c.center.y + c.center.h,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.center.x,
+                            .y = c.dst.y + c.dst.h - h,
+                            .w = c.dst.w - (c.src.w - c.center.w),
+                            .h = h,
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // left edge
+                        const w = c.center.x;
+                        const h = c.center.h;
+                        const src = .{
+                            .x = c.src.x,
+                            .y = c.src.y + c.center.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x,
+                            .y = c.dst.y + c.center.y,
+                            .w = w,
+                            .h = c.dst.h - (c.src.h - c.center.h),
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+
+                    { // main background
+                        const w = c.center.w;
+                        const h = c.center.h;
+                        const src = .{
+                            .x = c.src.x + c.center.x,
+                            .y = c.src.y + c.center.y,
+                            .w = w,
+                            .h = h,
+                        };
+                        const dst = .{
+                            .x = c.dst.x + c.center.x,
+                            .y = c.dst.y + c.center.y,
+                            .w = c.dst.w - (c.src.w - c.center.w),
+                            .h = c.dst.h - (c.src.h - c.center.h),
+                        };
+                        quad(.{
+                            .buf = self.verts[i..],
+                            .src = src,
+                            .dst = dst,
+                            .tw = tw,
+                            .th = th,
+                        });
+                        self.batches[batch_idx].len += 6;
+                        i += 6;
+                    }
+                },
             }
-
-            quad(.{
-                .buf = self.verts[i..],
-                .src = cmd.src,
-                .dst = cmd.dst,
-                .tw = cmd.tw,
-                .th = cmd.th,
-            });
-
-            self.batches[batch_idx].len += 6;
-            i += 6;
         }
 
         self.idx = 0;
-        self.tex = null;
 
         return .{ .verts = self.verts[0..i], .batches = self.batches[0..batch_count] };
-    }
-
-    fn sortLessThanFn(context: usize, lhs: RenderCommand, rhs: RenderCommand) bool {
-        _ = context;
-        return lhs.tex.id < rhs.tex.id;
     }
 };
 
