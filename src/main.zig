@@ -253,6 +253,7 @@ const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
     pause: bool = false,
+    pause_idx: usize = 0,
 
     time: f32 = 0,
     lives: u8 = 3,
@@ -543,40 +544,19 @@ const GameScene = struct {
 
         // Render pause menu
         if (scene.pause) {
-            const dialog = sprite.sprites.dialog;
-
-            const padding = 4;
-            const c_dim = TextRenderer.measure("Continue");
-            const s_dim = TextRenderer.measure("Settings");
-            const q_dim = TextRenderer.measure("Quit");
-            const v_advance = font.ascent - font.descent + font.line_gap;
-
-            var dialog_w = @max(c_dim[0], @max(s_dim[0], q_dim[0]));
-            dialog_w += dialog.bounds.w - dialog.center.w;
-            dialog_w += padding * 2;
-            var dialog_h: f32 = v_advance * 3;
-            // var dialog_h = c_dim[1] + s_dim[1] + q_dim[1];
-            dialog_h += dialog.bounds.h - dialog.center.h;
-            dialog_h += padding * 2;
-            // dialog_h += 2 * line_gap;
-
-            const x = 10;
-            const y = 10;
-
-            state.batch.setTexture(state.spritesheet_texture);
-            state.batch.renderNinePatch(.{
-                .src = dialog.bounds,
-                .center = dialog.center,
-                .dst = .{ .x = x, .y = y, .w = dialog_w, .h = dialog_h },
+            const ui = @import("ui.zig");
+            ui.begin(.{
+                .x = 10,
+                .y = 10,
+                .batch = &state.batch,
+                .tex_spritesheet = state.spritesheet_texture,
+                .tex_font = state.font_texture,
             });
-            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
-            var text_renderer = TextRenderer{};
-            var curr_y: f32 = y + dialog.center.y + padding;
-            text_renderer.render(&state.batch, "Continue", x + dialog.center.x + padding, curr_y);
-            curr_y += v_advance;
-            text_renderer.render(&state.batch, "Settings", x + dialog.center.x + padding, curr_y);
-            curr_y += v_advance;
-            text_renderer.render(&state.batch, "Quit", x + dialog.center.x + padding, curr_y);
+            defer ui.end();
+
+            ui.selectionItem("Continue", .{ .selected = scene.pause_idx == 0 });
+            ui.selectionItem("Settings", .{ .selected = scene.pause_idx == 1 });
+            ui.selectionItem("Quit", .{ .selected = scene.pause_idx == 2 });
         }
 
         const result = state.batch.commit();
@@ -611,6 +591,22 @@ const GameScene = struct {
         switch (ev.*.type) {
             .KEY_DOWN => {
                 switch (ev.*.key_code) {
+                    .UP => {
+                        if (!scene.pause) return;
+                        if (scene.pause_idx == 0) {
+                            scene.pause_idx = 2;
+                        } else {
+                            scene.pause_idx -= 1;
+                        }
+                    },
+                    .DOWN => {
+                        if (!scene.pause) return;
+                        if (scene.pause_idx == 2) {
+                            scene.pause_idx = 0;
+                        } else {
+                            scene.pause_idx += 1;
+                        }
+                    },
                     .LEFT => {
                         scene.inputs.left_down = true;
                     },
