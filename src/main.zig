@@ -546,8 +546,9 @@ const GameScene = struct {
         if (scene.pause) {
             const ui = @import("ui.zig");
             ui.begin(.{
-                .x = 10,
-                .y = 10,
+                .x = viewport_size[0] / 2,
+                .y = viewport_size[1] / 2,
+                .pivot = .{ 0.5, 0.5 },
                 .batch = &state.batch,
                 .tex_spritesheet = state.spritesheet_texture,
                 .tex_font = state.font_texture,

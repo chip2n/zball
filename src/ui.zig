@@ -15,6 +15,7 @@ const DrawListEntry = union(enum) {
 
 var origin: [2]f32 = .{ 0, 0 };
 var cursor: [2]f32 = .{ 0, 0 };
+var pivot: [2]f32 = .{ 0, 0 };
 var win_width: f32 = 0;
 var win_height: f32 = 0;
 var draw_list: [128]DrawListEntry = undefined;
@@ -26,6 +27,7 @@ var tex_font: Texture = undefined;
 pub const BeginDesc = struct {
     x: f32,
     y: f32,
+    pivot: [2]f32 = .{ 0, 0 },
     batch: *BatchRenderer,
     tex_spritesheet: Texture,
     tex_font: Texture,
@@ -38,6 +40,7 @@ pub fn begin(v: BeginDesc) void {
     origin[1] = v.y;
     cursor[0] = v.x;
     cursor[1] = v.y;
+    pivot = v.pivot;
     batch = v.batch;
     tex_spritesheet = v.tex_spritesheet;
     tex_font = v.tex_font;
@@ -47,21 +50,25 @@ pub fn begin(v: BeginDesc) void {
 pub fn end() void {
     const padding = 8;
 
-    { // render window
-        const dialog = sprite.sprites.dialog;
-        batch.setTexture(tex_spritesheet);
+    const dialog = sprite.sprites.dialog;
+    batch.setTexture(tex_spritesheet);
 
-        var w = win_width + dialog.bounds.w - dialog.center.w;
-        w += padding * 2;
-        var h = win_height + dialog.bounds.h - dialog.center.h;
-        h += padding * 2;
+    var w = win_width + dialog.bounds.w - dialog.center.w;
+    w += padding * 2;
+    var h = win_height + dialog.bounds.h - dialog.center.h;
+    h += padding * 2;
+    const offset = .{ -pivot[0] * w, -pivot[1] * h };
 
-        batch.renderNinePatch(.{
-            .src = dialog.bounds,
-            .center = dialog.center,
-            .dst = .{ .x = origin[0], .y = origin[1], .w = w, .h = h },
-        });
-    }
+    batch.renderNinePatch(.{
+        .src = dialog.bounds,
+        .center = dialog.center,
+        .dst = .{
+            .x = origin[0] + offset[0],
+            .y = origin[1] + offset[1],
+            .w = w,
+            .h = h,
+        },
+    });
 
     { // render draw list
         var text_renderer = TextRenderer{};
@@ -69,7 +76,12 @@ pub fn end() void {
         for (draw_list) |e| {
             switch (e) {
                 .text => |t| {
-                    text_renderer.render(batch, t.s, t.x + padding, t.y + padding);
+                    text_renderer.render(
+                        batch,
+                        t.s,
+                        t.x + padding + offset[0],
+                        t.y + padding + offset[1],
+                    );
                 },
             }
         }
@@ -103,7 +115,7 @@ pub fn selectionItem(s: []const u8, v: SelectionItemDesc) void {
     });
 
     cursor[1] += font.ascent + 4;
-    win_height = cursor[1] - origin[0] - 4;
+    win_height = cursor[1] - origin[1] - 4;
 }
 
 fn addDrawListEntry(entry: DrawListEntry) void {
