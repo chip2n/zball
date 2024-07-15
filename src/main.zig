@@ -544,6 +544,13 @@ const GameScene = struct {
 
         // Render pause menu
         if (scene.pause) {
+            // overlay
+            state.batch.setTexture(state.spritesheet_texture);
+            state.batch.render(.{
+                .src = sprite.sprites.overlay.bounds,
+                .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+            });
+
             const ui = @import("ui.zig");
             ui.begin(.{
                 .x = viewport_size[0] / 2,
