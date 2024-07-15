@@ -57,7 +57,7 @@ pub fn end() void {
     w += padding * 2;
     var h = win_height + dialog.bounds.h - dialog.center.h;
     h += padding * 2;
-    const offset = .{ -pivot[0] * w, -pivot[1] * h };
+    const offset = .{ @round(-pivot[0] * w), @round(-pivot[1] * h) };
 
     batch.renderNinePatch(.{
         .src = dialog.bounds,

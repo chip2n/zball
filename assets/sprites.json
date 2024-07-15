@@ -17,14 +17,14 @@
   "size": { "w": 256, "h": 256 },
   "scale": "1",
   "slices": [
-   { "name": "dialog", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 0, "w": 8, "h": 8 }, "center": {"x": 2, "y": 2, "w": 4, "h": 4 } }] },
+   { "name": "dialog", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 0, "w": 10, "h": 10 }, "center": {"x": 2, "y": 2, "w": 4, "h": 4 } }] },
    { "name": "title", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 0, "y": 0, "w": 160, "h": 120 } }] },
-   { "name": "brick1", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 170, "y": 0, "w": 16, "h": 8 } }] },
-   { "name": "brick2", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 187, "y": 0, "w": 16, "h": 8 } }] },
-   { "name": "brick3", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 204, "y": 0, "w": 16, "h": 8 } }] },
-   { "name": "brick4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 221, "y": 0, "w": 16, "h": 8 } }] },
-   { "name": "paddle", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 9, "w": 24, "h": 7 } }] },
-   { "name": "ball", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 186, "y": 9, "w": 4, "h": 4 } }] }
+   { "name": "brick1", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 171, "y": 0, "w": 16, "h": 8 } }] },
+   { "name": "brick2", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 188, "y": 0, "w": 16, "h": 8 } }] },
+   { "name": "brick3", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 205, "y": 0, "w": 16, "h": 8 } }] },
+   { "name": "brick4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 222, "y": 0, "w": 16, "h": 8 } }] },
+   { "name": "paddle", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 11, "w": 24, "h": 7 } }] },
+   { "name": "ball", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 186, "y": 11, "w": 4, "h": 4 } }] }
   ]
  }
 }

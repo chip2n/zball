@@ -195,6 +195,7 @@ pub const BatchRenderer = struct {
                         self.batches[batch_idx].len += 6;
                         i += 6;
                     }
+
                     { // bottom-right corner
                         const w = c.src.w - c.center.x - c.center.w;
                         const h = c.src.h - c.center.y - c.center.h;
