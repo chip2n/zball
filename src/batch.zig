@@ -127,6 +127,7 @@ pub const BatchRenderer = struct {
                     i += 6;
                 },
                 .nine_patch => |c| {
+                    // TODO refactor this
                     { // top-left corner
                         const w = c.center.x;
                         const h = c.center.y;

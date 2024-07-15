@@ -28,6 +28,8 @@ pub const TextRenderer = struct {
         self.cursor_x = 0;
     }
 
+    /// Measure the minimum bounding box that contains the glyphs when laid out
+    /// on a single line.
     pub fn measure(text: []const u8) [2]f32 {
         var width: f32 = 0;
         var height: f32 = 0;

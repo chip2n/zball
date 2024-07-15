@@ -22,7 +22,6 @@ pub fn main() !void {
     const font_path = args[1];
     const output_path = args[2];
     const img_path = args[3];
-    std.log.warn("{s}", .{output_path});
 
     const font_data = try std.fs.cwd().readFileAlloc(arena.allocator(), font_path, 1 << 20);
 
@@ -36,7 +35,8 @@ pub fn main() !void {
 
     var ascent: i32 = undefined;
     var descent: i32 = undefined;
-    try pack(font_data, &bitmap, bw, &glyphs, &ascent, &descent, chars);
+    var line_gap: i32 = undefined;
+    try pack(font_data, &bitmap, bw, &glyphs, &ascent, &descent, &line_gap, chars);
 
     var bitmap_rgba: [bitmap.len * 4]u8 = undefined;
     convertRGBA(&bitmap, &bitmap_rgba);
@@ -52,6 +52,7 @@ pub fn main() !void {
     try out.print("pub const image = @embedFile(\"{s}\");\n", .{img_path});
     try out.print("pub const ascent = {};\n", .{ascent});
     try out.print("pub const descent = {};\n\n", .{descent});
+    try out.print("pub const line_gap = {};\n\n", .{line_gap});
 
     _ = try out.write("pub const Glyph = struct {\n");
     _ = try out.write("    ch: u8,\n");
@@ -95,6 +96,7 @@ pub fn pack(
     glyphs: []GlyphData,
     out_ascent: *i32,
     out_descent: *i32,
+    out_line_gap: *i32,
     data: []const u8,
 ) !void {
     var font: c.stbtt_fontinfo = undefined;
@@ -113,6 +115,7 @@ pub fn pack(
     descent = @intFromFloat(@round(@as(f32, @floatFromInt(descent)) * scale));
     out_ascent.* = @intCast(ascent);
     out_descent.* = @intCast(descent);
+    out_line_gap.* = @intCast(line_gap);
 
     var x: usize = 0;
     var y: usize = 0;

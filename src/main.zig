@@ -543,17 +543,40 @@ const GameScene = struct {
 
         // Render pause menu
         if (scene.pause) {
+            const dialog = sprite.sprites.dialog;
+
+            const padding = 4;
+            const c_dim = TextRenderer.measure("Continue");
+            const s_dim = TextRenderer.measure("Settings");
+            const q_dim = TextRenderer.measure("Quit");
+            const v_advance = font.ascent - font.descent + font.line_gap;
+
+            var dialog_w = @max(c_dim[0], @max(s_dim[0], q_dim[0]));
+            dialog_w += dialog.bounds.w - dialog.center.w;
+            dialog_w += padding * 2;
+            var dialog_h: f32 = v_advance * 3;
+            // var dialog_h = c_dim[1] + s_dim[1] + q_dim[1];
+            dialog_h += dialog.bounds.h - dialog.center.h;
+            dialog_h += padding * 2;
+            // dialog_h += 2 * line_gap;
+
+            const x = 10;
+            const y = 10;
+
             state.batch.setTexture(state.spritesheet_texture);
             state.batch.renderNinePatch(.{
-                .src = sprite.sprites.dialog.bounds,
-                .center = sprite.sprites.dialog.center,
-                .dst = .{ .x = 10, .y = 10, .w = 32, .h = 32 },
+                .src = dialog.bounds,
+                .center = dialog.center,
+                .dst = .{ .x = x, .y = y, .w = dialog_w, .h = dialog_h },
             });
             state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
             var text_renderer = TextRenderer{};
-            text_renderer.render(&state.batch, "Continue", 32, 0);
-            text_renderer.render(&state.batch, "Settings", 32, 12);
-            text_renderer.render(&state.batch, "Quit", 32, 24);
+            var curr_y: f32 = y + dialog.center.y + padding;
+            text_renderer.render(&state.batch, "Continue", x + dialog.center.x + padding, curr_y);
+            curr_y += v_advance;
+            text_renderer.render(&state.batch, "Settings", x + dialog.center.x + padding, curr_y);
+            curr_y += v_advance;
+            text_renderer.render(&state.batch, "Quit", x + dialog.center.x + padding, curr_y);
         }
 
         const result = state.batch.commit();
