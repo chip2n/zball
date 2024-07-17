@@ -45,6 +45,10 @@ pub const AudioSystem = struct {
         category: AudioCategory = .sfx,
     };
     pub fn play(sys: *AudioSystem, v: PlayDesc) void {
+        // Check if we've played this clip recently - if we have, ignore it
+        for (&sys.playing) |p| {
+            if (p.clip == v.clip and p.frame == 0) return;
+        }
         for (&sys.playing) |*p| {
             if (p.clip != null) continue;
             p.clip = v.clip;
