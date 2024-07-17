@@ -553,13 +553,29 @@ const GameScene = struct {
         // Render particles
         state.particles.render(&state.batch);
 
-        // Top status bar
-        for (0..scene.lives) |i| {
-            const fi: f32 = @floatFromInt(i);
+        { // Top status bar
+            const d = sprite.sprites.dialog;
             state.batch.render(.{
-                .src = sprite.sprites.ball.bounds,
-                .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+                .src = .{
+                    .x = d.bounds.x + d.center.x,
+                    .y = d.bounds.y + d.center.y,
+                    .w = d.center.w,
+                    .h = d.center.h,
+                },
+                .dst = .{
+                    .x = 0,
+                    .y = 0,
+                    .w = viewport_size[0],
+                    .h = 8,
+                },
             });
+            for (0..scene.lives) |i| {
+                const fi: f32 = @floatFromInt(i);
+                state.batch.render(.{
+                    .src = sprite.sprites.ball.bounds,
+                    .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+                });
+            }
         }
 
         { // Score
