@@ -450,7 +450,7 @@ const GameScene = struct {
                 &out,
             );
             if (c) {
-                std.log.warn("DEAD!", .{});
+                state.audio.play(.{ .clip = .death });
                 if (scene.lives == 0) {
                     std.log.warn("GAME OVER", .{});
                     state.scene = Scene{ .title = .{} };
