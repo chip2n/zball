@@ -557,7 +557,7 @@ const GameScene = struct {
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
             state.batch.render(.{
-                .src = .{ .x = 0, .y = 0, .w = ball_w, .h = ball_h },
+                .src = sprite.sprites.ball.bounds,
                 .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
             });
         }
