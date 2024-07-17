@@ -402,7 +402,7 @@ const GameScene = struct {
                 &out,
             );
             if (c) {
-                std.log.warn("CEILING", .{});
+                state.audio.play(.{ .clip = .bounce });
                 normal = .{ 0, 1 };
                 scene.ball_pos = out;
                 scene.ball_dir = m.reflect(scene.ball_dir, normal);
@@ -418,7 +418,7 @@ const GameScene = struct {
                 &out,
             );
             if (c) {
-                std.log.warn("WALL", .{});
+                state.audio.play(.{ .clip = .bounce });
                 normal = .{ -1, 0 };
                 scene.ball_pos = out;
                 scene.ball_dir = m.reflect(scene.ball_dir, normal);
@@ -434,7 +434,7 @@ const GameScene = struct {
                 &out,
             );
             if (c) {
-                std.log.warn("WALL", .{});
+                state.audio.play(.{ .clip = .bounce });
                 normal = .{ -1, 0 };
                 scene.ball_pos = out;
                 scene.ball_dir = m.reflect(scene.ball_dir, normal);
