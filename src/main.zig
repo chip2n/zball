@@ -260,6 +260,10 @@ const GameScene = struct {
     lives: u8 = 3,
     score: u32 = 0,
 
+    // When player dies, we start a timer. When it reaches zero, we start a new
+    // round (or send them to the title screen).
+    death_timer: f32 = 0,
+
     paddle_pos: [2]f32 = initial_paddle_pos,
     ball_pos: [2]f32 = initial_ball_pos,
     ball_dir: [2]f32 = initial_ball_dir,
@@ -451,20 +455,29 @@ const GameScene = struct {
             );
             if (c) {
                 state.audio.play(.{ .clip = .death });
-                if (scene.lives == 0) {
-                    std.log.warn("GAME OVER", .{});
-                    state.scene = Scene{ .title = .{} };
-                } else {
-                    scene.lives -= 1;
-                    scene.updateIdleBall();
-                    scene.ball_dir = initial_ball_dir;
-                    m.normalize(&scene.ball_dir);
-                    scene.ball_state = .idle;
-                }
+                scene.death_timer = 2.5;
             }
         }
 
         state.particles.update(dt);
+
+        death: {
+            if (scene.death_timer <= 0) break :death;
+            scene.death_timer -= dt;
+            if (scene.death_timer > 0) break :death;
+
+            scene.death_timer = 0;
+
+            if (scene.lives == 0) {
+                state.scene = Scene{ .title = .{} };
+            } else {
+                scene.lives -= 1;
+                scene.updateIdleBall();
+                scene.ball_dir = initial_ball_dir;
+                m.normalize(&scene.ball_dir);
+                scene.ball_state = .idle;
+            }
+        }
     }
 
     fn paused(scene: *GameScene) bool {
