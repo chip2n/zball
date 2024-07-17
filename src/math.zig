@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const Rect = struct { x: f32, y: f32, w: f32, h: f32 };
 
 pub fn normalize(v: *[2]f32) void {
@@ -35,4 +37,20 @@ pub fn dot(v1: [2]f32, v2: [2]f32) f32 {
 
 pub fn cross(v1: [2]f32, v2: [2]f32) f32 {
     return v1[0] * v2[1] - v1[1] * v2[0];
+}
+
+pub fn vrot(v: *[2]f32, rad: f32) void {
+    const x = v[0] * @cos(rad) - v[1] * @sin(rad);
+    const y = v[0] * @sin(rad) + v[1] * @cos(rad);
+    v[0] = x;
+    v[1] = y;
+}
+
+/// Calculate angle between two vectors
+pub fn vangle(v1: [2]f32, v2: [2]f32) f32 {
+    // θ=atan2(w2​v1​ − w1​v2​, w1​v1 ​+ w2​v2​)
+    return std.math.atan2(
+        v2[1] * v1[0] - v2[0] * v1[1],
+        v2[0] * v1[0] + v2[1] * v1[1],
+    );
 }

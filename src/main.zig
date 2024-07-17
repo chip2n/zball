@@ -362,9 +362,12 @@ const GameScene = struct {
                         normal = c_normal;
                         coll_dist = brick_dist;
                     }
-                    std.log.warn("COLLIDED", .{});
                     brick.destroyed = true;
-                    state.particles.emit(brick_pos, 10, brick.sprite);
+                    state.particles.emit(.{
+                        .origin = brick_pos,
+                        .count = 10,
+                        .sprite = brick.sprite,
+                    });
                     state.audio.play(.{ .clip = .explode });
                     scene.score += 100;
 
@@ -454,7 +457,15 @@ const GameScene = struct {
                 &out,
             );
             if (c) {
+                state.audio.play(.{ .clip = .explode, .vol = 0.5 });
                 state.audio.play(.{ .clip = .death });
+                state.particles.emit(.{
+                    .origin = scene.ball_pos,
+                    .count = 10,
+                    .sprite = .ball,
+                    .start_angle = -std.math.pi,
+                    .sweep = std.math.pi,
+                });
                 scene.death_timer = 2.5;
             }
         }
@@ -752,6 +763,15 @@ fn renderGui() void {
     // _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
 
+    if (ig.igButton("emit", .{})) {
+        state.particles.emit(.{
+            .origin = .{ 40, 40 },
+            .count = 10,
+            .sprite = .ball,
+            .start_angle = -std.math.pi,
+            .sweep = std.math.pi,
+        });
+    }
     if (ig.igButton("Play sound", .{})) {
         state.audio.play(.{ .clip = .bounce });
     }

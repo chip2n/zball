@@ -14,6 +14,8 @@ const Emitter = struct {
     start_time: f32 = 0,
     origin: [2]f32 = .{ 0, 0 },
     count: usize = 0,
+    start_angle: f32 = 0,
+    sweep: f32 = 0,
     sprite: ?Sprite = null,
     active: bool = false,
 
@@ -32,12 +34,12 @@ const Emitter = struct {
             em.origin[0] + rng.float(f32) * bw - bw / 2 - sz / 2,
             em.origin[1] + rng.float(f32) * bh - bh / 2 - sz / 2,
         };
-        var vel = [2]f32{ rng.float(f32) * 2 - 1, rng.float(f32) * 2 - 1 };
-        m.normalize(&vel);
+        var vel = [2]f32{ 1, 0 };
+        m.vrot(&vel, rng.float(f32) * em.sweep + em.start_angle);
 
-        const gravity = 50;
+        const gravity = 100;
 
-        const speed = rng.float(f32) * 100 + 20;
+        const speed = rng.float(f32) * 150 + 10;
         vel = m.vmul(vel, speed);
 
         vel[1] = vel[1] + gravity * dt;
@@ -56,14 +58,23 @@ pub const ParticleSystem = struct {
     emitters: [max_emitters]Emitter = .{.{}} ** max_emitters,
     time: f32 = 0,
 
-    pub fn emit(sys: *ParticleSystem, origin: [2]f32, count: usize, sprite: Sprite) void {
+    pub const EmitDesc = struct {
+        origin: [2]f32,
+        count: usize,
+        sprite: Sprite,
+        start_angle: f32 = 0,
+        sweep: f32 = std.math.tau,
+    };
+    pub fn emit(sys: *ParticleSystem, v: EmitDesc) void {
         for (&sys.emitters) |*em| {
             if (em.active) continue;
             em.* = .{
                 .start_time = sys.time,
-                .origin = origin,
-                .count = count,
-                .sprite = sprite,
+                .origin = v.origin,
+                .count = v.count,
+                .sprite = v.sprite,
+                .start_angle = v.start_angle,
+                .sweep = v.sweep,
                 .active = true,
             };
             break;
