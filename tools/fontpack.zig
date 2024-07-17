@@ -25,9 +25,11 @@ pub fn main() !void {
 
     const font_data = try std.fs.cwd().readFileAlloc(arena.allocator(), font_path, 1 << 20);
 
-    // TODO do entire ascii table
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 :;@>";
+    var chars: [95]u8 = undefined;
     var glyphs: [chars.len]GlyphData = undefined;
+    for (32..127, 0..) |ch, i| {
+        chars[i] = @intCast(ch);
+    }
 
     const bw = 64;
     const bh = 64;
@@ -36,7 +38,7 @@ pub fn main() !void {
     var ascent: i32 = undefined;
     var descent: i32 = undefined;
     var line_gap: i32 = undefined;
-    try pack(font_data, &bitmap, bw, &glyphs, &ascent, &descent, &line_gap, chars);
+    try pack(font_data, &bitmap, bw, &glyphs, &ascent, &descent, &line_gap, &chars);
 
     var bitmap_rgba: [bitmap.len * 4]u8 = undefined;
     convertRGBA(&bitmap, &bitmap_rgba);
@@ -67,7 +69,7 @@ pub fn main() !void {
     _ = try out.write("pub const glyphs = [_]Glyph{\n");
     for (glyphs) |glyph| {
         try out.print(
-            "    .{{ .ch = '{c}', .x = {}, .y = {}, .w = {}, .h = {}, .bbox = .{{ {}, {}, {}, {} }}, .advance = {} }},\n",
+            "    .{{ .ch = {}, .x = {}, .y = {}, .w = {}, .h = {}, .bbox = .{{ {}, {}, {}, {} }}, .advance = {} }},\n",
             .{
                 glyph.ch,
                 glyph.pos[0],

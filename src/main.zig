@@ -14,6 +14,7 @@ const simgui = sokol.imgui;
 const shd = @import("shader");
 const font = @import("font");
 const sprite = @import("sprite");
+const ui = @import("ui.zig");
 const fwatch = @import("fwatch");
 
 const Pipeline = @import("shader.zig").Pipeline;
@@ -126,11 +127,6 @@ const state = struct {
     var batch = BatchRenderer.init();
     var particles = ParticleSystem{};
 
-    // const audio = struct {
-    //     var even_odd: u32 = 0;
-    //     var sample_pos: usize = 0;
-    //     var samples: [num_audio_samples]f32 = undefined;
-    // };
     var audio = AudioSystem{};
 };
 
@@ -152,8 +148,8 @@ const Scene = union(enum) {
         }
     }
 
-    fn render(scene: Scene) void {
-        switch (scene) {
+    fn render(scene: *Scene) void {
+        switch (scene.*) {
             .title => scene.title.render(),
             .game => scene.game.render(),
         }
@@ -175,7 +171,7 @@ const TitleScene = struct {
         _ = dt;
     }
 
-    fn render(scene: TitleScene) void {
+    fn render(scene: *TitleScene) void {
         state.batch.setTexture(state.spritesheet_texture);
 
         state.batch.render(.{
@@ -249,11 +245,16 @@ const TitleScene = struct {
     }
 };
 
+const GameMenu = struct {
+    state: enum { none, pause, settings } = .none,
+    pause_idx: usize = 0,
+    settings_idx: usize = 0,
+};
+
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
 
-    pause: bool = false,
-    pause_idx: usize = 0,
+    menu: GameMenu = .{},
 
     time: f32 = 0,
     lives: u8 = 3,
@@ -301,170 +302,173 @@ const GameScene = struct {
         // Reset data from previous frame
         scene.collision_count = 0;
 
-        if (!scene.pause) {
-            scene.time += dt;
+        if (scene.paused()) return;
+        scene.time += dt;
 
-            { // Move paddle
-                var paddle_dx: f32 = 0;
-                if (scene.inputs.left_down) {
-                    paddle_dx -= 1;
-                }
-                if (scene.inputs.right_down) {
-                    paddle_dx += 1;
-                }
-                const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
-                scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
+        { // Move paddle
+            var paddle_dx: f32 = 0;
+            if (scene.inputs.left_down) {
+                paddle_dx -= 1;
             }
-
-            // Fire ball when pressing space
-            if (scene.inputs.space_down and scene.ball_state == .idle) {
-                scene.ball_state = .alive;
+            if (scene.inputs.right_down) {
+                paddle_dx += 1;
             }
+            const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+            scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
+        }
 
-            const old_ball_pos = scene.ball_pos;
-            switch (scene.ball_state) {
-                .idle => {
-                    scene.updateIdleBall();
-                },
-                .alive => {
-                    scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
-                    scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
-                },
-            }
-            const new_ball_pos = scene.ball_pos;
+        // Fire ball when pressing space
+        if (scene.inputs.space_down and scene.ball_state == .idle) {
+            scene.ball_state = .alive;
+        }
 
-            var out: [2]f32 = undefined;
-            var normal: [2]f32 = undefined;
+        const old_ball_pos = scene.ball_pos;
+        switch (scene.ball_state) {
+            .idle => {
+                scene.updateIdleBall();
+            },
+            .alive => {
+                scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
+                scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
+            },
+        }
+        const new_ball_pos = scene.ball_pos;
 
-            { // Has the ball hit any bricks?
-                var collided = false;
-                var coll_dist = std.math.floatMax(f32);
-                for (&scene.bricks, 0..) |*brick, i| {
-                    if (brick.destroyed) continue;
+        var out: [2]f32 = undefined;
+        var normal: [2]f32 = undefined;
 
-                    var r = @import("collision.zig").Rect{
-                        .min = .{ brick.pos[0], brick.pos[1] },
-                        .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
-                    };
-                    r.grow(.{ ball_w / 2, ball_h / 2 });
-                    var c_normal: [2]f32 = undefined;
-                    const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
-                    if (c) {
-                        // always use the normal of the closest brick for ball reflection
-                        const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-                        const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
-                        if (brick_dist < coll_dist) {
-                            normal = c_normal;
-                            coll_dist = brick_dist;
-                        }
-                        std.log.warn("COLLIDED", .{});
-                        brick.destroyed = true;
-                        state.particles.emit(brick_pos, 10, brick.sprite);
-                        state.audio.play(.{ .clip = .explode });
-                        scene.score += 100;
+        { // Has the ball hit any bricks?
+            var collided = false;
+            var coll_dist = std.math.floatMax(f32);
+            for (&scene.bricks, 0..) |*brick, i| {
+                if (brick.destroyed) continue;
 
-                        scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
-                        scene.collision_count += 1;
-                    }
-                    collided = collided or c;
-                }
-                if (collided) {
-                    scene.ball_pos = out;
-                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
-                }
-            }
-
-            const vw: f32 = @floatFromInt(viewport_size[0]);
-            const vh: f32 = @floatFromInt(viewport_size[1]);
-
-            { // Has the ball hit the paddle?
                 var r = @import("collision.zig").Rect{
-                    .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
-                    .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+                    .min = .{ brick.pos[0], brick.pos[1] },
+                    .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
                 };
                 r.grow(.{ ball_w / 2, ball_h / 2 });
-                // TODO not sure we're using the right ball positions
-                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+                var c_normal: [2]f32 = undefined;
+                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
                 if (c) {
-                    state.audio.play(.{ .clip = .bounce });
-                    scene.ball_pos = out;
-                    scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
-                }
-            }
-
-            { // Has the ball hit the ceiling?
-                const c = @import("collision.zig").line_intersection(
-                    old_ball_pos,
-                    scene.ball_pos,
-                    .{ 0, brick_start_y },
-                    .{ vw - ball_w / 2, brick_start_y },
-                    &out,
-                );
-                if (c) {
-                    std.log.warn("CEILING", .{});
-                    normal = .{ 0, 1 };
-                    scene.ball_pos = out;
-                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
-                }
-            }
-
-            { // Has the ball hit the right wall?
-                const c = @import("collision.zig").line_intersection(
-                    old_ball_pos,
-                    scene.ball_pos,
-                    .{ vw - ball_w / 2, 0 },
-                    .{ vw - ball_w / 2, vh },
-                    &out,
-                );
-                if (c) {
-                    std.log.warn("WALL", .{});
-                    normal = .{ -1, 0 };
-                    scene.ball_pos = out;
-                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
-                }
-            }
-
-            { // Has the ball hit the left wall?
-                const c = @import("collision.zig").line_intersection(
-                    old_ball_pos,
-                    scene.ball_pos,
-                    .{ ball_w / 2, 0 },
-                    .{ ball_w / 2, vh },
-                    &out,
-                );
-                if (c) {
-                    std.log.warn("WALL", .{});
-                    normal = .{ -1, 0 };
-                    scene.ball_pos = out;
-                    scene.ball_dir = m.reflect(scene.ball_dir, normal);
-                }
-            }
-
-            { // Has the ball hit the floor?
-                const c = @import("collision.zig").line_intersection(
-                    old_ball_pos,
-                    scene.ball_pos,
-                    .{ 0, vh - ball_h / 2 },
-                    .{ vw, vh - ball_h / 2 },
-                    &out,
-                );
-                if (c) {
-                    std.log.warn("DEAD!", .{});
-                    if (scene.lives == 0) {
-                        std.log.warn("GAME OVER", .{});
-                        state.scene = Scene{ .title = .{} };
-                    } else {
-                        scene.lives -= 1;
-                        scene.updateIdleBall();
-                        scene.ball_dir = initial_ball_dir;
-                        m.normalize(&scene.ball_dir);
-                        scene.ball_state = .idle;
+                    // always use the normal of the closest brick for ball reflection
+                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+                    const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
+                    if (brick_dist < coll_dist) {
+                        normal = c_normal;
+                        coll_dist = brick_dist;
                     }
+                    std.log.warn("COLLIDED", .{});
+                    brick.destroyed = true;
+                    state.particles.emit(brick_pos, 10, brick.sprite);
+                    state.audio.play(.{ .clip = .explode });
+                    scene.score += 100;
+
+                    scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
+                    scene.collision_count += 1;
+                }
+                collided = collided or c;
+            }
+            if (collided) {
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        const vw: f32 = @floatFromInt(viewport_size[0]);
+        const vh: f32 = @floatFromInt(viewport_size[1]);
+
+        { // Has the ball hit the paddle?
+            var r = @import("collision.zig").Rect{
+                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+            };
+            r.grow(.{ ball_w / 2, ball_h / 2 });
+            // TODO not sure we're using the right ball positions
+            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+            if (c) {
+                state.audio.play(.{ .clip = .bounce });
+                scene.ball_pos = out;
+                scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
+            }
+        }
+
+        { // Has the ball hit the ceiling?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ 0, brick_start_y },
+                .{ vw - ball_w / 2, brick_start_y },
+                &out,
+            );
+            if (c) {
+                std.log.warn("CEILING", .{});
+                normal = .{ 0, 1 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        { // Has the ball hit the right wall?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ vw - ball_w / 2, 0 },
+                .{ vw - ball_w / 2, vh },
+                &out,
+            );
+            if (c) {
+                std.log.warn("WALL", .{});
+                normal = .{ -1, 0 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        { // Has the ball hit the left wall?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ ball_w / 2, 0 },
+                .{ ball_w / 2, vh },
+                &out,
+            );
+            if (c) {
+                std.log.warn("WALL", .{});
+                normal = .{ -1, 0 };
+                scene.ball_pos = out;
+                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            }
+        }
+
+        { // Has the ball hit the floor?
+            const c = @import("collision.zig").line_intersection(
+                old_ball_pos,
+                scene.ball_pos,
+                .{ 0, vh - ball_h / 2 },
+                .{ vw, vh - ball_h / 2 },
+                &out,
+            );
+            if (c) {
+                std.log.warn("DEAD!", .{});
+                if (scene.lives == 0) {
+                    std.log.warn("GAME OVER", .{});
+                    state.scene = Scene{ .title = .{} };
+                } else {
+                    scene.lives -= 1;
+                    scene.updateIdleBall();
+                    scene.ball_dir = initial_ball_dir;
+                    m.normalize(&scene.ball_dir);
+                    scene.ball_state = .idle;
                 }
             }
-
-            state.particles.update(dt);
         }
+
+        state.particles.update(dt);
+    }
+
+    fn paused(scene: *GameScene) bool {
+        return scene.menu.state != .none;
     }
 
     // The angle depends on how far the ball is from the center of the paddle
@@ -480,7 +484,7 @@ const GameScene = struct {
         scene.ball_pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
     }
 
-    fn render(scene: GameScene) void {
+    fn render(scene: *GameScene) void {
         state.batch.setTexture(state.spritesheet_texture);
 
         // Render all bricks
@@ -542,29 +546,63 @@ const GameScene = struct {
             text_renderer.render(&state.batch, label, 32, 0);
         }
 
-        // Render pause menu
-        if (scene.pause) {
-            // overlay
-            state.batch.setTexture(state.spritesheet_texture);
-            state.batch.render(.{
-                .src = sprite.sprites.overlay.bounds,
-                .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
-            });
+        // Render game menus
+        switch (scene.menu.state) {
+            .none => {},
+            .pause => {
+                // overlay
+                state.batch.setTexture(state.spritesheet_texture);
+                state.batch.render(.{
+                    .src = sprite.sprites.overlay.bounds,
+                    .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+                });
 
-            const ui = @import("ui.zig");
-            ui.begin(.{
-                .x = viewport_size[0] / 2,
-                .y = viewport_size[1] / 2,
-                .pivot = .{ 0.5, 0.5 },
-                .batch = &state.batch,
-                .tex_spritesheet = state.spritesheet_texture,
-                .tex_font = state.font_texture,
-            });
-            defer ui.end();
+                ui.begin(.{
+                    .x = viewport_size[0] / 2,
+                    .y = viewport_size[1] / 2,
+                    .pivot = .{ 0.5, 0.5 },
+                    .batch = &state.batch,
+                    .tex_spritesheet = state.spritesheet_texture,
+                    .tex_font = state.font_texture,
+                });
+                defer ui.end();
 
-            ui.selectionItem("Continue", .{ .selected = scene.pause_idx == 0 });
-            ui.selectionItem("Settings", .{ .selected = scene.pause_idx == 1 });
-            ui.selectionItem("Quit", .{ .selected = scene.pause_idx == 2 });
+                if (ui.selectionItem("Continue", .{ .selected = scene.menu.pause_idx == 0 })) {
+                    scene.menu.state = .none;
+                }
+                if (ui.selectionItem("Settings", .{ .selected = scene.menu.pause_idx == 1 })) {
+                    scene.menu.state = .settings;
+                }
+                if (ui.selectionItem("Quit", .{ .selected = scene.menu.pause_idx == 2 })) {
+                    sapp.quit();
+                }
+            },
+            .settings => {
+                // overlay
+                state.batch.setTexture(state.spritesheet_texture);
+                state.batch.render(.{
+                    .src = sprite.sprites.overlay.bounds,
+                    .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+                });
+
+                ui.begin(.{
+                    .x = viewport_size[0] / 2,
+                    .y = viewport_size[1] / 2,
+                    .pivot = .{ 0.5, 0.5 },
+                    .batch = &state.batch,
+                    .tex_spritesheet = state.spritesheet_texture,
+                    .tex_font = state.font_texture,
+                });
+                defer ui.end();
+
+                _ = ui.selectionItem("Volume (sfx)", .{ .selected = scene.menu.settings_idx == 0 });
+                ui.slider(.{ .value = &state.audio.vol_sfx, .focused = scene.menu.settings_idx == 0 });
+                _ = ui.selectionItem("Volume (bg)", .{ .selected = scene.menu.settings_idx == 1 });
+                ui.slider(.{ .value = &state.audio.vol_bg, .focused = scene.menu.settings_idx == 1 });
+                if (ui.selectionItem("Back", .{ .selected = scene.menu.settings_idx == 2 })) {
+                    scene.menu.state = .pause;
+                }
+            },
         }
 
         const result = state.batch.commit();
@@ -596,64 +634,97 @@ const GameScene = struct {
     }
 
     fn input(scene: *GameScene, ev: [*c]const sapp.Event) void {
-        switch (ev.*.type) {
-            .KEY_DOWN => {
-                switch (ev.*.key_code) {
-                    .UP => {
-                        if (!scene.pause) return;
-                        if (scene.pause_idx == 0) {
-                            scene.pause_idx = 2;
-                        } else {
-                            scene.pause_idx -= 1;
-                        }
-                    },
-                    .DOWN => {
-                        if (!scene.pause) return;
-                        if (scene.pause_idx == 2) {
-                            scene.pause_idx = 0;
-                        } else {
-                            scene.pause_idx += 1;
-                        }
-                    },
-                    .ENTER => {
-                        if (!scene.pause) return;
-                        switch (scene.pause_idx) {
-                            0 => scene.pause = false,
-                            1 => {},
-                            2 => sapp.quit(),
+        switch (scene.menu.state) {
+            .none => {
+                switch (ev.*.type) {
+                    .KEY_DOWN => {
+                        switch (ev.*.key_code) {
+                            .LEFT => {
+                                scene.inputs.left_down = true;
+                            },
+                            .RIGHT => {
+                                scene.inputs.right_down = true;
+                            },
+                            .SPACE => {
+                                scene.inputs.space_down = true;
+                            },
+                            .ESCAPE => {
+                                scene.menu.state = .pause;
+                            },
                             else => {},
                         }
                     },
-                    .LEFT => {
-                        scene.inputs.left_down = true;
-                    },
-                    .RIGHT => {
-                        scene.inputs.right_down = true;
-                    },
-                    .SPACE => {
-                        scene.inputs.space_down = true;
-                    },
-                    .ESCAPE => {
-                        scene.pause = !scene.pause;
-                    },
-                    else => {},
-                }
-            },
-            .KEY_UP => {
-                switch (ev.*.key_code) {
-                    .LEFT => {
-                        scene.inputs.left_down = false;
-                    },
-                    .RIGHT => {
-                        scene.inputs.right_down = false;
-                    },
-                    .SPACE => {
-                        scene.inputs.space_down = false;
+                    .KEY_UP => {
+                        switch (ev.*.key_code) {
+                            .LEFT => {
+                                scene.inputs.left_down = false;
+                            },
+                            .RIGHT => {
+                                scene.inputs.right_down = false;
+                            },
+                            .SPACE => {
+                                scene.inputs.space_down = false;
+                            },
+                            else => {},
+                        }
                     },
                     else => {},
                 }
             },
-            else => {},
+            .pause => {
+                switch (ev.*.type) {
+                    .KEY_DOWN => {
+                        switch (ev.*.key_code) {
+                            .UP => {
+                                if (scene.menu.pause_idx == 0) {
+                                    scene.menu.pause_idx = 2;
+                                } else {
+                                    scene.menu.pause_idx -= 1;
+                                }
+                            },
+                            .DOWN => {
+                                if (scene.menu.pause_idx == 2) {
+                                    scene.menu.pause_idx = 0;
+                                } else {
+                                    scene.menu.pause_idx += 1;
+                                }
+                            },
+                            .ESCAPE => {
+                                scene.menu.state = .none;
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            },
+            .settings => {
+                switch (ev.*.type) {
+                    .KEY_DOWN => {
+                        switch (ev.*.key_code) {
+                            .UP => {
+                                if (scene.menu.settings_idx == 0) {
+                                    scene.menu.settings_idx = 2;
+                                } else {
+                                    scene.menu.settings_idx -= 1;
+                                }
+                            },
+                            .DOWN => {
+                                if (scene.menu.settings_idx == 2) {
+                                    scene.menu.settings_idx = 0;
+                                } else {
+                                    scene.menu.settings_idx += 1;
+                                }
+                            },
+                            .ESCAPE => {
+                                scene.menu.state = .pause;
+                            },
+                            else => {},
+                        }
+                    },
+                    else => {},
+                }
+            },
         }
     }
 };
@@ -681,7 +752,7 @@ fn renderGui() void {
         state.audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play music", .{})) {
-        state.audio.play(.{ .clip = .music, .loop = true, .volume = 0.4 });
+        state.audio.play(.{ .clip = .music, .loop = true, .category = .bg });
     }
 
     if (config.shader_reload) {
@@ -963,8 +1034,8 @@ export fn sokolFrame() void {
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    // forward input events to sokol-imgui
     _ = simgui.handleEvent(ev.*);
+    ui.handleEvent(ev.*);
 
     switch (ev.*.type) {
         .RESIZED => {

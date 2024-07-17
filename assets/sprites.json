@@ -25,7 +25,10 @@
    { "name": "brick4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 222, "y": 0, "w": 16, "h": 8 } }] },
    { "name": "paddle", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 11, "w": 24, "h": 7 } }] },
    { "name": "ball", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 186, "y": 11, "w": 4, "h": 4 } }] },
-   { "name": "overlay", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 191, "y": 11, "w": 1, "h": 1 } }] }
+   { "name": "overlay", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 191, "y": 11, "w": 1, "h": 1 } }] },
+   { "name": "slider_thumb", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 194, "y": 11, "w": 4, "h": 5 } }] },
+   { "name": "slider_rail_active", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 199, "y": 13, "w": 1, "h": 1 } }] },
+   { "name": "slider_rail_inactive", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 201, "y": 13, "w": 1, "h": 1 } }] }
   ]
  }
 }

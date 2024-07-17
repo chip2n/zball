@@ -1,6 +1,8 @@
 const std = @import("std");
 const font = @import("font");
 const sprite = @import("sprite");
+const sokol = @import("sokol");
+const sapp = sokol.app;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const Texture = @import("Texture.zig");
@@ -8,6 +10,11 @@ const Texture = @import("Texture.zig");
 const DrawListEntry = union(enum) {
     text: struct {
         s: []const u8,
+        x: f32,
+        y: f32,
+    },
+    slider: struct {
+        value: f32,
         x: f32,
         y: f32,
     },
@@ -23,6 +30,10 @@ var draw_list_idx: usize = 0;
 var batch: *BatchRenderer = undefined;
 var tex_spritesheet: Texture = undefined;
 var tex_font: Texture = undefined;
+
+const io = struct {
+    var key_pressed: sapp.Keycode = .INVALID;
+};
 
 pub const BeginDesc = struct {
     x: f32,
@@ -72,10 +83,10 @@ pub fn end() void {
 
     { // render draw list
         var text_renderer = TextRenderer{};
-        batch.setTexture(tex_font); // TODO
-        for (draw_list) |e| {
+        for (draw_list[0..draw_list_idx]) |e| {
             switch (e) {
                 .text => |t| {
+                    batch.setTexture(tex_font);
                     text_renderer.render(
                         batch,
                         t.s,
@@ -83,16 +94,55 @@ pub fn end() void {
                         t.y + padding + offset[1],
                     );
                 },
+                .slider => |s| {
+                    batch.setTexture(tex_spritesheet);
+                    const thumb = sprite.sprites.slider_thumb;
+                    const rail_inactive = sprite.sprites.slider_rail_inactive;
+                    const rail_active = sprite.sprites.slider_rail_active;
+                    // inactive rail
+                    batch.render(.{
+                        .src = rail_inactive.bounds,
+                        .dst = .{
+                            .x = s.x + padding + offset[0],
+                            .y = s.y + padding + offset[1],
+                            .w = win_width,
+                            .h = rail_inactive.bounds.h,
+                        },
+                    });
+                    // active rail
+                    batch.render(.{
+                        .src = rail_active.bounds,
+                        .dst = .{
+                            .x = s.x + padding + offset[0],
+                            .y = s.y + padding + offset[1],
+                            .w = win_width * s.value,
+                            .h = rail_active.bounds.h,
+                        },
+                    });
+                    // thumb
+                    batch.render(.{
+                        .src = thumb.bounds,
+                        .dst = .{
+                            .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, thumb.bounds.w) / 2),
+                            .y = s.y + padding + offset[1] - @floor(@as(f32, thumb.bounds.h) / 2),
+                            .w = thumb.bounds.w,
+                            .h = thumb.bounds.h,
+                        },
+                    });
+                },
             }
         }
     }
+
+    // clear IO
+    io.key_pressed = .INVALID;
 }
 
 pub const SelectionItemDesc = struct {
     selected: bool = false,
 };
 
-pub fn selectionItem(s: []const u8, v: SelectionItemDesc) void {
+pub fn selectionItem(s: []const u8, v: SelectionItemDesc) bool {
     const arrow_w = 8;
     const sz = TextRenderer.measure(s);
     win_width = @max(win_width, sz[0] + arrow_w + 2);
@@ -116,6 +166,38 @@ pub fn selectionItem(s: []const u8, v: SelectionItemDesc) void {
 
     cursor[1] += font.ascent + 4;
     win_height = cursor[1] - origin[1] - 4;
+
+    return v.selected and io.key_pressed == .ENTER;
+}
+
+const SliderDesc = struct {
+    value: *f32,
+    focused: bool,
+};
+pub fn slider(v: SliderDesc) void {
+    if (v.focused) {
+        if (io.key_pressed == .LEFT) v.value.* = @max(0, v.value.* - 0.1);
+        if (io.key_pressed == .RIGHT) v.value.* = @min(v.value.* + 0.1, 1);
+    }
+
+    addDrawListEntry(.{
+        .slider = .{
+            .value = v.value.*,
+            .x = cursor[0],
+            .y = cursor[1],
+        },
+    });
+    cursor[1] += 4;
+    win_height += 4;
+}
+
+pub fn handleEvent(ev: sapp.Event) void {
+    switch (ev.type) {
+        .KEY_DOWN => {
+            io.key_pressed = ev.key_code;
+        },
+        else => {},
+    }
 }
 
 fn addDrawListEntry(entry: DrawListEntry) void {

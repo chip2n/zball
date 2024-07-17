@@ -7,7 +7,7 @@ const Rect = m.Rect;
 const max_quads = 512;
 const max_verts = max_quads * 6;
 const max_cmds = max_quads;
-const max_tex = 8;
+const max_tex = 16; // TODO needed to increase this because we don't sort batches properly
 
 const TextureId = usize;
 

@@ -4,7 +4,6 @@ const root = @import("root");
 const sokol = @import("sokol");
 const saudio = sokol.audio;
 
-const g_volume = 0.3;
 const num_channels = 2;
 const sample_buf_length = 4096; // TODO
 const sample_rate = 44100; // TODO
@@ -17,6 +16,8 @@ pub const audio_data = .{
     .music = embed("assets/music.wav"),
 };
 
+const AudioCategory = enum { sfx, bg };
+
 const AudioClip = std.meta.FieldEnum(@TypeOf(audio_data));
 
 const clips = std.enums.EnumArray(AudioClip, WavData).init(audio_data);
@@ -25,26 +26,31 @@ pub const AudioSystem = struct {
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
+    vol_bg: f32 = 1,
+    vol_sfx: f32 = 1,
 
     const AudioTrack = struct {
         clip: ?AudioClip = null,
         frame: usize = 0,
         loop: bool = false,
-        volume: f32 = 1.0,
+        vol: f32 = 1.0,
+        category: AudioCategory = .sfx,
     };
 
-    const PlayOptions = struct {
+    const PlayDesc = struct {
         clip: AudioClip,
         loop: bool = false,
-        volume: f32 = 1.0,
+        vol: f32 = 1.0,
+        category: AudioCategory = .sfx,
     };
-    pub fn play(sys: *AudioSystem, v: PlayOptions) void {
+    pub fn play(sys: *AudioSystem, v: PlayDesc) void {
         for (&sys.playing) |*p| {
             if (p.clip != null) continue;
             p.clip = v.clip;
             p.frame = 0;
             p.loop = v.loop;
-            p.volume = v.volume;
+            p.vol = v.vol;
+            p.category = v.category;
             break;
         } else {
             std.log.warn("Cannot play clip - too many audio clips is playing at the same time.", .{});
@@ -65,7 +71,7 @@ pub const AudioSystem = struct {
         for (&sys.playing) |*p| {
             if (p.clip == null) continue;
             const clip = clips.get(p.clip.?);
-            const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, p.volume);
+            const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, sys.trackVolume(p.*));
             p.frame += count;
 
             if (p.frame >= clip.frameCount()) {
@@ -82,6 +88,14 @@ pub const AudioSystem = struct {
         if (num_frames > 0) {
             _ = saudio.push(&(sys.samples[0]), num_frames);
         }
+    }
+
+    fn trackVolume(sys: AudioSystem, track: AudioTrack) f32 {
+        const cat_vol = switch (track.category) {
+            .bg => sys.vol_bg,
+            .sfx => sys.vol_sfx,
+        };
+        return track.vol * cat_vol;
     }
 
     fn writeSamples(
@@ -105,10 +119,10 @@ pub const AudioSystem = struct {
             const result = (fs / @as(f32, @floatFromInt(div)));
             std.debug.assert(-1 <= result and result <= 1);
             if (clip.header.nbrChannels == 1) {
-                dst[i * num_channels + 0] += result * volume * g_volume;
-                dst[i * num_channels + 1] += result * volume * g_volume;
+                dst[i * num_channels + 0] += result * volume;
+                dst[i * num_channels + 1] += result * volume;
             } else if (clip.header.nbrChannels == 2) {
-                dst[i] += result * volume * g_volume;
+                dst[i] += result * volume;
             } else unreachable;
         }
 
