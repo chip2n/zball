@@ -123,6 +123,8 @@ pub fn build(b: *Build) !void {
         // Used with ZLS for better analysis of comptime shenanigans
         const check = b.step("check", "Check if game compiles");
         check.dependOn(&check_exe.step);
+        try addAssets(b, check_exe);
+        check_exe.root_module.addOptions("config", options);
 
         // Tests
         const tests = b.addTest(.{
