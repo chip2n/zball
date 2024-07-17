@@ -26,8 +26,8 @@ pub const AudioSystem = struct {
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
-    vol_bg: f32 = 1,
-    vol_sfx: f32 = 1,
+    vol_bg: f32 = 0.5,
+    vol_sfx: f32 = 0.5,
 
     const AudioTrack = struct {
         clip: ?AudioClip = null,

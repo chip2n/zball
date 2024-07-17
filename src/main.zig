@@ -752,7 +752,7 @@ fn renderGui() void {
         state.audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play music", .{})) {
-        state.audio.play(.{ .clip = .music, .loop = true, .category = .bg });
+        state.audio.play(.{ .clip = .music, .loop = true, .vol = 0.5, .category = .bg });
     }
 
     if (config.shader_reload) {
