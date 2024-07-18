@@ -40,9 +40,10 @@ const offscreen_sample_count = 1;
 
 const num_audio_samples = 32;
 
-// TODO reuse in batch
-const max_quads = 256;
-const max_verts = max_quads * 6; // TODO use index buffers
+pub const max_quads = 512;
+pub const max_verts = max_quads * 6; // TODO use index buffers
+const max_balls = 32;
+const powerup_freq = 0.3;
 
 const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
@@ -61,7 +62,11 @@ const initial_ball_pos: [2]f32 = .{
     initial_paddle_pos[0],
     initial_paddle_pos[1] - paddle_h - ball_h / 2,
 };
-const initial_ball_dir: [2]f32 = .{ 0.3, -1 };
+const initial_ball_dir: [2]f32 = blk: {
+    var dir: [2]f32 = .{ 0.3, -1 };
+    m.normalize(&dir);
+    break :blk dir;
+};
 const num_bricks = 10;
 const num_rows = 4;
 pub const brick_w = 16;
@@ -257,6 +262,12 @@ const Powerup = struct {
     active: bool = false,
 };
 
+const Ball = struct {
+    pos: [2]f32 = initial_ball_pos,
+    dir: [2]f32 = initial_ball_dir,
+    active: bool = false,
+};
+
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
     powerups: [16]Powerup = .{.{}} ** 16,
@@ -272,8 +283,8 @@ const GameScene = struct {
     death_timer: f32 = 0,
 
     paddle_pos: [2]f32 = initial_paddle_pos,
-    ball_pos: [2]f32 = initial_ball_pos,
-    ball_dir: [2]f32 = initial_ball_dir,
+
+    balls: [max_balls]Ball = .{.{}} ** max_balls,
     ball_state: BallState = .idle,
 
     inputs: struct {
@@ -291,7 +302,13 @@ const GameScene = struct {
 
     fn init() GameScene {
         var scene = GameScene{};
-        m.normalize(&scene.ball_dir);
+
+        // spawn one ball to start
+        scene.balls[0] = .{
+            .pos = initial_ball_pos,
+            .dir = initial_ball_dir,
+            .active = true,
+        };
 
         // initialize bricks
         const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
@@ -333,19 +350,6 @@ const GameScene = struct {
             scene.ball_state = .alive;
         }
 
-        // Move ball
-        const old_ball_pos = scene.ball_pos;
-        switch (scene.ball_state) {
-            .idle => {
-                scene.updateIdleBall();
-            },
-            .alive => {
-                scene.ball_pos[0] += scene.ball_dir[0] * ball_speed * dt;
-                scene.ball_pos[1] += scene.ball_dir[1] * ball_speed * dt;
-            },
-        }
-        const new_ball_pos = scene.ball_pos;
-
         // Move powerups
         for (&scene.powerups) |*p| {
             if (!p.active) continue;
@@ -354,9 +358,6 @@ const GameScene = struct {
                 p.active = false;
             }
         }
-
-        var out: [2]f32 = undefined;
-        var normal: [2]f32 = undefined;
 
         { // Has the paddle hit a powerup?
             const paddle_bounds = m.Rect{
@@ -377,138 +378,188 @@ const GameScene = struct {
                 if (!paddle_bounds.overlaps(powerup_bounds)) continue;
                 p.active = false;
                 state.audio.play(.{ .clip = .powerup });
+                switch (p.type) {
+                    .split => {
+                        // var new_balls = std.BoundedArray(Ball, max_balls){ .len = 0 };
+                        // var new_balls: [max_balls]Ball = .{.{}} ** max_balls;
+                        var new_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
+
+                        for (scene.balls, 0..) |ball, i| {
+                            if (!ball.active) continue;
+                            new_balls.append(i) catch continue;
+                        }
+                        for (new_balls.constSlice()) |i| {
+                            var ball = &scene.balls[i];
+                            var d1 = ball.dir;
+                            var d2 = ball.dir;
+                            m.vrot(&d1, -std.math.pi / 8.0);
+                            m.vrot(&d2, std.math.pi / 8.0);
+                            ball.dir = d1;
+                            scene.spawnBall(ball.pos, d2) catch break;
+                        }
+                    },
+                    .flame => {
+                        // TODO implement
+                    },
+                }
             }
         }
 
-        { // Has the ball hit any bricks?
-            var collided = false;
-            var coll_dist = std.math.floatMax(f32);
-            for (&scene.bricks, 0..) |*brick, i| {
-                if (brick.destroyed) continue;
+        // Move balls
+        for (&scene.balls) |*ball| {
+            if (!ball.active) continue;
+            const old_ball_pos = ball.pos;
+            switch (scene.ball_state) {
+                .idle => {
+                    scene.updateIdleBall();
+                },
+                .alive => {
+                    ball.pos[0] += ball.dir[0] * ball_speed * dt;
+                    ball.pos[1] += ball.dir[1] * ball_speed * dt;
+                },
+            }
+            const new_ball_pos = ball.pos;
 
+            var out: [2]f32 = undefined;
+            var normal: [2]f32 = undefined;
+
+            { // Has the ball hit any bricks?
+                var collided = false;
+                var coll_dist = std.math.floatMax(f32);
+                for (&scene.bricks, 0..) |*brick, i| {
+                    if (brick.destroyed) continue;
+
+                    var r = @import("collision.zig").Rect{
+                        .min = .{ brick.pos[0], brick.pos[1] },
+                        .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                    };
+                    r.grow(.{ ball_w / 2, ball_h / 2 });
+                    var c_normal: [2]f32 = undefined;
+                    const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                    if (c) {
+                        // always use the normal of the closest brick for ball reflection
+                        const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+                        const brick_dist = m.magnitude(m.vsub(brick_pos, ball.pos));
+                        if (brick_dist < coll_dist) {
+                            normal = c_normal;
+                            coll_dist = brick_dist;
+                        }
+                        brick.destroyed = true;
+                        state.particles.emit(.{
+                            .origin = brick_pos,
+                            .count = 10,
+                            .sprite = brick.sprite,
+                        });
+                        state.audio.play(.{ .clip = .explode });
+                        scene.score += 100;
+
+                        scene.spawnPowerup(brick.pos);
+
+                        scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
+                        scene.collision_count += 1;
+                    }
+                    collided = collided or c;
+                }
+                if (collided) {
+                    ball.pos = out;
+                    ball.dir = m.reflect(ball.dir, normal);
+                }
+            }
+
+            const vw: f32 = @floatFromInt(viewport_size[0]);
+            const vh: f32 = @floatFromInt(viewport_size[1]);
+
+            { // Has the ball hit the paddle?
+                // TODO reuse
                 var r = @import("collision.zig").Rect{
-                    .min = .{ brick.pos[0], brick.pos[1] },
-                    .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                    .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                    .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
                 };
                 r.grow(.{ ball_w / 2, ball_h / 2 });
-                var c_normal: [2]f32 = undefined;
-                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                // TODO not sure we're using the right ball positions
+                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
                 if (c) {
-                    // always use the normal of the closest brick for ball reflection
-                    const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-                    const brick_dist = m.magnitude(m.vsub(brick_pos, scene.ball_pos));
-                    if (brick_dist < coll_dist) {
-                        normal = c_normal;
-                        coll_dist = brick_dist;
-                    }
-                    brick.destroyed = true;
-                    state.particles.emit(.{
-                        .origin = brick_pos,
-                        .count = 10,
-                        .sprite = brick.sprite,
-                    });
-                    state.audio.play(.{ .clip = .explode });
-                    scene.score += 100;
-
-                    scene.spawnPowerup(brick.pos);
-
-                    scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
-                    scene.collision_count += 1;
+                    state.audio.play(.{ .clip = .bounce });
+                    ball.pos = out;
+                    ball.dir = paddle_reflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
                 }
-                collided = collided or c;
             }
-            if (collided) {
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+
+            { // Has the ball hit the ceiling?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    ball.pos,
+                    .{ 0, brick_start_y },
+                    .{ vw - ball_w / 2, brick_start_y },
+                    &out,
+                );
+                if (c) {
+                    state.audio.play(.{ .clip = .bounce });
+                    normal = .{ 0, 1 };
+                    ball.pos = out;
+                    ball.dir = m.reflect(ball.dir, normal);
+                }
             }
-        }
 
-        const vw: f32 = @floatFromInt(viewport_size[0]);
-        const vh: f32 = @floatFromInt(viewport_size[1]);
-
-        { // Has the ball hit the paddle?
-            // TODO reuse
-            var r = @import("collision.zig").Rect{
-                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
-                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
-            };
-            r.grow(.{ ball_w / 2, ball_h / 2 });
-            // TODO not sure we're using the right ball positions
-            const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-            if (c) {
-                state.audio.play(.{ .clip = .bounce });
-                scene.ball_pos = out;
-                scene.ball_dir = paddle_reflect(scene.paddle_pos[0], paddle_w, scene.ball_pos, scene.ball_dir);
+            { // Has the ball hit the right wall?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    ball.pos,
+                    .{ vw - ball_w / 2, 0 },
+                    .{ vw - ball_w / 2, vh },
+                    &out,
+                );
+                if (c) {
+                    state.audio.play(.{ .clip = .bounce });
+                    normal = .{ -1, 0 };
+                    ball.pos = out;
+                    ball.dir = m.reflect(ball.dir, normal);
+                }
             }
-        }
 
-        { // Has the ball hit the ceiling?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ 0, brick_start_y },
-                .{ vw - ball_w / 2, brick_start_y },
-                &out,
-            );
-            if (c) {
-                state.audio.play(.{ .clip = .bounce });
-                normal = .{ 0, 1 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
+            { // Has the ball hit the left wall?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    ball.pos,
+                    .{ ball_w / 2, 0 },
+                    .{ ball_w / 2, vh },
+                    &out,
+                );
+                if (c) {
+                    state.audio.play(.{ .clip = .bounce });
+                    normal = .{ -1, 0 };
+                    ball.pos = out;
+                    ball.dir = m.reflect(ball.dir, normal);
+                }
             }
-        }
 
-        { // Has the ball hit the right wall?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ vw - ball_w / 2, 0 },
-                .{ vw - ball_w / 2, vh },
-                &out,
-            );
-            if (c) {
-                state.audio.play(.{ .clip = .bounce });
-                normal = .{ -1, 0 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
+            { // Has a ball hit the floor?
+                const c = @import("collision.zig").line_intersection(
+                    old_ball_pos,
+                    ball.pos,
+                    .{ 0, vh - ball_h / 2 },
+                    .{ vw, vh - ball_h / 2 },
+                    &out,
+                );
+                if (c) {
+                    state.audio.play(.{ .clip = .explode, .vol = 0.5 });
+                    state.particles.emit(.{
+                        .origin = ball.pos,
+                        .count = 10,
+                        .sprite = .ball,
+                        .start_angle = -std.math.pi,
+                        .sweep = std.math.pi,
+                    });
+                    ball.active = false;
 
-        { // Has the ball hit the left wall?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ ball_w / 2, 0 },
-                .{ ball_w / 2, vh },
-                &out,
-            );
-            if (c) {
-                state.audio.play(.{ .clip = .bounce });
-                normal = .{ -1, 0 };
-                scene.ball_pos = out;
-                scene.ball_dir = m.reflect(scene.ball_dir, normal);
-            }
-        }
-
-        { // Has the ball hit the floor?
-            const c = @import("collision.zig").line_intersection(
-                old_ball_pos,
-                scene.ball_pos,
-                .{ 0, vh - ball_h / 2 },
-                .{ vw, vh - ball_h / 2 },
-                &out,
-            );
-            if (c) {
-                state.audio.play(.{ .clip = .explode, .vol = 0.5 });
-                state.audio.play(.{ .clip = .death });
-                state.particles.emit(.{
-                    .origin = scene.ball_pos,
-                    .count = 10,
-                    .sprite = .ball,
-                    .start_angle = -std.math.pi,
-                    .sweep = std.math.pi,
-                });
-                scene.death_timer = 2.5;
+                    // If the ball was the final ball, start a death timer
+                    for (scene.balls) |balls| {
+                        if (balls.active) break;
+                    } else {
+                        state.audio.play(.{ .clip = .death });
+                        scene.death_timer = 2.5;
+                    }
+                }
             }
         }
 
@@ -525,9 +576,11 @@ const GameScene = struct {
                 state.scene = Scene{ .title = .{} };
             } else {
                 scene.lives -= 1;
-                scene.updateIdleBall();
-                scene.ball_dir = initial_ball_dir;
-                m.normalize(&scene.ball_dir);
+
+                scene.balls[0] = .{
+                    .active = true,
+                    .dir = initial_ball_dir,
+                };
                 scene.ball_state = .idle;
             }
         }
@@ -537,12 +590,26 @@ const GameScene = struct {
         return scene.menu.state != .none;
     }
 
+    fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !void {
+        for (&scene.balls) |*ball| {
+            if (ball.active) continue;
+            ball.* = .{
+                .pos = pos,
+                .dir = dir,
+                .active = true,
+            };
+            break;
+        } else {
+            return error.MaxBallsReached;
+        }
+    }
+
     fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
         // TODO don't recreate
         var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
         const rng = prng.random();
         const value = rng.float(f32);
-        if (value < 0.7) return;
+        if (value < 1 - powerup_freq) return;
 
         for (&scene.powerups) |*p| {
             if (p.active) continue;
@@ -564,8 +631,11 @@ const GameScene = struct {
     }
 
     fn updateIdleBall(scene: *GameScene) void {
-        scene.ball_pos[0] = scene.paddle_pos[0];
-        scene.ball_pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
+        for (&scene.balls) |*ball| {
+            if (!ball.active) continue;
+            ball.pos[0] = scene.paddle_pos[0];
+            ball.pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
+        }
     }
 
     fn render(scene: *GameScene) void {
@@ -588,16 +658,19 @@ const GameScene = struct {
             });
         }
 
-        // Render ball
-        state.batch.render(.{
-            .src = sprite.sprites.ball.bounds,
-            .dst = .{
-                .x = scene.ball_pos[0] - ball_w / 2,
-                .y = scene.ball_pos[1] - ball_h / 2,
-                .w = ball_w,
-                .h = ball_h,
-            },
-        });
+        // Render balls
+        for (scene.balls) |ball| {
+            if (!ball.active) continue;
+            state.batch.render(.{
+                .src = sprite.sprites.ball.bounds,
+                .dst = .{
+                    .x = ball.pos[0] - ball_w / 2,
+                    .y = ball.pos[1] - ball_h / 2,
+                    .w = ball_w,
+                    .h = ball_h,
+                },
+            });
+        }
 
         // Render paddle
         state.batch.render(.{

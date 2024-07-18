@@ -6,7 +6,7 @@ const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const Sprite = sprites.Sprite;
 
-const max_emitters = 16;
+const max_emitters = 32;
 
 const p_size = .{ 1, 3 };
 
@@ -79,8 +79,7 @@ pub const ParticleSystem = struct {
             };
             break;
         } else {
-            std.log.err("Max emitter count reached", .{});
-            unreachable;
+            std.log.debug("Max emitter count reached", .{});
         }
     }
 

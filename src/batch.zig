@@ -1,11 +1,12 @@
 const std = @import("std");
+const root = @import("root");
 const Texture = @import("Texture.zig");
 const m = @import("math.zig");
 const Rect = m.Rect;
 
 // TODO copied
-const max_quads = 512;
-const max_verts = max_quads * 6;
+const max_quads = root.max_quads;
+const max_verts = root.max_verts;
 const max_cmds = max_quads;
 const max_tex = 16; // TODO needed to increase this because we don't sort batches properly
 

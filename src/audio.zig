@@ -59,7 +59,7 @@ pub const AudioSystem = struct {
             p.category = v.category;
             break;
         } else {
-            std.log.warn("Cannot play clip - too many audio clips is playing at the same time.", .{});
+            std.log.debug("Cannot play clip - too many audio clips is playing at the same time.", .{});
             return;
         }
     }
