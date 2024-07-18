@@ -1,5 +1,6 @@
 const m = @import("math.zig");
 
+// TODO separate from math rect
 pub const Rect = struct {
     min: [2]f32,
     max: [2]f32,

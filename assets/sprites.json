@@ -28,7 +28,9 @@
    { "name": "overlay", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 191, "y": 11, "w": 1, "h": 1 } }] },
    { "name": "slider_thumb", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 194, "y": 11, "w": 4, "h": 5 } }] },
    { "name": "slider_rail_active", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 199, "y": 13, "w": 1, "h": 1 } }] },
-   { "name": "slider_rail_inactive", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 201, "y": 13, "w": 1, "h": 1 } }] }
+   { "name": "slider_rail_inactive", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 201, "y": 13, "w": 1, "h": 1 } }] },
+   { "name": "powerup_split", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 205, "y": 9, "w": 16, "h": 8 } }] },
+   { "name": "powerup_flame", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 222, "y": 9, "w": 16, "h": 8 } }] }
   ]
  }
 }

@@ -251,8 +251,15 @@ const GameMenu = struct {
     settings_idx: usize = 0,
 };
 
+const Powerup = struct {
+    type: enum { split, flame } = .split,
+    pos: [2]f32 = .{ 0, 0 },
+    active: bool = false,
+};
+
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
+    powerups: [16]Powerup = .{.{}} ** 16,
 
     menu: GameMenu = .{},
 
@@ -326,6 +333,7 @@ const GameScene = struct {
             scene.ball_state = .alive;
         }
 
+        // Move ball
         const old_ball_pos = scene.ball_pos;
         switch (scene.ball_state) {
             .idle => {
@@ -338,8 +346,39 @@ const GameScene = struct {
         }
         const new_ball_pos = scene.ball_pos;
 
+        // Move powerups
+        for (&scene.powerups) |*p| {
+            if (!p.active) continue;
+            p.pos[1] += dt * 40;
+            if (p.pos[1] > viewport_size[1]) {
+                p.active = false;
+            }
+        }
+
         var out: [2]f32 = undefined;
         var normal: [2]f32 = undefined;
+
+        { // Has the paddle hit a powerup?
+            const paddle_bounds = m.Rect{
+                .x = scene.paddle_pos[0] - paddle_w / 2,
+                .y = scene.paddle_pos[1] - paddle_h,
+                .w = paddle_w,
+                .h = paddle_h,
+            };
+            for (&scene.powerups) |*p| {
+                if (!p.active) continue;
+                const powerup_bounds = m.Rect{
+                    // TODO just store bounds? also using hard coded split sprite here
+                    .x = p.pos[0],
+                    .y = p.pos[1],
+                    .w = sprite.sprites.powerup_split.bounds.w,
+                    .h = sprite.sprites.powerup_split.bounds.h,
+                };
+                if (!paddle_bounds.overlaps(powerup_bounds)) continue;
+                p.active = false;
+                state.audio.play(.{ .clip = .powerup });
+            }
+        }
 
         { // Has the ball hit any bricks?
             var collided = false;
@@ -371,6 +410,8 @@ const GameScene = struct {
                     state.audio.play(.{ .clip = .explode });
                     scene.score += 100;
 
+                    scene.spawnPowerup(brick.pos);
+
                     scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
                     scene.collision_count += 1;
                 }
@@ -386,6 +427,7 @@ const GameScene = struct {
         const vh: f32 = @floatFromInt(viewport_size[1]);
 
         { // Has the ball hit the paddle?
+            // TODO reuse
             var r = @import("collision.zig").Rect{
                 .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
                 .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
@@ -495,6 +537,24 @@ const GameScene = struct {
         return scene.menu.state != .none;
     }
 
+    fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
+        // TODO don't recreate
+        var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
+        const rng = prng.random();
+        const value = rng.float(f32);
+        if (value < 0.7) return;
+
+        for (&scene.powerups) |*p| {
+            if (p.active) continue;
+            p.* = .{
+                .type = .split,
+                .pos = pos,
+                .active = true,
+            };
+            return;
+        }
+    }
+
     // The angle depends on how far the ball is from the center of the paddle
     fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir: [2]f32) [2]f32 {
         const p = (paddle_pos - ball_pos[0]) / paddle_width;
@@ -549,6 +609,21 @@ const GameScene = struct {
                 .h = paddle_h,
             },
         });
+
+        // Render powerups
+        for (scene.powerups) |p| {
+            if (!p.active) continue;
+            const s = sprite.sprites.powerup_split;
+            state.batch.render(.{
+                .src = s.bounds,
+                .dst = .{
+                    .x = p.pos[0],
+                    .y = p.pos[1],
+                    .w = s.bounds.w,
+                    .h = s.bounds.h,
+                },
+            });
+        }
 
         // Render particles
         state.particles.render(&state.batch);
