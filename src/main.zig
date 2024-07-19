@@ -44,6 +44,7 @@ pub const max_quads = 512;
 pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const powerup_freq = 0.3;
+const flame_duration = 5;
 
 const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
@@ -256,8 +257,9 @@ const GameMenu = struct {
     settings_idx: usize = 0,
 };
 
+const PowerupType = enum { split, flame };
 const Powerup = struct {
-    type: enum { split, flame } = .split,
+    type: PowerupType = .split,
     pos: [2]f32 = .{ 0, 0 },
     active: bool = false,
 };
@@ -286,6 +288,8 @@ const GameScene = struct {
 
     balls: [max_balls]Ball = .{.{}} ** max_balls,
     ball_state: BallState = .idle,
+
+    flame_timer: f32 = 0,
 
     inputs: struct {
         left_down: bool = false,
@@ -399,7 +403,8 @@ const GameScene = struct {
                         }
                     },
                     .flame => {
-                        // TODO implement
+                        scene.flame_timer = flame_duration;
+                        // TODO add particle effect
                     },
                 }
             }
@@ -460,7 +465,7 @@ const GameScene = struct {
                     }
                     collided = collided or c;
                 }
-                if (collided) {
+                if (collided and scene.flame_timer <= 0) {
                     ball.pos = out;
                     ball.dir = m.reflect(ball.dir, normal);
                 }
@@ -565,6 +570,14 @@ const GameScene = struct {
 
         state.particles.update(dt);
 
+        flame: {
+            if (scene.flame_timer <= 0) break :flame;
+            scene.flame_timer -= dt;
+            if (scene.flame_timer > 0) break :flame;
+
+            scene.flame_timer = 0;
+        }
+
         death: {
             if (scene.death_timer <= 0) break :death;
             scene.death_timer -= dt;
@@ -614,7 +627,7 @@ const GameScene = struct {
         for (&scene.powerups) |*p| {
             if (p.active) continue;
             p.* = .{
-                .type = .split,
+                .type = rng.enumValue(PowerupType),
                 .pos = pos,
                 .active = true,
             };
