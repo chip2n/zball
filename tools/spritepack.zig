@@ -69,15 +69,18 @@ pub fn main() !void {
     const json = try file.readToEndAlloc(arena.allocator(), 1 << 30);
     const data = try parse(arena.allocator(), json);
 
-    _ = try out.write("const std = @import(\"std\");\n\n");
-    _ = try out.write("pub const Sprite = std.meta.FieldEnum(@TypeOf(sprites));\n\n");
-    _ = try out.write("const SpriteData = struct {\n");
-    _ = try out.write("    name: []const u8,\n");
-    _ = try out.write("    bounds: Rect,\n");
-    _ = try out.write("    center: ?Rect = null,\n");
-    _ = try out.write("};\n\n");
-    // TODO math module?
-    _ = try out.write("pub const Rect = struct { x: u32, y: u32, w: u32, h: u32 };\n\n");
+    _ = try out.write(
+        \\const std = @import("std");
+        \\const math = @import("math");
+        \\
+        \\pub const Sprite = std.meta.FieldEnum(@TypeOf(sprites));
+        \\const SpriteData = struct {
+        \\    name: []const u8,
+        \\    bounds: math.IRect,
+        \\    center: ?math.IRect = null,
+        \\};
+    );
+    _ = try out.write("\n");
     _ = try out.write("const sprite_arr = std.enums.EnumArray(Sprite, SpriteData).init(sprites);\n");
     _ = try out.write("pub fn get(sprite: Sprite) SpriteData {\n");
     _ = try out.write("    return sprite_arr.get(sprite);");

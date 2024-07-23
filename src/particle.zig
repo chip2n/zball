@@ -1,7 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 const sprites = @import("sprite");
-const m = @import("math.zig");
+const m = @import("math");
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const Sprite = sprites.Sprite;
@@ -100,13 +100,7 @@ pub const ParticleSystem = struct {
                 const p = em.particle(n, sys.time);
                 const sprite = sprites.get(em.sprite.?);
                 batch.render(.{
-                    // TODO I dislike this conversion
-                    .src = .{
-                        .x = @floatFromInt(sprite.bounds.x),
-                        .y = @floatFromInt(sprite.bounds.y),
-                        .w = @floatFromInt(sprite.bounds.w),
-                        .h = @floatFromInt(sprite.bounds.h),
-                    },
+                    .src = sprite.bounds,
                     .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
                 });
             }

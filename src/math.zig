@@ -1,24 +1,41 @@
 const std = @import("std");
 
-pub const Rect = struct {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
+pub const Rect = GenRect(f32);
+pub const IRect = GenRect(u32);
 
-    pub fn overlaps(self: Rect, other: Rect) bool {
-        // Rectangle has area 0
-        if (self.w == 0 or self.h == 0 or other.w == 0 or other.h == 0) return false;
+fn GenRect(comptime T: type) type {
+    return packed struct {
+        const Self = @This();
 
-        // One rectangle is on left side of other
-        if (self.x >= (other.x + other.w) or other.x >= (self.x + self.w)) return false;
+        x: T,
+        y: T,
+        w: T,
+        h: T,
 
-        // One rectangle is above other
-        if (other.y >= (self.y + self.h) or self.y >= (other.y + other.h)) return false;
+        pub fn center(self: Self) [2]f32 {
+            return .{ self.x + self.w / 2, self.y + self.h / 2 };
+        }
 
-        return true;
-    }
-};
+        pub fn overlaps(self: Self, other: Self) bool {
+            // Rectangle has area 0
+            if (self.w == 0 or self.h == 0 or other.w == 0 or other.h == 0) return false;
+
+            // One rectangle is on left side of other
+            if (self.x >= (other.x + other.w) or other.x >= (self.x + self.w)) return false;
+
+            // One rectangle is above other
+            if (other.y >= (self.y + self.h) or self.y >= (other.y + other.h)) return false;
+
+            return true;
+        }
+
+        pub fn containsPoint(self: Self, px: f32, py: f32) bool {
+            if (px < self.x or px > self.x + self.w) return false;
+            if (py < self.y or py > self.y + self.h) return false;
+            return true;
+        }
+    };
+}
 
 pub fn normalize(v: *[2]f32) void {
     const mag = magnitude(v.*);

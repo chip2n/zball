@@ -1,4 +1,4 @@
-const m = @import("math.zig");
+const m = @import("math");
 
 // TODO separate from math rect
 pub const Rect = struct {

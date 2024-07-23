@@ -1,8 +1,9 @@
 const std = @import("std");
 const root = @import("root");
 const Texture = @import("Texture.zig");
-const m = @import("math.zig");
+const m = @import("math");
 const Rect = m.Rect;
+const IRect = m.IRect;
 
 // TODO copied
 const max_quads = root.max_quads;
@@ -19,12 +20,12 @@ const RenderCommand = union(enum) {
         th: f32,
     },
     sprite: struct {
-        src: ?Rect,
+        src: ?IRect,
         dst: Rect,
     },
     nine_patch: struct {
-        src: Rect,
-        center: Rect,
+        src: IRect,
+        center: IRect,
         dst: Rect,
     },
 };
@@ -64,7 +65,7 @@ pub const BatchRenderer = struct {
         std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderOptions = struct { src: ?Rect = null, dst: Rect };
+    const RenderOptions = struct { src: ?IRect = null, dst: Rect };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         self.buf[self.idx] = .{
             .sprite = .{
@@ -76,7 +77,7 @@ pub const BatchRenderer = struct {
         std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderNinePatchOptions = struct { src: Rect, center: Rect, dst: Rect };
+    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         self.buf[self.idx] = .{
             .nine_patch = .{
@@ -132,8 +133,8 @@ pub const BatchRenderer = struct {
                     { // top-left corner
                         const w = c.center.x;
                         const h = c.center.y;
-                        const src = .{ .x = c.src.x, .y = c.src.y, .w = w, .h = h };
-                        const dst = .{ .x = c.dst.x, .y = c.dst.y, .w = w, .h = h };
+                        const src = IRect{ .x = c.src.x, .y = c.src.y, .w = w, .h = h };
+                        const dst = Rect{ .x = c.dst.x, .y = c.dst.y, .w = @floatFromInt(w), .h = @floatFromInt(h) };
                         quad(.{
                             .buf = self.verts[i..],
                             .src = src,
@@ -148,17 +149,17 @@ pub const BatchRenderer = struct {
                     { // top-right corner
                         const w = c.src.w - c.center.x - c.center.w;
                         const h = c.center.y;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x + c.center.x + c.center.w,
                             .y = c.src.y,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
-                            .x = c.dst.x + c.dst.w - w,
+                        const dst = Rect{
+                            .x = c.dst.x + c.dst.w - @as(f32, @floatFromInt(w)),
                             .y = c.dst.y,
-                            .w = w,
-                            .h = h,
+                            .w = @floatFromInt(w),
+                            .h = @floatFromInt(h),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -174,17 +175,17 @@ pub const BatchRenderer = struct {
                     { // bottom-left corner
                         const w = c.center.x;
                         const h = c.src.h - c.center.y - c.center.h;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x,
                             .y = c.src.y + c.src.h - h,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
+                        const dst = Rect{
                             .x = c.dst.x,
-                            .y = c.dst.y + c.dst.h - h,
-                            .w = w,
-                            .h = h,
+                            .y = c.dst.y + c.dst.h - @as(f32, @floatFromInt(h)),
+                            .w = @floatFromInt(w),
+                            .h = @floatFromInt(h),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -200,17 +201,17 @@ pub const BatchRenderer = struct {
                     { // bottom-right corner
                         const w = c.src.w - c.center.x - c.center.w;
                         const h = c.src.h - c.center.y - c.center.h;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x + c.center.x + c.center.w,
                             .y = c.src.y + c.src.h - h,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
-                            .x = c.dst.x + c.dst.w - w,
-                            .y = c.dst.y + c.dst.h - h,
-                            .w = w,
-                            .h = h,
+                        const dst = Rect{
+                            .x = c.dst.x + c.dst.w - @as(f32, @floatFromInt(w)),
+                            .y = c.dst.y + c.dst.h - @as(f32, @floatFromInt(h)),
+                            .w = @floatFromInt(w),
+                            .h = @floatFromInt(h),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -226,17 +227,17 @@ pub const BatchRenderer = struct {
                     { // top edge
                         const w = c.center.w;
                         const h = c.center.y;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x + c.center.x,
                             .y = c.src.y,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
-                            .x = c.dst.x + c.center.x,
+                        const dst = Rect{
+                            .x = c.dst.x + @as(f32, @floatFromInt(c.center.x)),
                             .y = c.dst.y,
-                            .w = c.dst.w - (c.src.w - c.center.w),
-                            .h = h,
+                            .w = c.dst.w - @as(f32, @floatFromInt(c.src.w - c.center.w)),
+                            .h = @floatFromInt(h),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -252,17 +253,17 @@ pub const BatchRenderer = struct {
                     { // right edge
                         const w = c.src.w - c.center.x - c.center.w;
                         const h = c.center.h;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x + c.center.x + c.center.w,
                             .y = c.src.y + c.center.y,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
-                            .x = c.dst.x + c.dst.w - w,
-                            .y = c.dst.y + c.center.y,
-                            .w = w,
-                            .h = c.dst.h - (c.src.h - c.center.h),
+                        const dst = Rect{
+                            .x = c.dst.x + c.dst.w - @as(f32, @floatFromInt(w)),
+                            .y = c.dst.y + @as(f32, @floatFromInt(c.center.y)),
+                            .w = @floatFromInt(w),
+                            .h = c.dst.h - @as(f32, @floatFromInt(c.src.h - c.center.h)),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -278,17 +279,17 @@ pub const BatchRenderer = struct {
                     { // bottom edge
                         const w = c.center.w;
                         const h = c.src.h - c.center.y - c.center.h;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x + c.center.x,
                             .y = c.src.y + c.center.y + c.center.h,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
-                            .x = c.dst.x + c.center.x,
-                            .y = c.dst.y + c.dst.h - h,
-                            .w = c.dst.w - (c.src.w - c.center.w),
-                            .h = h,
+                        const dst = Rect{
+                            .x = c.dst.x + @as(f32, @floatFromInt(c.center.x)),
+                            .y = c.dst.y + c.dst.h - @as(f32, @floatFromInt(h)),
+                            .w = c.dst.w - @as(f32, @floatFromInt(c.src.w - c.center.w)),
+                            .h = @floatFromInt(h),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -304,17 +305,17 @@ pub const BatchRenderer = struct {
                     { // left edge
                         const w = c.center.x;
                         const h = c.center.h;
-                        const src = .{
+                        const src = IRect{
                             .x = c.src.x,
                             .y = c.src.y + c.center.y,
                             .w = w,
                             .h = h,
                         };
-                        const dst = .{
+                        const dst = Rect{
                             .x = c.dst.x,
-                            .y = c.dst.y + c.center.y,
-                            .w = w,
-                            .h = c.dst.h - (c.src.h - c.center.h),
+                            .y = c.dst.y + @as(f32, @floatFromInt(c.center.y)),
+                            .w = @floatFromInt(w),
+                            .h = c.dst.h - @as(f32, @floatFromInt(c.src.h - c.center.h)),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -337,10 +338,10 @@ pub const BatchRenderer = struct {
                             .h = h,
                         };
                         const dst = .{
-                            .x = c.dst.x + c.center.x,
-                            .y = c.dst.y + c.center.y,
-                            .w = c.dst.w - (c.src.w - c.center.w),
-                            .h = c.dst.h - (c.src.h - c.center.h),
+                            .x = c.dst.x + @as(f32, @floatFromInt(c.center.x)),
+                            .y = c.dst.y + @as(f32, @floatFromInt(c.center.y)),
+                            .w = c.dst.w - @as(f32, @floatFromInt(c.src.w - c.center.w)),
+                            .h = c.dst.h - @as(f32, @floatFromInt(c.src.h - c.center.h)),
                         };
                         quad(.{
                             .buf = self.verts[i..],
@@ -375,7 +376,7 @@ const Vertex = extern struct {
 
 const QuadOptions = struct {
     buf: []Vertex,
-    src: ?Rect = null,
+    src: ?IRect = null,
     dst: Rect,
     // reference texture dimensions
     tw: f32,
@@ -392,7 +393,13 @@ fn quad(v: QuadOptions) void {
     const tw = v.tw;
     const th = v.th;
 
-    const src = v.src orelse Rect{ .x = 0, .y = 0, .w = tw, .h = th };
+    const src = if (v.src) |r| Rect{
+        .x = @floatFromInt(r.x),
+        .y = @floatFromInt(r.y),
+        .w = @floatFromInt(r.w),
+        .h = @floatFromInt(r.h),
+    } else Rect{ .x = 0, .y = 0, .w = tw, .h = th };
+
     const uv1 = .{ src.x / tw, src.y / th };
     const uv2 = .{ (src.x + src.w) / tw, (src.y + src.h) / th };
     // zig fmt: off

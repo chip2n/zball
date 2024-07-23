@@ -140,6 +140,50 @@ pub fn build(b: *Build) !void {
     }
 }
 
+fn addDeps(
+    b: *Build,
+    step: *Build.Step.Compile,
+    deps: CoreDependencies,
+) void {
+    // sokol
+    const mod_sokol = deps.sokol.module("sokol");
+    step.root_module.addImport("sokol", mod_sokol);
+
+    // imgui
+    const mod_cimgui = deps.cimgui.module("cimgui");
+    step.root_module.addImport("cimgui", mod_cimgui);
+
+    // stb
+    step.addIncludePath(deps.stb.path("."));
+    step.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
+
+    // zmath
+    const mod_zmath = deps.zmath.module("root");
+    step.root_module.addImport("zmath", mod_zmath);
+
+    // math
+    const mod_math = b.addModule("math", .{
+        .root_source_file = b.path("src/math.zig"),
+    });
+    step.root_module.addImport("math", mod_math);
+
+    // tools
+    step.root_module.addAnonymousImport("shader", .{
+        .root_source_file = deps.shader_path,
+        .imports = &.{
+            .{ .name = "sokol", .module = mod_sokol },
+            .{ .name = "zmath", .module = mod_zmath },
+        },
+    });
+    step.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
+    step.root_module.addAnonymousImport("sprite", .{
+        .root_source_file = deps.sprite_path,
+        .imports = &.{
+            .{ .name = "math", .module = mod_math },
+        },
+    });
+}
+
 fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
     var dir = try std.fs.cwd().openDir("assets", .{ .iterate = true });
     defer dir.close();
@@ -205,32 +249,7 @@ fn buildNative(
         .optimize = optimize,
     });
 
-    // sokol
-    const mod_sokol = deps.sokol.module("sokol");
-    exe.root_module.addImport("sokol", mod_sokol);
-
-    // imgui
-    const mod_cimgui = deps.cimgui.module("cimgui");
-    exe.root_module.addImport("cimgui", mod_cimgui);
-
-    // stb
-    exe.addIncludePath(deps.stb.path("."));
-    exe.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
-
-    // zmath
-    const mod_zmath = deps.zmath.module("root");
-    exe.root_module.addImport("zmath", mod_zmath);
-
-    // tools
-    exe.root_module.addAnonymousImport("shader", .{
-        .root_source_file = deps.shader_path,
-        .imports = &.{
-            .{ .name = "sokol", .module = mod_sokol },
-            .{ .name = "zmath", .module = mod_zmath },
-        },
-    });
-    exe.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
-    exe.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_path });
+    addDeps(b, exe, deps);
 
     if (install) {
         b.installArtifact(exe);
@@ -262,32 +281,7 @@ fn buildWeb(
         .root_source_file = b.path("src/main.zig"),
     });
 
-    // sokol
-    const mod_sokol = deps.sokol.module("sokol");
-    lib.root_module.addImport("sokol", mod_sokol);
-
-    // imgui
-    const mod_cimgui = deps.cimgui.module("cimgui");
-    lib.root_module.addImport("cimgui", mod_cimgui);
-
-    // stb
-    lib.addIncludePath(deps.stb.path("."));
-    lib.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
-
-    // zmath
-    const mod_zmath = deps.zmath.module("root");
-    lib.root_module.addImport("zmath", mod_zmath);
-
-    // tools
-    lib.root_module.addAnonymousImport("shader", .{
-        .root_source_file = deps.shader_path,
-        .imports = &.{
-            .{ .name = "sokol", .module = mod_sokol },
-            .{ .name = "zmath", .module = mod_zmath },
-        },
-    });
-    lib.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
-    lib.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_path });
+    addDeps(b, lib, deps);
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
