@@ -56,16 +56,17 @@ pub fn main() !void {
     try out.print("pub const descent = {};\n\n", .{descent});
     try out.print("pub const line_gap = {};\n\n", .{line_gap});
 
-    // TODO multiline strings
-    _ = try out.write("pub const Glyph = struct {\n");
-    _ = try out.write("    ch: u8,\n");
-    _ = try out.write("    x: u32,\n");
-    _ = try out.write("    y: u32,\n");
-    _ = try out.write("    w: u32,\n");
-    _ = try out.write("    h: u32,\n");
-    _ = try out.write("    bbox: [4]i32,\n");
-    _ = try out.write("    advance: u32,\n");
-    _ = try out.write("};\n");
+    _ = try out.write(
+        \\pub const Glyph = struct {
+        \\    ch: u8,
+        \\    x: u32,
+        \\    y: u32,
+        \\    w: u32,
+        \\    h: u32,
+        \\    bbox: [4]i32,
+        \\    advance: u32,
+        \\};
+    );
 
     _ = try out.write("pub const glyphs = [_]Glyph{\n");
     for (glyphs) |glyph| {
@@ -86,7 +87,6 @@ pub fn main() !void {
         );
     }
     _ = try out.write("};");
-
     _ = try out.write("\n\n");
 
     return std.process.cleanExit();

@@ -81,11 +81,13 @@ pub fn main() !void {
         \\};
     );
     _ = try out.write("\n");
-    _ = try out.write("const sprite_arr = std.enums.EnumArray(Sprite, SpriteData).init(sprites);\n");
-    _ = try out.write("pub fn get(sprite: Sprite) SpriteData {\n");
-    _ = try out.write("    return sprite_arr.get(sprite);");
-    _ = try out.write("}\n\n");
-
+    _ = try out.write(
+        \\const sprite_arr = std.enums.EnumArray(Sprite, SpriteData).init(sprites);
+        \\pub fn get(sprite: Sprite) SpriteData {
+        \\    return sprite_arr.get(sprite);
+        \\}
+    );
+    _ = try out.write("\n");
     _ = try out.write("pub const sprites = .{\n");
     for (data.meta.slices) |s| {
         const b = s.keys[0].bounds;
