@@ -76,7 +76,8 @@ pub fn main() !void {
     _ = try out.write("    bounds: Rect,\n");
     _ = try out.write("    center: ?Rect = null,\n");
     _ = try out.write("};\n\n");
-    _ = try out.write("const Rect = struct { x: u32, y: u32, w: u32, h: u32 };\n\n");
+    // TODO math module?
+    _ = try out.write("pub const Rect = struct { x: u32, y: u32, w: u32, h: u32 };\n\n");
     _ = try out.write("const sprite_arr = std.enums.EnumArray(Sprite, SpriteData).init(sprites);\n");
     _ = try out.write("pub fn get(sprite: Sprite) SpriteData {\n");
     _ = try out.write("    return sprite_arr.get(sprite);");
@@ -85,7 +86,7 @@ pub fn main() !void {
     _ = try out.write("pub const sprites = .{\n");
     for (data.meta.slices) |s| {
         const b = s.keys[0].bounds;
-        try out.print("    .{s} = .{{\n", .{s.name});
+        try out.print("    .{s} = SpriteData{{\n", .{s.name});
         try out.print("        .name = \"{s}\",\n", .{s.name});
         try out.print("        .bounds = .{{ .x = {}, .y = {}, .w = {}, .h = {} }},\n", .{ b.x, b.y, b.w, b.h });
         if (s.keys[0].center) |c| {

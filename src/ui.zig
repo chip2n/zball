@@ -64,15 +64,25 @@ pub fn end() void {
     const dialog = sprite.sprites.dialog;
     batch.setTexture(tex_spritesheet);
 
-    var w = win_width + dialog.bounds.w - dialog.center.w;
+    var w = win_width + @as(f32, @floatFromInt(dialog.bounds.w - dialog.center.?.w));
     w += padding * 2;
-    var h = win_height + dialog.bounds.h - dialog.center.h;
+    var h = win_height + @as(f32, @floatFromInt(dialog.bounds.h - dialog.center.?.h));
     h += padding * 2;
     const offset = .{ @round(-pivot[0] * w), @round(-pivot[1] * h) };
 
     batch.renderNinePatch(.{
-        .src = dialog.bounds,
-        .center = dialog.center,
+        .src = .{
+            .x = @floatFromInt(dialog.bounds.x),
+            .y = @floatFromInt(dialog.bounds.y),
+            .w = @floatFromInt(dialog.bounds.w),
+            .h = @floatFromInt(dialog.bounds.h),
+        },
+        .center = .{
+            .x = @floatFromInt(dialog.center.?.x),
+            .y = @floatFromInt(dialog.center.?.y),
+            .w = @floatFromInt(dialog.center.?.w),
+            .h = @floatFromInt(dialog.center.?.h),
+        },
         .dst = .{
             .x = origin[0] + offset[0],
             .y = origin[1] + offset[1],
@@ -101,7 +111,12 @@ pub fn end() void {
                     const rail_active = sprite.sprites.slider_rail_active;
                     // inactive rail
                     batch.render(.{
-                        .src = rail_inactive.bounds,
+                        .src = .{
+                            .x = @floatFromInt(rail_inactive.bounds.x),
+                            .y = @floatFromInt(rail_inactive.bounds.y),
+                            .w = @floatFromInt(rail_inactive.bounds.w),
+                            .h = @floatFromInt(rail_inactive.bounds.h),
+                        },
                         .dst = .{
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
@@ -111,7 +126,12 @@ pub fn end() void {
                     });
                     // active rail
                     batch.render(.{
-                        .src = rail_active.bounds,
+                        .src = .{
+                            .x = @floatFromInt(rail_active.bounds.x),
+                            .y = @floatFromInt(rail_active.bounds.y),
+                            .w = @floatFromInt(rail_active.bounds.w),
+                            .h = @floatFromInt(rail_active.bounds.h),
+                        },
                         .dst = .{
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
@@ -121,7 +141,12 @@ pub fn end() void {
                     });
                     // thumb
                     batch.render(.{
-                        .src = thumb.bounds,
+                        .src = .{
+                            .x = @floatFromInt(thumb.bounds.x),
+                            .y = @floatFromInt(thumb.bounds.y),
+                            .w = @floatFromInt(thumb.bounds.w),
+                            .h = @floatFromInt(thumb.bounds.h),
+                        },
                         .dst = .{
                             .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, thumb.bounds.w) / 2),
                             .y = s.y + padding + offset[1] - @floor(@as(f32, thumb.bounds.h) / 2),

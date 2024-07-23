@@ -169,6 +169,16 @@ const Scene = union(enum) {
     }
 };
 
+// TODO
+fn rect(r: sprite.Rect) m.Rect {
+    return .{
+        .x = @floatFromInt(r.x),
+        .y = @floatFromInt(r.y),
+        .w = @floatFromInt(r.w),
+        .h = @floatFromInt(r.h),
+    };
+}
+
 const TitleScene = struct {
     idx: usize = 0,
 
@@ -181,7 +191,7 @@ const TitleScene = struct {
         state.batch.setTexture(state.spritesheet_texture);
 
         state.batch.render(.{
-            .src = sprite.sprites.title.bounds,
+            .src = rect(sprite.sprites.title.bounds),
             .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
         });
 
@@ -372,12 +382,16 @@ const GameScene = struct {
             };
             for (&scene.powerups) |*p| {
                 if (!p.active) continue;
+                const sp = switch (p.type) {
+                    .split => sprite.sprites.powerup_split,
+                    .flame => sprite.sprites.powerup_flame,
+                };
                 const powerup_bounds = m.Rect{
                     // TODO just store bounds? also using hard coded split sprite here
                     .x = p.pos[0],
                     .y = p.pos[1],
-                    .w = sprite.sprites.powerup_split.bounds.w,
-                    .h = sprite.sprites.powerup_split.bounds.h,
+                    .w = @floatFromInt(sp.bounds.w),
+                    .h = @floatFromInt(sp.bounds.h),
                 };
                 if (!paddle_bounds.overlaps(powerup_bounds)) continue;
                 p.active = false;
@@ -675,7 +689,7 @@ const GameScene = struct {
         for (scene.balls) |ball| {
             if (!ball.active) continue;
             state.batch.render(.{
-                .src = sprite.sprites.ball.bounds,
+                .src = rect(sprite.sprites.ball.bounds),
                 .dst = .{
                     .x = ball.pos[0] - ball_w / 2,
                     .y = ball.pos[1] - ball_h / 2,
@@ -687,7 +701,7 @@ const GameScene = struct {
 
         // Render paddle
         state.batch.render(.{
-            .src = sprite.sprites.paddle.bounds,
+            .src = rect(sprite.sprites.paddle.bounds),
             .dst = .{
                 .x = scene.paddle_pos[0] - paddle_w / 2,
                 .y = scene.paddle_pos[1] - paddle_h,
@@ -699,14 +713,18 @@ const GameScene = struct {
         // Render powerups
         for (scene.powerups) |p| {
             if (!p.active) continue;
-            const s = sprite.sprites.powerup_split;
+            // TODO duplicated
+            const sp = switch (p.type) {
+                .split => sprite.sprites.powerup_split,
+                .flame => sprite.sprites.powerup_flame,
+            };
             state.batch.render(.{
-                .src = s.bounds,
+                .src = rect(sp.bounds),
                 .dst = .{
                     .x = p.pos[0],
                     .y = p.pos[1],
-                    .w = s.bounds.w,
-                    .h = s.bounds.h,
+                    .w = @floatFromInt(sp.bounds.w),
+                    .h = @floatFromInt(sp.bounds.h),
                 },
             });
         }
@@ -718,10 +736,10 @@ const GameScene = struct {
             const d = sprite.sprites.dialog;
             state.batch.render(.{
                 .src = .{
-                    .x = d.bounds.x + d.center.x,
-                    .y = d.bounds.y + d.center.y,
-                    .w = d.center.w,
-                    .h = d.center.h,
+                    .x = @floatFromInt(d.bounds.x + d.center.?.x),
+                    .y = @floatFromInt(d.bounds.y + d.center.?.y),
+                    .w = @floatFromInt(d.center.?.w),
+                    .h = @floatFromInt(d.center.?.h),
                 },
                 .dst = .{
                     .x = 0,
@@ -733,7 +751,7 @@ const GameScene = struct {
             for (0..scene.lives) |i| {
                 const fi: f32 = @floatFromInt(i);
                 state.batch.render(.{
-                    .src = sprite.sprites.ball.bounds,
+                    .src = rect(sprite.sprites.ball.bounds),
                     .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
                 });
             }
@@ -754,7 +772,7 @@ const GameScene = struct {
                 // overlay
                 state.batch.setTexture(state.spritesheet_texture);
                 state.batch.render(.{
-                    .src = sprite.sprites.overlay.bounds,
+                    .src = rect(sprite.sprites.overlay.bounds),
                     .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
                 });
 
@@ -782,7 +800,7 @@ const GameScene = struct {
                 // overlay
                 state.batch.setTexture(state.spritesheet_texture);
                 state.batch.render(.{
-                    .src = sprite.sprites.overlay.bounds,
+                    .src = rect(sprite.sprites.overlay.bounds),
                     .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
                 });
 
