@@ -945,7 +945,15 @@ fn renderGui() void {
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
-    // _ = ig.igText("Ball pos: %f %f", scene.ball_pos[0], scene.ball_pos[1]);
+
+    switch (state.scene) {
+        .game => |s| {
+            _ = ig.igText("Death timer: %.4g", s.death_timer);
+            _ = ig.igText("Flame timer: %.4g", s.flame_timer);
+        },
+        else => {},
+    }
+
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
 
     if (ig.igButton("emit", .{})) {
