@@ -22,8 +22,8 @@ const ParticleEffect = union(enum) {
 
 const Particle = struct {
     active: bool = false,
-    // sprite: ?Sprite = null,
     pos: [2]f32 = .{ 0, 0 },
+    z: f32 = 0,
     vel: [2]f32 = .{ 0, 0 },
     time: f32 = 0,
     lifetime: f32 = 0,
@@ -122,6 +122,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                     .active = true,
                     // .sprite = sprite,
                     .pos = m.vadd(self.pos, pos),
+                    .z = rng.float(f32),
                     .vel = vel,
                     .time = 0,
                     .lifetime = p_lifetime,
@@ -159,6 +160,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                         .w = w,
                         .h = h,
                     },
+                    .z = p.z,
                 });
             }
         }

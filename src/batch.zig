@@ -12,21 +12,37 @@ const max_tex = 16; // TODO needed to increase this because we don't sort batche
 
 const TextureId = usize;
 
+// TODO we can look up tw and th afterwards. Also, tex could be just u8
+const TextureInfo = struct { id: usize, tw: f32, th: f32 };
+
 const RenderCommand = union(enum) {
-    switch_tex: struct {
-        tex: usize,
-        tw: f32,
-        th: f32,
-    },
     sprite: struct {
         src: ?IRect,
         dst: Rect,
+        z: f32,
+        tex: TextureInfo,
     },
     nine_patch: struct {
         src: IRect,
         center: IRect,
         dst: Rect,
+        z: f32,
+        tex: TextureInfo,
     },
+
+    fn z_index(cmd: RenderCommand) f32 {
+        return switch (cmd) {
+            .sprite => |c| c.z,
+            .nine_patch => |c| c.z,
+        };
+    }
+
+    fn tex(cmd: RenderCommand) TextureInfo {
+        return switch (cmd) {
+            .sprite => |c| c.tex,
+            .nine_patch => |c| c.tex,
+        };
+    }
 };
 
 pub const BatchResult = struct {
@@ -46,57 +62,69 @@ pub const BatchRenderer = struct {
     buf: [max_cmds]RenderCommand = undefined,
     idx: usize = 0,
 
+    tex: ?Texture = null,
+
     pub fn init() BatchRenderer {
         return .{};
     }
 
     pub fn setTexture(self: *BatchRenderer, tex: Texture) void {
-        const tw: f32 = @floatFromInt(tex.desc.width);
-        const th: f32 = @floatFromInt(tex.desc.height);
-        self.buf[self.idx] = .{
-            .switch_tex = .{
-                .tex = tex.id,
-                .tw = tw,
-                .th = th,
-            },
-        };
-        self.idx += 1;
-        std.debug.assert(self.idx < self.buf.len);
+        self.tex = tex;
+        // const tw: f32 = @floatFromInt(tex.desc.width);
+        // const th: f32 = @floatFromInt(tex.desc.height);
+        // self.buf[self.idx] = .{
+        //     .switch_tex = .{
+        //         .tex = tex.id,
+        //         .tw = tw,
+        //         .th = th,
+        //     },
+        // };
+        // self.idx += 1;
+        // std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderOptions = struct { src: ?IRect = null, dst: Rect };
+    const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0 };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
+        const tw: f32 = @floatFromInt(self.tex.?.desc.width);
+        const th: f32 = @floatFromInt(self.tex.?.desc.height);
         self.buf[self.idx] = .{
             .sprite = .{
                 .src = v.src,
                 .dst = v.dst,
+                .z = v.z,
+                .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
         };
         self.idx += 1;
         std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect };
+    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0 };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
+        const tw: f32 = @floatFromInt(self.tex.?.desc.width);
+        const th: f32 = @floatFromInt(self.tex.?.desc.height);
         self.buf[self.idx] = .{
             .nine_patch = .{
                 .src = v.src,
                 .center = v.center,
                 .dst = v.dst,
+                .z = v.z,
+                .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
         };
         self.idx += 1;
         std.debug.assert(self.idx < self.buf.len);
     }
 
-    // TODO: Implement z-ordering and use sorting to avoid tex switches
     pub fn commit(self: *BatchRenderer) BatchResult {
         const buf = self.buf[0..self.idx];
 
-        // First command must be setting the texture
-        var tex = buf[0].switch_tex.tex;
-        var tw = buf[0].switch_tex.tw;
-        var th = buf[0].switch_tex.th;
+        // Order draw calls by z-index first and texture ID second
+        std.mem.sort(RenderCommand, buf, {}, cmdLessThan);
+
+        var tex = buf[0].tex().id;
+        var tw = buf[0].tex().tw;
+        var th = buf[0].tex().th;
 
         var i: usize = 0;
         var batch_idx: usize = 0;
@@ -104,23 +132,28 @@ pub const BatchRenderer = struct {
         self.batches[0].offset = 0;
         self.batches[0].len = 0;
         self.batches[0].tex = tex;
-        for (buf[1..]) |cmd| {
+
+        for (buf) |cmd| {
+            if (tex != cmd.tex().id) {
+                // Make new batch
+                tex = cmd.tex().id;
+                tw = cmd.tex().tw;
+                th = cmd.tex().th;
+
+                batch_idx += 1;
+                batch_count += 1;
+                self.batches[batch_idx].offset = i;
+                self.batches[batch_idx].len = 0;
+                self.batches[batch_idx].tex = tex;
+            }
+
             switch (cmd) {
-                .switch_tex => |c| {
-                    tex = c.tex;
-                    tw = c.tw;
-                    th = c.th;
-                    batch_idx += 1;
-                    batch_count += 1;
-                    self.batches[batch_idx].offset = i;
-                    self.batches[batch_idx].len = 0;
-                    self.batches[batch_idx].tex = c.tex;
-                },
                 .sprite => |c| {
                     quad(.{
                         .buf = self.verts[i..],
                         .src = c.src,
                         .dst = c.dst,
+                        .z = c.z,
                         .tw = tw,
                         .th = th,
                     });
@@ -138,6 +171,7 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
                             .tw = tw,
                             .th = th,
                         });
@@ -360,6 +394,17 @@ pub const BatchRenderer = struct {
 
         return .{ .verts = self.verts[0..i], .batches = self.batches[0..batch_count] };
     }
+
+    fn cmdLessThan(_: void, lhs: RenderCommand, rhs: RenderCommand) bool {
+        const lz = lhs.z_index();
+        const lt = lhs.tex();
+        const rz = rhs.z_index();
+        const rt = rhs.tex();
+
+        if (lz < rz) return true;
+        if (lz > rz) return false;
+        return lt.id < rt.id;
+    }
 };
 
 // TODO below is copied - where does it belong?
@@ -377,6 +422,7 @@ const QuadOptions = struct {
     buf: []Vertex,
     src: ?IRect = null,
     dst: Rect,
+    z: f32 = 0,
     // reference texture dimensions
     tw: f32,
     th: f32,
@@ -386,7 +432,7 @@ fn quad(v: QuadOptions) void {
     const buf = v.buf;
     const x = v.dst.x;
     const y = v.dst.y;
-    const z = 0;
+    const z = v.z;
     const w = v.dst.w;
     const h = v.dst.h;
     const tw = v.tw;

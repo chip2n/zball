@@ -282,7 +282,6 @@ const FlameEmitter = @import("particle2.zig").Emitter(.{
         .{ .sprite = .particle_flame_4, .weight = 0.4 },
         .{ .sprite = .particle_flame_3, .weight = 0.5 },
         .{ .sprite = .particle_flame_2, .weight = 0.5 },
-        .{ .sprite = .particle_flame_1, .weight = 0.5 },
     },
     .count = 30,
     .lifetime = 1,
@@ -704,6 +703,16 @@ const GameScene = struct {
         // Render balls
         for (scene.balls) |ball| {
             if (!ball.active) continue;
+            state.batch.render(.{
+                .src = sprite.sprites.ball.bounds,
+                .dst = .{
+                    .x = ball.pos[0] - ball_w / 2,
+                    .y = ball.pos[1] - ball_h / 2,
+                    .w = ball_w,
+                    .h = ball_h,
+                },
+                .z = 2,
+            });
 
             // If flame is active, render flame effect
             // if (scene.flame_timer > 0) {
@@ -725,15 +734,6 @@ const GameScene = struct {
             // }
 
             scene.flame_emitter.render(&state.batch);
-            state.batch.render(.{
-                .src = sprite.sprites.ball.bounds,
-                .dst = .{
-                    .x = ball.pos[0] - ball_w / 2,
-                    .y = ball.pos[1] - ball_h / 2,
-                    .w = ball_w,
-                    .h = ball_h,
-                },
-            });
         }
 
         // Render paddle
@@ -1208,7 +1208,7 @@ fn quad(v: QuadOptions) void {
 fn computeVsParams() shd.VsParams {
     const model = zm.identity();
     const view = zm.translation(-state.camera[0], -state.camera[1], 0);
-    const proj = zm.orthographicLh(
+    const proj = zm.orthographicRh(
         @floatFromInt(viewport_size[0]),
         @floatFromInt(viewport_size[1]),
         -10,
