@@ -10,13 +10,23 @@ const max_emitters = 32;
 
 const p_size = .{ 1, 3 };
 
+const ParticleEffect = union(enum) {
+    none: void,
+    explosion: struct {
+        sprite: Sprite,
+        start_angle: f32 = 0,
+        sweep: f32 = std.math.tau,
+    },
+    flame: struct {
+        sprite: Sprite,
+    },
+};
+
 const Emitter = struct {
     start_time: f32 = 0,
     origin: [2]f32 = .{ 0, 0 },
     count: usize = 0,
-    start_angle: f32 = 0,
-    sweep: f32 = 0,
-    sprite: ?Sprite = null,
+    effect: ParticleEffect = .none,
     active: bool = false,
 
     /// Get position of particle N at time T
@@ -27,29 +37,41 @@ const Emitter = struct {
 
         const dt = t - em.start_time;
 
-        const bw = root.brick_w;
-        const bh = root.brick_h;
-        const sz = p_size[0] + rng.float(f32) * (p_size[1] - p_size[0]);
-        const pos = [2]f32{
-            em.origin[0] + rng.float(f32) * bw - bw / 2 - sz / 2,
-            em.origin[1] + rng.float(f32) * bh - bh / 2 - sz / 2,
-        };
-        var vel = [2]f32{ 1, 0 };
-        m.vrot(&vel, rng.float(f32) * em.sweep + em.start_angle);
+        return switch (em.effect) {
+            .none => .{ .pos = .{ 0, 0 }, .sz = 0 },
+            .explosion => |e| blk: {
+                const bw = root.brick_w;
+                const bh = root.brick_h;
+                const sz = p_size[0] + rng.float(f32) * (p_size[1] - p_size[0]);
+                const pos = [2]f32{
+                    em.origin[0] + rng.float(f32) * bw - bw / 2 - sz / 2,
+                    em.origin[1] + rng.float(f32) * bh - bh / 2 - sz / 2,
+                };
+                var vel = [2]f32{ 1, 0 };
+                m.vrot(&vel, rng.float(f32) * e.sweep + e.start_angle);
 
-        const gravity = 100;
+                const gravity = 100;
 
-        const speed = rng.float(f32) * 150 + 10;
-        vel = m.vmul(vel, speed);
+                const speed = rng.float(f32) * 150 + 10;
+                vel = m.vmul(vel, speed);
 
-        vel[1] = vel[1] + gravity * dt;
+                vel[1] = vel[1] + gravity * dt;
 
-        return .{
-            .pos = .{
-                pos[0] + vel[0] * dt,
-                pos[1] + vel[1] * dt + 0.5 * gravity * dt * dt,
+                break :blk .{
+                    .pos = .{
+                        pos[0] + vel[0] * dt,
+                        pos[1] + vel[1] * dt + 0.5 * gravity * dt * dt,
+                    },
+                    .sz = sz,
+                };
             },
-            .sz = sz,
+            .flame => blk: {
+                const pos = [2]f32{
+                    em.origin[0],
+                    em.origin[1],
+                };
+                break :blk .{ .pos = pos, .sz = 8 };
+            },
         };
     }
 };
@@ -61,9 +83,7 @@ pub const ParticleSystem = struct {
     pub const EmitDesc = struct {
         origin: [2]f32,
         count: usize,
-        sprite: Sprite,
-        start_angle: f32 = 0,
-        sweep: f32 = std.math.tau,
+        effect: ParticleEffect,
     };
     pub fn emit(sys: *ParticleSystem, v: EmitDesc) void {
         for (&sys.emitters) |*em| {
@@ -72,9 +92,7 @@ pub const ParticleSystem = struct {
                 .start_time = sys.time,
                 .origin = v.origin,
                 .count = v.count,
-                .sprite = v.sprite,
-                .start_angle = v.start_angle,
-                .sweep = v.sweep,
+                .effect = v.effect,
                 .active = true,
             };
             break;
@@ -96,13 +114,29 @@ pub const ParticleSystem = struct {
     pub fn render(sys: ParticleSystem, batch: *BatchRenderer) void {
         for (sys.emitters) |em| {
             if (!em.active) continue;
-            for (0..em.count) |n| {
-                const p = em.particle(n, sys.time);
-                const sprite = sprites.get(em.sprite.?);
-                batch.render(.{
-                    .src = sprite.bounds,
-                    .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
-                });
+
+            switch (em.effect) {
+                .none => {},
+                .explosion => |e| {
+                    for (0..em.count) |n| {
+                        const p = em.particle(n, sys.time);
+                        const sprite = sprites.get(e.sprite);
+                        batch.render(.{
+                            .src = sprite.bounds,
+                            .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
+                        });
+                    }
+                },
+                .flame => |e| {
+                    for (0..em.count) |n| {
+                        const p = em.particle(n, sys.time);
+                        const sprite = sprites.get(e.sprite);
+                        batch.render(.{
+                            .src = sprite.bounds,
+                            .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
+                        });
+                    }
+                },
             }
         }
     }

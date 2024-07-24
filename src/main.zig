@@ -40,7 +40,7 @@ const offscreen_sample_count = 1;
 
 const num_audio_samples = 32;
 
-pub const max_quads = 512;
+pub const max_quads = 1024;
 pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const powerup_freq = 0.3;
@@ -275,6 +275,22 @@ const Ball = struct {
     active: bool = false,
 };
 
+const FlameEmitter = @import("particle2.zig").Emitter(.{
+    .sprites = &.{
+        .{ .sprite = .particle_flame_6, .weight = 0.2 },
+        .{ .sprite = .particle_flame_5, .weight = 0.2 },
+        .{ .sprite = .particle_flame_4, .weight = 0.4 },
+        .{ .sprite = .particle_flame_3, .weight = 0.5 },
+        .{ .sprite = .particle_flame_2, .weight = 0.5 },
+        .{ .sprite = .particle_flame_1, .weight = 0.5 },
+    },
+    .count = 30,
+    .lifetime = 1,
+    .lifetime_randomness = 0.5,
+    .gravity = -30,
+    .spawn_radius = 2,
+});
+
 const GameScene = struct {
     bricks: [num_rows * num_bricks]Brick = undefined,
     powerups: [16]Powerup = .{.{}} ** 16,
@@ -294,6 +310,7 @@ const GameScene = struct {
     balls: [max_balls]Ball = .{.{}} ** max_balls,
     ball_state: BallState = .idle,
 
+    flame_emitter: FlameEmitter = FlameEmitter.init(),
     flame_timer: f32 = 0,
 
     inputs: struct {
@@ -412,8 +429,7 @@ const GameScene = struct {
                         }
                     },
                     .flame => {
-                        scene.flame_timer = flame_duration;
-                        // TODO add particle effect
+                        scene.addFlamePowerup();
                     },
                 }
             }
@@ -462,7 +478,7 @@ const GameScene = struct {
                         state.particles.emit(.{
                             .origin = brick_pos,
                             .count = 10,
-                            .sprite = brick.sprite,
+                            .effect = .{ .explosion = .{ .sprite = brick.sprite } },
                         });
                         state.audio.play(.{ .clip = .explode });
                         scene.score += 100;
@@ -560,9 +576,13 @@ const GameScene = struct {
                     state.particles.emit(.{
                         .origin = ball.pos,
                         .count = 10,
-                        .sprite = .ball,
-                        .start_angle = -std.math.pi,
-                        .sweep = std.math.pi,
+                        .effect = .{
+                            .explosion = .{
+                                .sprite = .ball,
+                                .start_angle = -std.math.pi,
+                                .sweep = std.math.pi,
+                            },
+                        },
                     });
                     ball.active = false;
 
@@ -578,6 +598,8 @@ const GameScene = struct {
         }
 
         state.particles.update(dt);
+        scene.flame_emitter.pos = scene.balls[0].pos; // TODO apply to all balls
+        scene.flame_emitter.update(dt);
 
         flame: {
             if (scene.flame_timer <= 0) break :flame;
@@ -606,6 +628,10 @@ const GameScene = struct {
                 scene.ball_state = .idle;
             }
         }
+    }
+
+    fn addFlamePowerup(scene: *GameScene) void {
+        scene.flame_timer = flame_duration;
     }
 
     fn paused(scene: *GameScene) bool {
@@ -678,6 +704,27 @@ const GameScene = struct {
         // Render balls
         for (scene.balls) |ball| {
             if (!ball.active) continue;
+
+            // If flame is active, render flame effect
+            // if (scene.flame_timer > 0) {
+            // ParticleSystem.renderImmediate(.{
+            //     .batch = &state.batch,
+            //     .seed = scene.flame_seed,
+            //     .pos = .{
+            //         ball.pos[0] + ball_w / 2,
+            //         ball.pos[1] + ball_h / 2,
+            //     },
+            //     .time = flame_duration - scene.flame_timer,
+            //     .effect = .{
+            //         // .flame = .{ .sprite = .particle_flame_big },
+            //         .explosion = .{
+            //             .sprite = .ball,
+            //         },
+            //     },
+            // });
+            // }
+
+            scene.flame_emitter.render(&state.batch);
             state.batch.render(.{
                 .src = sprite.sprites.ball.bounds,
                 .dst = .{
@@ -947,9 +994,12 @@ fn renderGui() void {
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
 
     switch (state.scene) {
-        .game => |s| {
+        .game => |*s| {
             _ = ig.igText("Death timer: %.4g", s.death_timer);
             _ = ig.igText("Flame timer: %.4g", s.flame_timer);
+            if (ig.igButton("Enable flame", .{})) {
+                s.addFlamePowerup();
+            }
         },
         else => {},
     }
@@ -960,9 +1010,13 @@ fn renderGui() void {
         state.particles.emit(.{
             .origin = .{ 40, 40 },
             .count = 10,
-            .sprite = .ball,
-            .start_angle = -std.math.pi,
-            .sweep = std.math.pi,
+            .effect = .{
+                .explosion = .{
+                    .sprite = .ball,
+                    .start_angle = -std.math.pi,
+                    .sweep = std.math.pi,
+                },
+            },
         });
     }
     if (ig.igButton("Play sound", .{})) {

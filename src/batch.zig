@@ -5,7 +5,6 @@ const m = @import("math");
 const Rect = m.Rect;
 const IRect = m.IRect;
 
-// TODO copied
 const max_quads = root.max_quads;
 const max_verts = root.max_verts;
 const max_cmds = max_quads;
