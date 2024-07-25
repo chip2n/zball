@@ -89,8 +89,6 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         pub fn update(self: *Self, dt: f32) void {
-            if (!self.emitting) return;
-
             const rng = self.prng.random();
 
             self.time += dt;
@@ -112,31 +110,31 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
             if (self.spawn_timer >= spawn_freq) {
                 self.spawn_timer = 0;
 
-                const len = rng.float(f32) * desc.spawn_radius;
-                var pos = [2]f32{ len, 0 };
-                const angle = rng.float(f32) * std.math.tau;
-                m.vrot(&pos, angle);
-                const vel = .{ 0, 0 };
+                if (self.emitting) {
+                    const len = rng.float(f32) * desc.spawn_radius;
+                    var pos = [2]f32{ len, 0 };
+                    const angle = rng.float(f32) * std.math.tau;
+                    m.vrot(&pos, angle);
+                    const vel = .{ 0, 0 };
 
-                const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
+                    const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
 
-                // const sprite = desc.sprites[rng.weightedIndex(f32, &weights)].sprite;
-                self.particles[self.idx] = .{
-                    .active = true,
-                    // .sprite = sprite,
-                    .pos = m.vadd(self.pos, pos),
-                    .z = rng.float(f32),
-                    .vel = vel,
-                    .time = 0,
-                    .lifetime = p_lifetime,
-                };
-                self.idx = (self.idx + 1) % (count - 1);
+                    // const sprite = desc.sprites[rng.weightedIndex(f32, &weights)].sprite;
+                    self.particles[self.idx] = .{
+                        .active = true,
+                        // .sprite = sprite,
+                        .pos = m.vadd(self.pos, pos),
+                        .z = rng.float(f32),
+                        .vel = vel,
+                        .time = 0,
+                        .lifetime = p_lifetime,
+                    };
+                    self.idx = (self.idx + 1) % (count - 1);
+                }
             }
         }
 
         pub fn render(self: Self, batch: *BatchRenderer) void {
-            if (!self.emitting) return;
-
             for (self.particles) |p| {
                 if (!p.active) continue;
 
