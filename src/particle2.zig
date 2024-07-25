@@ -8,6 +8,10 @@ const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const Sprite = sprites.Sprite;
 
+const vadd = m.vadd;
+const vmul = m.vmul;
+const vrot = m.vrot;
+
 const ParticleEffect = union(enum) {
     none: void,
     explosion: struct {
@@ -38,8 +42,20 @@ const EmitterDesc = struct {
     /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
     sprites: []const SpriteDesc,
 
+    /// Whether particles should keep emitting after lifetime expires
+    loop: bool,
+
     /// How many particles to emit in one cycle
     count: usize,
+
+    /// The base velocity for each particle
+    velocity: [2]f32,
+
+    /// Randomness of the velocity magnitude
+    velocity_randomness: f32,
+
+    /// Random rotation (in radians) applied to the base velocity
+    velocity_sweep: f32,
 
     /// Maximum time each particle will live, in seconds
     lifetime: f32,
@@ -52,6 +68,10 @@ const EmitterDesc = struct {
 
     /// Defines circle in which the particles will spawn randomly
     spawn_radius: f32,
+
+    /// Defines how packed the particles will be in one cycle (0 means even
+    /// distribution, 1 means emit all particles instantly)
+    explosiveness: f32,
 };
 
 pub fn Emitter(comptime desc: EmitterDesc) type {
@@ -61,7 +81,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
     const min_lifetime = lifetime * (1 - lifetime_randomness);
     const gravity = desc.gravity;
 
-    const spawn_freq = lifetime / @as(f32, @floatFromInt(count));
+    const spawn_freq = (lifetime / @as(f32, @floatFromInt(count)) * (1 - desc.explosiveness));
 
     const weight_sum = blk: {
         var sum: f32 = 0;
@@ -81,17 +101,23 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         idx: usize = 0,
         time: f32 = 0,
         spawn_timer: f32 = 0,
+        cycle_timer: f32 = 0,
+        next_spawn: f32 = 0,
+        cycle_spawns: usize = 0,
         prng: std.Random.DefaultPrng,
 
-        pub fn init() Self {
-            const prng = std.Random.DefaultPrng.init(0);
+        const EmitterInitDesc = struct {
+            seed: u64,
+        };
+
+        pub fn init(v: EmitterInitDesc) Self {
+            const prng = std.Random.DefaultPrng.init(v.seed);
             return .{ .prng = prng };
         }
 
         pub fn update(self: *Self, dt: f32) void {
-            const rng = self.prng.random();
-
             self.time += dt;
+
             for (&self.particles) |*p| {
                 p.vel[1] = p.vel[1] + gravity * dt;
                 p.pos = .{
@@ -105,33 +131,65 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
 
             self.spawn_timer += dt;
 
-            // TODO we need z index for this to look better
             // Time to spawn another particle?
-            if (self.spawn_timer >= spawn_freq) {
-                self.spawn_timer = 0;
-
-                if (self.emitting) {
-                    const len = rng.float(f32) * desc.spawn_radius;
-                    var pos = [2]f32{ len, 0 };
-                    const angle = rng.float(f32) * std.math.tau;
-                    m.vrot(&pos, angle);
-                    const vel = .{ 0, 0 };
-
-                    const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
-
-                    // const sprite = desc.sprites[rng.weightedIndex(f32, &weights)].sprite;
-                    self.particles[self.idx] = .{
-                        .active = true,
-                        // .sprite = sprite,
-                        .pos = m.vadd(self.pos, pos),
-                        .z = rng.float(f32),
-                        .vel = vel,
-                        .time = 0,
-                        .lifetime = p_lifetime,
-                    };
-                    self.idx = (self.idx + 1) % (count - 1);
+            if (self.emitting) {
+                const start = self.cycle_timer;
+                const end = start + dt;
+                var t = start;
+                while (t < end and self.cycle_spawns < count) {
+                    if (self.next_spawn <= t) {
+                        self.spawnParticle();
+                    }
+                    t += spawn_freq;
                 }
+
+                self.cycle_timer = end;
+            } else {
+                self.cycle_timer = 0;
+                self.cycle_spawns = 0;
+                self.next_spawn = 0;
             }
+
+            // Next cycle?
+            if (self.cycle_timer >= lifetime) {
+                self.cycle_timer = 0;
+                self.cycle_spawns = 0;
+                self.next_spawn = 0;
+                if (!desc.loop) self.emitting = false;
+            }
+        }
+
+        fn spawnParticle(self: *Self) void {
+            const rng = self.prng.random();
+            const pos = blk: {
+                const len = rng.float(f32) * desc.spawn_radius;
+                var result = [2]f32{ len, 0 };
+                const angle = rng.float(f32) * std.math.tau;
+                vrot(&result, angle);
+                break :blk result;
+            };
+
+            const vel = blk: {
+                var result = desc.velocity;
+                result = vmul(result, (1 - rng.float(f32) * desc.velocity_randomness));
+                const angle = rng.float(f32) * desc.velocity_sweep;
+                vrot(&result, angle);
+                break :blk result;
+            };
+
+            const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
+
+            self.particles[self.idx] = .{
+                .active = true,
+                .pos = vadd(self.pos, pos),
+                .z = rng.float(f32),
+                .vel = vel,
+                .time = 0,
+                .lifetime = p_lifetime,
+            };
+            self.idx = (self.idx + 1) % (count - 1);
+            self.cycle_spawns += 1;
+            self.next_spawn += spawn_freq;
         }
 
         pub fn render(self: Self, batch: *BatchRenderer) void {

@@ -272,7 +272,7 @@ const Powerup = struct {
 const Ball = struct {
     pos: [2]f32 = initial_ball_pos,
     dir: [2]f32 = initial_ball_dir,
-    flame_emitter: FlameEmitter = FlameEmitter.init(),
+    flame_emitter: FlameEmitter = undefined,
     active: bool = false,
 };
 
@@ -284,11 +284,32 @@ const FlameEmitter = @import("particle2.zig").Emitter(.{
         .{ .sprite = .particle_flame_3, .weight = 0.5 },
         .{ .sprite = .particle_flame_2, .weight = 0.5 },
     },
+    .loop = true,
     .count = 30,
+    .velocity = .{ 0, 0 },
+    .velocity_randomness = 0,
+    .velocity_sweep = 0,
     .lifetime = 1,
     .lifetime_randomness = 0.5,
     .gravity = -30,
     .spawn_radius = 2,
+    .explosiveness = 0,
+});
+
+const ExplosionEmitter = @import("particle2.zig").Emitter(.{
+    .sprites = &.{
+        .{ .sprite = .particle_flame_2, .weight = 1 },
+    },
+    .loop = false,
+    .count = 20,
+    .velocity = .{ 100, 0 },
+    .velocity_randomness = 1,
+    .velocity_sweep = std.math.tau,
+    .lifetime = 1,
+    .lifetime_randomness = 0.1,
+    .gravity = 100,
+    .spawn_radius = 2,
+    .explosiveness = 1,
 });
 
 const GameScene = struct {
@@ -296,6 +317,9 @@ const GameScene = struct {
     powerups: [16]Powerup = .{.{}} ** 16,
 
     menu: GameMenu = .{},
+
+    // TODO
+    explosion_emitter: ExplosionEmitter = undefined,
 
     time: f32 = 0,
     lives: u8 = 3,
@@ -328,12 +352,10 @@ const GameScene = struct {
     fn init() GameScene {
         var scene = GameScene{};
 
+        scene.explosion_emitter = ExplosionEmitter.init(.{ .seed = @as(u64, @bitCast(std.time.milliTimestamp())) });
+
         // spawn one ball to start
-        scene.balls[0] = .{
-            .pos = initial_ball_pos,
-            .dir = initial_ball_dir,
-            .active = true,
-        };
+        _ = scene.spawnBall(initial_ball_pos, initial_ball_dir) catch unreachable;
 
         // initialize bricks
         const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
@@ -592,6 +614,7 @@ const GameScene = struct {
         }
 
         state.particles.update(dt);
+        scene.explosion_emitter.update(dt);
 
         flame: {
             if (scene.flame_timer <= 0) break :flame;
@@ -643,6 +666,7 @@ const GameScene = struct {
             ball.* = .{
                 .pos = pos,
                 .dir = dir,
+                .flame_emitter = FlameEmitter.init(.{ .seed = @as(u64, @bitCast(std.time.milliTimestamp())) }),
                 .active = true,
             };
             return ball;
@@ -759,6 +783,7 @@ const GameScene = struct {
 
         // Render particles
         state.particles.render(&state.batch);
+        scene.explosion_emitter.render(&state.batch);
 
         { // Top status bar
             const d = sprite.sprites.dialog;
@@ -991,6 +1016,14 @@ fn renderGui() void {
             if (ig.igButton("Enable flame", .{})) {
                 s.addFlamePowerup();
             }
+            if (ig.igButton("Trigger explosion", .{})) {
+                s.explosion_emitter = ExplosionEmitter.init(.{ .seed = @as(u64, @bitCast(std.time.milliTimestamp())) });
+                s.explosion_emitter.emitting = true;
+                s.explosion_emitter.pos = .{ 100, 100 };
+            }
+
+            // @import("debug.zig").renderEmitterGui(s.explosion_emitter);
+            @import("debug.zig").renderEmitterGui(s.balls[0].flame_emitter);
         },
         else => {},
     }
