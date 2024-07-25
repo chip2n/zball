@@ -272,6 +272,7 @@ const Powerup = struct {
 const Ball = struct {
     pos: [2]f32 = initial_ball_pos,
     dir: [2]f32 = initial_ball_dir,
+    flame_emitter: FlameEmitter = FlameEmitter.init(),
     active: bool = false,
 };
 
@@ -309,7 +310,6 @@ const GameScene = struct {
     balls: [max_balls]Ball = .{.{}} ** max_balls,
     ball_state: BallState = .idle,
 
-    flame_emitter: FlameEmitter = FlameEmitter.init(),
     flame_timer: f32 = 0,
 
     inputs: struct {
@@ -409,8 +409,6 @@ const GameScene = struct {
                 state.audio.play(.{ .clip = .powerup });
                 switch (p.type) {
                     .split => {
-                        // var new_balls = std.BoundedArray(Ball, max_balls){ .len = 0 };
-                        // var new_balls: [max_balls]Ball = .{.{}} ** max_balls;
                         var new_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
 
                         for (scene.balls, 0..) |ball, i| {
@@ -418,13 +416,7 @@ const GameScene = struct {
                             new_balls.append(i) catch continue;
                         }
                         for (new_balls.constSlice()) |i| {
-                            var ball = &scene.balls[i];
-                            var d1 = ball.dir;
-                            var d2 = ball.dir;
-                            m.vrot(&d1, -std.math.pi / 8.0);
-                            m.vrot(&d2, std.math.pi / 8.0);
-                            ball.dir = d1;
-                            scene.spawnBall(ball.pos, d2) catch break;
+                            scene.splitBall(&scene.balls[i]) catch break;
                         }
                     },
                     .flame => {
@@ -594,11 +586,12 @@ const GameScene = struct {
                     }
                 }
             }
+
+            ball.flame_emitter.pos = ball.pos;
+            ball.flame_emitter.update(dt);
         }
 
         state.particles.update(dt);
-        scene.flame_emitter.pos = scene.balls[0].pos; // TODO apply to all balls
-        scene.flame_emitter.update(dt);
 
         flame: {
             if (scene.flame_timer <= 0) break :flame;
@@ -606,6 +599,10 @@ const GameScene = struct {
             if (scene.flame_timer > 0) break :flame;
 
             scene.flame_timer = 0;
+
+            for (&scene.balls) |*ball| {
+                ball.flame_emitter.emitting = false;
+            }
         }
 
         death: {
@@ -631,13 +628,16 @@ const GameScene = struct {
 
     fn addFlamePowerup(scene: *GameScene) void {
         scene.flame_timer = flame_duration;
+        for (&scene.balls) |*ball| {
+            ball.flame_emitter.emitting = true;
+        }
     }
 
     fn paused(scene: *GameScene) bool {
         return scene.menu.state != .none;
     }
 
-    fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !void {
+    fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !*Ball {
         for (&scene.balls) |*ball| {
             if (ball.active) continue;
             ball.* = .{
@@ -645,10 +645,20 @@ const GameScene = struct {
                 .dir = dir,
                 .active = true,
             };
-            break;
+            return ball;
         } else {
             return error.MaxBallsReached;
         }
+    }
+
+    fn splitBall(scene: *GameScene, ball: *Ball) !void {
+        var d1 = ball.dir;
+        var d2 = ball.dir;
+        m.vrot(&d1, -std.math.pi / 8.0);
+        m.vrot(&d2, std.math.pi / 8.0);
+        ball.dir = d1;
+        const new_ball = try scene.spawnBall(ball.pos, d2);
+        new_ball.flame_emitter.emitting = ball.flame_emitter.emitting;
     }
 
     fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
@@ -714,26 +724,7 @@ const GameScene = struct {
                 .z = 2,
             });
 
-            // If flame is active, render flame effect
-            // if (scene.flame_timer > 0) {
-            // ParticleSystem.renderImmediate(.{
-            //     .batch = &state.batch,
-            //     .seed = scene.flame_seed,
-            //     .pos = .{
-            //         ball.pos[0] + ball_w / 2,
-            //         ball.pos[1] + ball_h / 2,
-            //     },
-            //     .time = flame_duration - scene.flame_timer,
-            //     .effect = .{
-            //         // .flame = .{ .sprite = .particle_flame_big },
-            //         .explosion = .{
-            //             .sprite = .ball,
-            //         },
-            //     },
-            // });
-            // }
-
-            scene.flame_emitter.render(&state.batch);
+            ball.flame_emitter.render(&state.batch);
         }
 
         // Render paddle

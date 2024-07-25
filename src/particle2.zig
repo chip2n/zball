@@ -74,6 +74,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
     return struct {
         const Self = @This();
 
+        emitting: bool = false,
         pos: [2]f32 = .{ 0, 0 },
 
         particles: [count]Particle = .{.{}} ** count,
@@ -88,6 +89,8 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         pub fn update(self: *Self, dt: f32) void {
+            if (!self.emitting) return;
+
             const rng = self.prng.random();
 
             self.time += dt;
@@ -132,6 +135,8 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         pub fn render(self: Self, batch: *BatchRenderer) void {
+            if (!self.emitting) return;
+
             for (self.particles) |p| {
                 if (!p.active) continue;
 
