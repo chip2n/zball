@@ -19,10 +19,10 @@ const fwatch = @import("fwatch");
 
 const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
-const ParticleSystem = @import("particle.zig").ParticleSystem;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 const AudioSystem = @import("audio.zig").AudioSystem;
 
+const particle = @import("particle.zig");
 const utils = @import("utils.zig");
 
 const ig = @import("cimgui");
@@ -132,7 +132,6 @@ const state = struct {
     var scene: Scene = .{ .title = .{} };
 
     var batch = BatchRenderer.init();
-    var particles = ParticleSystem{};
 
     var audio = AudioSystem{};
 };
@@ -274,10 +273,12 @@ const Ball = struct {
     pos: [2]f32 = initial_ball_pos,
     dir: [2]f32 = initial_ball_dir,
     flame: FlameEmitter = undefined,
+    // TODO: make this explosion unique
+    explosion: ExplosionEmitter = undefined,
     active: bool = false,
 };
 
-const FlameEmitter = @import("particle2.zig").Emitter(.{
+const FlameEmitter = particle.Emitter(.{
     .loop = true,
     .count = 30,
     .velocity = .{ 0, 0 },
@@ -299,7 +300,7 @@ const particleFlameSprites = &.{
 };
 
 // TODO add random rotations?
-const ExplosionEmitter = @import("particle2.zig").Emitter(.{
+const ExplosionEmitter = particle.Emitter(.{
     .loop = false,
     .count = 20,
     .velocity = .{ 100, 0 },
@@ -312,22 +313,28 @@ const ExplosionEmitter = @import("particle2.zig").Emitter(.{
     .explosiveness = 1,
 });
 
-const brick_sprite_regions = .{
+const brick_explosion_regions = .{
+    .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
+    .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
+};
+const ball_explosion_regions = .{
     .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
     .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
 };
 
-const brick_sprites1 = .{.{ .sprite = .brick1, .weight = 1, .regions = &brick_sprite_regions }};
-const brick_sprites2 = .{.{ .sprite = .brick2, .weight = 1, .regions = &brick_sprite_regions }};
-const brick_sprites3 = .{.{ .sprite = .brick3, .weight = 1, .regions = &brick_sprite_regions }};
-const brick_sprites4 = .{.{ .sprite = .brick4, .weight = 1, .regions = &brick_sprite_regions }};
+const brick_sprites1 = .{.{ .sprite = .brick1, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites2 = .{.{ .sprite = .brick2, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites3 = .{.{ .sprite = .brick3, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites4 = .{.{ .sprite = .brick4, .weight = 1, .regions = &brick_explosion_regions }};
+const ball_sprites = .{.{ .sprite = .ball, .weight = 1, .regions = &ball_explosion_regions }};
 
-fn particleExplosionSprites(s: sprite.Sprite) []const @import("particle2.zig").SpriteDesc {
+fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     return switch (s) {
         .brick1 => &brick_sprites1,
         .brick2 => &brick_sprites2,
         .brick3 => &brick_sprites3,
         .brick4 => &brick_sprites4,
+        .ball => &ball_sprites,
         else => unreachable,
     };
 }
@@ -612,17 +619,12 @@ const GameScene = struct {
                 );
                 if (c) {
                     state.audio.play(.{ .clip = .explode, .vol = 0.5 });
-                    state.particles.emit(.{
-                        .origin = ball.pos,
-                        .count = 10,
-                        .effect = .{
-                            .explosion = .{
-                                .sprite = .ball,
-                                .start_angle = -std.math.pi,
-                                .sweep = std.math.pi,
-                            },
-                        },
+                    // TODO avoid recreation
+                    ball.explosion = ExplosionEmitter.init(.{
+                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                        .sprites = particleExplosionSprites(.ball),
                     });
+                    ball.explosion.emitting = true;
                     ball.active = false;
                     ball.flame.emitting = false;
 
@@ -641,6 +643,9 @@ const GameScene = struct {
         for (&scene.balls) |*ball| {
             ball.flame.pos = ball.pos;
             ball.flame.update(dt);
+
+            ball.explosion.pos = ball.pos;
+            ball.explosion.update(dt);
         }
         for (&scene.bricks) |*brick| {
             brick.emitter.update(dt);
@@ -699,6 +704,10 @@ const GameScene = struct {
                 .flame = FlameEmitter.init(.{
                     .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
                     .sprites = particleFlameSprites,
+                }),
+                .explosion = ExplosionEmitter.init(.{
+                    .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                    .sprites = particleExplosionSprites(.ball),
                 }),
                 .active = true,
             };
@@ -815,6 +824,7 @@ const GameScene = struct {
         // Render particles
         for (scene.balls) |ball| {
             ball.flame.render(&state.batch);
+            ball.explosion.render(&state.batch);
         }
         for (scene.bricks) |brick| {
             brick.emitter.render(&state.batch);
@@ -1060,19 +1070,6 @@ fn renderGui() void {
 
     _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
 
-    if (ig.igButton("emit", .{})) {
-        state.particles.emit(.{
-            .origin = .{ 40, 40 },
-            .count = 10,
-            .effect = .{
-                .explosion = .{
-                    .sprite = .ball,
-                    .start_angle = -std.math.pi,
-                    .sweep = std.math.pi,
-                },
-            },
-        });
-    }
     if (ig.igButton("Play sound", .{})) {
         state.audio.play(.{ .clip = .bounce });
     }

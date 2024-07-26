@@ -1,3 +1,5 @@
+// TODO use for all particle effects
+
 const std = @import("std");
 const root = @import("root");
 const sprites = @import("sprite");
@@ -6,9 +8,10 @@ const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const Sprite = sprites.Sprite;
 
-const max_emitters = 32;
-
-const p_size = .{ 1, 3 };
+const IRect = m.IRect;
+const vadd = m.vadd;
+const vmul = m.vmul;
+const vrot = m.vrot;
 
 const ParticleEffect = union(enum) {
     none: void,
@@ -22,122 +25,242 @@ const ParticleEffect = union(enum) {
     },
 };
 
-const Emitter = struct {
-    start_time: f32 = 0,
-    origin: [2]f32 = .{ 0, 0 },
-    count: usize = 0,
-    effect: ParticleEffect = .none,
+const Particle = struct {
+    seed: u8 = 0,
     active: bool = false,
-
-    /// Get position of particle N at time T
-    fn particle(em: Emitter, n: usize, t: f32) struct { pos: [2]f32, sz: f32 } {
-        const seed = @as(u64, @intFromFloat(em.start_time * 1000)) + @as(u64, @intCast(n));
-        var prng = std.Random.DefaultPrng.init(seed);
-        const rng = prng.random();
-
-        const dt = t - em.start_time;
-
-        return switch (em.effect) {
-            .none => .{ .pos = .{ 0, 0 }, .sz = 0 },
-            .explosion => |e| blk: {
-                const bw = root.brick_w;
-                const bh = root.brick_h;
-                const sz = p_size[0] + rng.float(f32) * (p_size[1] - p_size[0]);
-                const pos = [2]f32{
-                    em.origin[0] + rng.float(f32) * bw - bw / 2 - sz / 2,
-                    em.origin[1] + rng.float(f32) * bh - bh / 2 - sz / 2,
-                };
-                var vel = [2]f32{ 1, 0 };
-                m.vrot(&vel, rng.float(f32) * e.sweep + e.start_angle);
-
-                const gravity = 100;
-
-                const speed = rng.float(f32) * 150 + 10;
-                vel = m.vmul(vel, speed);
-
-                vel[1] = vel[1] + gravity * dt;
-
-                break :blk .{
-                    .pos = .{
-                        pos[0] + vel[0] * dt,
-                        pos[1] + vel[1] * dt + 0.5 * gravity * dt * dt,
-                    },
-                    .sz = sz,
-                };
-            },
-            .flame => blk: {
-                const pos = [2]f32{
-                    em.origin[0],
-                    em.origin[1],
-                };
-                break :blk .{ .pos = pos, .sz = 8 };
-            },
-        };
-    }
-};
-
-pub const ParticleSystem = struct {
-    emitters: [max_emitters]Emitter = .{.{}} ** max_emitters,
+    pos: [2]f32 = .{ 0, 0 },
+    z: f32 = 0,
+    vel: [2]f32 = .{ 0, 0 },
     time: f32 = 0,
-
-    pub const EmitDesc = struct {
-        origin: [2]f32,
-        count: usize,
-        effect: ParticleEffect,
-    };
-    pub fn emit(sys: *ParticleSystem, v: EmitDesc) void {
-        for (&sys.emitters) |*em| {
-            if (em.active) continue;
-            em.* = .{
-                .start_time = sys.time,
-                .origin = v.origin,
-                .count = v.count,
-                .effect = v.effect,
-                .active = true,
-            };
-            break;
-        } else {
-            std.log.debug("Max emitter count reached", .{});
-        }
-    }
-
-    pub fn update(sys: *ParticleSystem, dt: f32) void {
-        sys.time += dt;
-        for (&sys.emitters) |*em| {
-            if (!em.active) continue;
-            if (sys.time - em.start_time > 2) {
-                em.active = false;
-            }
-        }
-    }
-
-    pub fn render(sys: ParticleSystem, batch: *BatchRenderer) void {
-        for (sys.emitters) |em| {
-            if (!em.active) continue;
-
-            switch (em.effect) {
-                .none => {},
-                .explosion => |e| {
-                    for (0..em.count) |n| {
-                        const p = em.particle(n, sys.time);
-                        const sprite = sprites.get(e.sprite);
-                        batch.render(.{
-                            .src = sprite.bounds,
-                            .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
-                        });
-                    }
-                },
-                .flame => |e| {
-                    for (0..em.count) |n| {
-                        const p = em.particle(n, sys.time);
-                        const sprite = sprites.get(e.sprite);
-                        batch.render(.{
-                            .src = sprite.bounds,
-                            .dst = .{ .x = p.pos[0], .y = p.pos[1], .w = p.sz, .h = p.sz },
-                        });
-                    }
-                },
-            }
-        }
-    }
+    lifetime: f32 = 0,
 };
+
+pub const SpriteDesc = struct {
+    sprite: Sprite,
+    weight: f32,
+    regions: []const struct { bounds: IRect, weight: f32 } = &.{},
+};
+
+const EmitterDesc = struct {
+    /// Whether particles should keep emitting after lifetime expires
+    loop: bool,
+
+    /// How many particles to emit in one cycle
+    count: usize,
+
+    /// The base velocity for each particle
+    velocity: [2]f32,
+
+    /// Randomness of the velocity magnitude
+    velocity_randomness: f32,
+
+    /// Random rotation (in radians) applied to the base velocity
+    velocity_sweep: f32,
+
+    /// Maximum time each particle will live, in seconds
+    lifetime: f32,
+
+    /// Randomness of lifetime value
+    lifetime_randomness: f32,
+
+    /// The gravity applied to each particle
+    gravity: f32,
+
+    /// Defines circle in which the particles will spawn randomly
+    spawn_radius: f32,
+
+    /// Defines how packed the particles will be in one cycle (0 means even
+    /// distribution, 1 means emit all particles instantly)
+    explosiveness: f32,
+};
+
+// TODO Remove comptime usage - everything can be tweaked during runtime. Needs allocator in this case (unless we make count fixed)
+pub fn Emitter(comptime desc: EmitterDesc) type {
+    const count = desc.count;
+    const lifetime = desc.lifetime;
+    const lifetime_randomness = desc.lifetime_randomness;
+    const min_lifetime = lifetime * (1 - lifetime_randomness);
+    const gravity = desc.gravity;
+
+    const spawn_freq = (lifetime / @as(f32, @floatFromInt(count)) * (1 - desc.explosiveness));
+
+    return struct {
+        const Self = @This();
+
+        emitting: bool = false,
+        pos: [2]f32 = .{ 0, 0 },
+
+        /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
+        sprites: []const SpriteDesc,
+
+        particles: [count]Particle = .{.{}} ** count,
+        idx: usize = 0,
+        time: f32 = 0,
+        spawn_timer: f32 = 0,
+        cycle_timer: f32 = 0,
+        next_spawn: f32 = 0,
+        cycle_spawns: usize = 0,
+        prng: std.Random.DefaultPrng,
+
+        const EmitterInitDesc = struct {
+            seed: u64,
+            sprites: []const SpriteDesc,
+        };
+
+        pub fn init(v: EmitterInitDesc) Self {
+            const prng = std.Random.DefaultPrng.init(v.seed);
+            return .{
+                .sprites = v.sprites,
+                .prng = prng,
+            };
+        }
+
+        pub fn update(self: *Self, dt: f32) void {
+            self.time += dt;
+
+            for (&self.particles) |*p| {
+                p.vel[1] = p.vel[1] + gravity * dt;
+                p.pos = .{
+                    p.pos[0] + p.vel[0] * dt,
+                    p.pos[1] + p.vel[1] * dt,
+                };
+                p.time += dt;
+
+                if (p.time >= p.lifetime) p.active = false;
+            }
+
+            self.spawn_timer += dt;
+
+            // Time to spawn another particle?
+            if (self.emitting) {
+                const start = self.cycle_timer;
+                const end = start + dt;
+                var t = start;
+                while (t < end and self.cycle_spawns < count) {
+                    if (self.next_spawn <= t) {
+                        self.spawnParticle();
+                    }
+                    t += spawn_freq;
+                }
+
+                self.cycle_timer = end;
+            } else {
+                self.cycle_timer = 0;
+                self.cycle_spawns = 0;
+                self.next_spawn = 0;
+            }
+
+            // Next cycle?
+            if (self.cycle_timer >= lifetime) {
+                self.cycle_timer = 0;
+                self.cycle_spawns = 0;
+                self.next_spawn = 0;
+                if (!desc.loop) self.emitting = false;
+            }
+        }
+
+        fn spawnParticle(self: *Self) void {
+            const rng = self.prng.random();
+            const pos = blk: {
+                const len = rng.float(f32) * desc.spawn_radius;
+                var result = [2]f32{ len, 0 };
+                const angle = rng.float(f32) * std.math.tau;
+                vrot(&result, angle);
+                break :blk result;
+            };
+
+            const vel = blk: {
+                var result = desc.velocity;
+                result = vmul(result, (1 - rng.float(f32) * desc.velocity_randomness));
+                const angle = rng.float(f32) * desc.velocity_sweep;
+                vrot(&result, angle);
+                break :blk result;
+            };
+
+            const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
+
+            self.particles[self.idx] = .{
+                .seed = rng.int(u8),
+                .active = true,
+                .pos = vadd(self.pos, pos),
+                .z = rng.float(f32),
+                .vel = vel,
+                .time = 0,
+                .lifetime = p_lifetime,
+            };
+            self.idx = (self.idx + 1) % (count - 1);
+            self.cycle_spawns += 1;
+            self.next_spawn += spawn_freq;
+        }
+
+        pub fn render(self: Self, batch: *BatchRenderer) void {
+            // TODO cache
+            const weight_sum = blk: {
+                var sum: f32 = 0;
+                for (self.sprites) |s| {
+                    sum += s.weight;
+                }
+                break :blk sum;
+            };
+
+            for (self.particles) |p| {
+                if (!p.active) continue;
+
+                // Figure out which sprite should be rendered based on how long
+                // the particle has been alive
+                const sprite_factor = p.time / lifetime;
+                std.debug.assert(p.time < lifetime);
+                var sprite_desc: SpriteDesc = undefined;
+
+                {
+                    var i: f32 = 0;
+                    for (self.sprites) |s| {
+                        i += s.weight;
+                        if (i >= sprite_factor * weight_sum) {
+                            sprite_desc = s;
+                            break;
+                        }
+                    } else continue;
+                }
+
+                const sprite = sprites.get(sprite_desc.sprite);
+
+                // Should we use a region of this sprite, or the whole thing?
+                const src = blk: {
+                    if (sprite_desc.regions.len > 0) {
+                        const idx = p.seed % sprite_desc.regions.len;
+                        const region = sprite_desc.regions[idx].bounds;
+                        break :blk IRect{
+                            .x = sprite.bounds.x + region.x,
+                            .y = sprite.bounds.y + region.y,
+                            .w = region.w,
+                            .h = region.h,
+                        };
+                    }
+                    break :blk sprite.bounds;
+                };
+
+                const w: f32 = @floatFromInt(src.w);
+                const h: f32 = @floatFromInt(src.h);
+                batch.render(.{
+                    .src = src,
+                    .dst = .{
+                        .x = p.pos[0] - w / 2,
+                        .y = p.pos[1] - h / 2,
+                        .w = w,
+                        .h = h,
+                    },
+                    .z = p.z,
+                });
+            }
+        }
+    };
+}
+
+fn weightArray(arr: anytype) []const f32 {
+    var weights: [arr.len]f32 = undefined;
+    for (arr, &weights) |x, *w| {
+        w.* = x.weight;
+    }
+    return weights;
+}

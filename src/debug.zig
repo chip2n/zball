@@ -1,4 +1,4 @@
-const particle = @import("particle2.zig");
+const particle = @import("particle.zig");
 const sokol = @import("sokol");
 
 const ig = @import("cimgui");
