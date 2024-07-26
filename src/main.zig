@@ -687,6 +687,7 @@ const GameScene = struct {
     fn addFlamePowerup(scene: *GameScene) void {
         scene.flame_timer = flame_duration;
         for (&scene.balls) |*ball| {
+            if (!ball.active) continue;
             ball.flame.emitting = true;
         }
     }
