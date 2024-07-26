@@ -8,6 +8,7 @@ const BatchRenderer = @import("batch.zig").BatchRenderer;
 
 const Sprite = sprites.Sprite;
 
+const IRect = m.IRect;
 const vadd = m.vadd;
 const vmul = m.vmul;
 const vrot = m.vrot;
@@ -25,6 +26,7 @@ const ParticleEffect = union(enum) {
 };
 
 const Particle = struct {
+    seed: u8 = 0,
     active: bool = false,
     pos: [2]f32 = .{ 0, 0 },
     z: f32 = 0,
@@ -33,15 +35,13 @@ const Particle = struct {
     lifetime: f32 = 0,
 };
 
-const SpriteDesc = struct {
+pub const SpriteDesc = struct {
     sprite: Sprite,
     weight: f32,
+    regions: []const struct { bounds: IRect, weight: f32 } = &.{},
 };
 
 const EmitterDesc = struct {
-    /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
-    sprites: []const SpriteDesc,
-
     /// Whether particles should keep emitting after lifetime expires
     loop: bool,
 
@@ -74,6 +74,7 @@ const EmitterDesc = struct {
     explosiveness: f32,
 };
 
+// TODO Remove comptime usage - everything can be tweaked during runtime. Needs allocator in this case (unless we make count fixed)
 pub fn Emitter(comptime desc: EmitterDesc) type {
     const count = desc.count;
     const lifetime = desc.lifetime;
@@ -83,19 +84,14 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
 
     const spawn_freq = (lifetime / @as(f32, @floatFromInt(count)) * (1 - desc.explosiveness));
 
-    const weight_sum = blk: {
-        var sum: f32 = 0;
-        for (desc.sprites) |s| {
-            sum += s.weight;
-        }
-        break :blk sum;
-    };
-
     return struct {
         const Self = @This();
 
         emitting: bool = false,
         pos: [2]f32 = .{ 0, 0 },
+
+        /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
+        sprites: []const SpriteDesc,
 
         particles: [count]Particle = .{.{}} ** count,
         idx: usize = 0,
@@ -108,11 +104,15 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
 
         const EmitterInitDesc = struct {
             seed: u64,
+            sprites: []const SpriteDesc,
         };
 
         pub fn init(v: EmitterInitDesc) Self {
             const prng = std.Random.DefaultPrng.init(v.seed);
-            return .{ .prng = prng };
+            return .{
+                .sprites = v.sprites,
+                .prng = prng,
+            };
         }
 
         pub fn update(self: *Self, dt: f32) void {
@@ -180,6 +180,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
             const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
 
             self.particles[self.idx] = .{
+                .seed = rng.int(u8),
                 .active = true,
                 .pos = vadd(self.pos, pos),
                 .z = rng.float(f32),
@@ -193,6 +194,15 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         pub fn render(self: Self, batch: *BatchRenderer) void {
+            // TODO cache
+            const weight_sum = blk: {
+                var sum: f32 = 0;
+                for (self.sprites) |s| {
+                    sum += s.weight;
+                }
+                break :blk sum;
+            };
+
             for (self.particles) |p| {
                 if (!p.active) continue;
 
@@ -200,24 +210,43 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                 // the particle has been alive
                 const sprite_factor = p.time / lifetime;
                 std.debug.assert(p.time < lifetime);
-                var sprite_id: Sprite = undefined;
-                var i: f32 = 0;
-                for (desc.sprites) |s| {
-                    i += s.weight;
-                    if (i >= sprite_factor * weight_sum) {
-                        sprite_id = s.sprite;
-                        break;
-                    }
-                } else continue;
+                var sprite_desc: SpriteDesc = undefined;
 
-                const sprite = sprites.get(sprite_id);
-                const w: f32 = @floatFromInt(sprite.bounds.w);
-                const h: f32 = @floatFromInt(sprite.bounds.h);
+                {
+                    var i: f32 = 0;
+                    for (self.sprites) |s| {
+                        i += s.weight;
+                        if (i >= sprite_factor * weight_sum) {
+                            sprite_desc = s;
+                            break;
+                        }
+                    } else continue;
+                }
+
+                const sprite = sprites.get(sprite_desc.sprite);
+
+                // Should we use a region of this sprite, or the whole thing?
+                const src = blk: {
+                    if (sprite_desc.regions.len > 0) {
+                        const idx = p.seed % sprite_desc.regions.len;
+                        const region = sprite_desc.regions[idx].bounds;
+                        break :blk IRect{
+                            .x = sprite.bounds.x + region.x,
+                            .y = sprite.bounds.y + region.y,
+                            .w = region.w,
+                            .h = region.h,
+                        };
+                    }
+                    break :blk sprite.bounds;
+                };
+
+                const w: f32 = @floatFromInt(src.w);
+                const h: f32 = @floatFromInt(src.h);
                 batch.render(.{
-                    .src = sprite.bounds,
+                    .src = src,
                     .dst = .{
                         .x = p.pos[0] - w / 2,
-                        .y = p.pos[1] - w / 2,
+                        .y = p.pos[1] - h / 2,
                         .w = w,
                         .h = h,
                     },
@@ -226,4 +255,12 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
             }
         }
     };
+}
+
+fn weightArray(arr: anytype) []const f32 {
+    var weights: [arr.len]f32 = undefined;
+    for (arr, &weights) |x, *w| {
+        w.* = x.weight;
+    }
+    return weights;
 }
