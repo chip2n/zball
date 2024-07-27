@@ -164,6 +164,9 @@ fn addDeps(
     // math
     const mod_math = b.addModule("math", .{
         .root_source_file = b.path("src/math.zig"),
+        .imports = &.{
+            .{ .name = "zmath", .module = mod_zmath },
+        },
     });
     step.root_module.addImport("math", mod_math);
 

@@ -29,9 +29,7 @@ const particle = @import("particle.zig");
 const utils = @import("utils.zig");
 
 const ig = @import("cimgui");
-// TODO
 const m = @import("math");
-const zm = @import("zmath");
 
 const spritesheet = @embedFile("assets/sprites.png");
 
@@ -1289,15 +1287,15 @@ fn quad(v: QuadOptions) void {
 }
 
 fn computeVsParams() shd.VsParams {
-    const model = zm.identity();
-    const view = zm.translation(-state.camera[0], -state.camera[1], 0);
-    const proj = zm.orthographicRh(
+    const model = m.identity();
+    const view = m.translation(-state.camera[0], -state.camera[1], 0);
+    const proj = m.orthographicRh(
         @floatFromInt(viewport_size[0]),
         @floatFromInt(viewport_size[1]),
         -10,
         10,
     );
-    const mvp = zm.mul(model, zm.mul(view, proj));
+    const mvp = m.mul(model, m.mul(view, proj));
     return shd.VsParams{ .mvp = mvp };
 }
 
@@ -1310,9 +1308,9 @@ fn computeFSQParams() shd.VsFsqParams {
     const vh: f32 = @floatFromInt(viewport_size[1]);
     const viewport_aspect = vw / vh;
 
-    var model = zm.scaling(2, (2 / viewport_aspect) * aspect, 1);
+    var model = m.scaling(2, (2 / viewport_aspect) * aspect, 1);
     if (aspect > viewport_aspect) {
-        model = zm.scaling((2 * viewport_aspect) / aspect, 2, 1);
+        model = m.scaling((2 * viewport_aspect) / aspect, 2, 1);
     }
     return shd.VsFsqParams{ .mvp = model };
 }

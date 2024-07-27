@@ -1,4 +1,11 @@
 const std = @import("std");
+const zm = @import("zmath");
+
+pub const identity = zm.identity;
+pub const translation = zm.translation;
+pub const orthographicRh = zm.orthographicRh;
+pub const mul = zm.mul;
+pub const scaling = zm.scaling;
 
 pub const Rect = GenRect(f32);
 pub const IRect = GenRect(u32);
