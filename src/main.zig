@@ -22,6 +22,9 @@ const TextRenderer = @import("ttf.zig").TextRenderer;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 const AudioSystem = @import("audio.zig").AudioSystem;
 
+const box_intersection = @import("collision.zig").box_intersection;
+const line_intersection = @import("collision.zig").line_intersection;
+
 const particle = @import("particle.zig");
 const utils = @import("utils.zig");
 
@@ -434,12 +437,7 @@ const GameScene = struct {
         }
 
         { // Has the paddle hit a powerup?
-            const paddle_bounds = m.Rect{
-                .x = scene.paddle_pos[0] - paddle_w / 2,
-                .y = scene.paddle_pos[1] - paddle_h,
-                .w = paddle_w,
-                .h = paddle_h,
-            };
+            const paddle_bounds = scene.paddleBounds();
             for (&scene.powerups) |*p| {
                 if (!p.active) continue;
                 const sp = switch (p.type) {
@@ -505,7 +503,7 @@ const GameScene = struct {
                     };
                     r.grow(.{ ball_w / 2, ball_h / 2 });
                     var c_normal: [2]f32 = undefined;
-                    const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                    const c = box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
                     if (c) {
                         // always use the normal of the closest brick for ball reflection
                         const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
@@ -545,16 +543,40 @@ const GameScene = struct {
             const vw: f32 = @floatFromInt(viewport_size[0]);
             const vh: f32 = @floatFromInt(viewport_size[1]);
 
-            { // Has the ball hit the paddle?
-                // TODO reuse
-                var r = @import("collision.zig").Rect{
-                    .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
-                    .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+            // Has the ball hit the paddle?
+            paddle_check: {
+                // NOTE: We only check for collision if the ball is heading
+                // downward, because there are situations the ball could be
+                // temporarily inside the paddle (and I don't know a better way
+                // to solve that which look good or feel good gameplay-wise)
+                if (ball.dir[1] < 0) break :paddle_check;
+
+                var paddle_bounds = scene.paddleBounds();
+                const ball_bounds = Rect{
+                    .x = old_ball_pos[0] - ball_w,
+                    .y = old_ball_pos[1] - ball_h,
+                    .w = ball_w,
+                    .h = ball_h,
                 };
-                r.grow(.{ ball_w / 2, ball_h / 2 });
-                // TODO not sure we're using the right ball positions
-                const c = @import("collision.zig").box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-                if (c) {
+
+                var collided = false;
+
+                // After we've moved the paddle, a ball may be inside it. If so,
+                // consider it collided.
+                if (paddle_bounds.overlaps(ball_bounds)) {
+                    collided = true;
+                    out = old_ball_pos;
+                } else {
+                    // TODO reuse
+                    var r = @import("collision.zig").Rect{
+                        .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                        .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+                    };
+                    r.grow(.{ ball_w / 2, ball_h / 2 });
+                    collided = box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+                }
+
+                if (collided) {
                     state.audio.play(.{ .clip = .bounce });
                     ball.pos = out;
                     ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
@@ -562,7 +584,7 @@ const GameScene = struct {
             }
 
             { // Has the ball hit the ceiling?
-                const c = @import("collision.zig").line_intersection(
+                const c = line_intersection(
                     old_ball_pos,
                     ball.pos,
                     .{ 0, brick_start_y },
@@ -578,7 +600,7 @@ const GameScene = struct {
             }
 
             { // Has the ball hit the right wall?
-                const c = @import("collision.zig").line_intersection(
+                const c = line_intersection(
                     old_ball_pos,
                     ball.pos,
                     .{ vw - ball_w / 2, 0 },
@@ -594,7 +616,7 @@ const GameScene = struct {
             }
 
             { // Has the ball hit the left wall?
-                const c = @import("collision.zig").line_intersection(
+                const c = line_intersection(
                     old_ball_pos,
                     ball.pos,
                     .{ ball_w / 2, 0 },
@@ -610,7 +632,7 @@ const GameScene = struct {
             }
 
             { // Has a ball hit the floor?
-                const c = @import("collision.zig").line_intersection(
+                const c = line_intersection(
                     old_ball_pos,
                     ball.pos,
                     .{ 0, vh - ball_h / 2 },
@@ -682,6 +704,15 @@ const GameScene = struct {
                 scene.ball_state = .idle;
             }
         }
+    }
+
+    fn paddleBounds(scene: GameScene) Rect {
+        return m.Rect{
+            .x = scene.paddle_pos[0] - paddle_w / 2,
+            .y = scene.paddle_pos[1] - paddle_h,
+            .w = paddle_w,
+            .h = paddle_h,
+        };
     }
 
     fn addFlamePowerup(scene: *GameScene) void {
