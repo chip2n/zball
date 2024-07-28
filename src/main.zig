@@ -33,8 +33,6 @@ const m = @import("math");
 
 const spritesheet = @embedFile("assets/sprites.png");
 
-const audio_bounce = @import("audio.zig").embed("assets/bounce.wav");
-
 const Texture = @import("Texture.zig");
 
 const offscreen_sample_count = 1;
@@ -46,6 +44,8 @@ pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const powerup_freq = 0.3;
 const flame_duration = 5;
+
+const use_gpa = builtin.os.tag != .emscripten;
 
 const initial_screen_size = .{ 640, 480 };
 const viewport_size: [2]i32 = .{ 160, 120 };
@@ -98,6 +98,7 @@ const debug = if (builtin.os.tag == .linux) struct {
     var reload: bool = false;
 } else struct {};
 
+// TODO refactor this a bit
 const state = struct {
     const offscreen = struct {
         var pass_action: sg.PassAction = .{};
@@ -127,10 +128,11 @@ const state = struct {
 
     var window_size: [2]i32 = initial_screen_size;
 
-    var allocator = std.heap.c_allocator;
+    var allocator: std.mem.Allocator = undefined;
     var arena: std.heap.ArenaAllocator = undefined;
 
     var scene: Scene = .{ .title = .{} };
+    var next_scene: ?Scene = null;
 
     var batch = BatchRenderer.init();
 
@@ -148,6 +150,13 @@ const Scene = union(enum) {
 
     const count = std.enums.values(@typeInfo(Scene).Union.tag_type.?).len;
 
+    fn deinit(scene: *Scene) void {
+        switch (scene.*) {
+            .title => scene.title.deinit(),
+            .game => scene.game.deinit(),
+        }
+    }
+
     fn update(scene: *Scene, dt: f32) void {
         switch (scene.*) {
             .title => scene.title.update(dt),
@@ -162,10 +171,10 @@ const Scene = union(enum) {
         }
     }
 
-    fn input(scene: *Scene, ev: [*c]const sapp.Event) void {
+    fn input(scene: *Scene, ev: [*c]const sapp.Event) !void {
         switch (scene.*) {
-            .title => scene.title.input(ev),
-            .game => scene.game.input(ev),
+            .title => try scene.title.input(ev),
+            .game => try scene.game.input(ev),
         }
     }
 };
@@ -228,7 +237,7 @@ const TitleScene = struct {
         sg.endPass();
     }
 
-    fn input(scene: *TitleScene, ev: [*c]const sapp.Event) void {
+    fn input(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
         switch (ev.*.type) {
             .KEY_DOWN => {
                 switch (ev.*.key_code) {
@@ -244,7 +253,8 @@ const TitleScene = struct {
                     },
                     .ENTER, .SPACE => {
                         if (scene.idx == 0) {
-                            state.scene = Scene{ .game = GameScene.init() };
+                            const game_scene = try GameScene.init(state.allocator);
+                            state.scene = Scene{ .game = game_scene };
                         } else if (scene.idx == 1) {
                             sapp.quit();
                         }
@@ -254,6 +264,10 @@ const TitleScene = struct {
             },
             else => {},
         }
+    }
+
+    fn deinit(scene: *TitleScene) void {
+        _ = scene;
     }
 };
 
@@ -341,7 +355,9 @@ fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
 }
 
 const GameScene = struct {
-    bricks: [num_rows * num_bricks]Brick = undefined,
+    allocator: std.mem.Allocator,
+
+    bricks: []Brick,
     powerups: [16]Powerup = .{.{}} ** 16,
 
     menu: GameMenu = .{},
@@ -356,7 +372,7 @@ const GameScene = struct {
 
     paddle_pos: [2]f32 = initial_paddle_pos,
 
-    balls: [max_balls]Ball = .{.{}} ** max_balls,
+    balls: []Ball,
     ball_state: BallState = .idle,
 
     flame_timer: f32 = 0,
@@ -367,18 +383,20 @@ const GameScene = struct {
         space_down: bool = false,
     } = .{},
 
-    collisions: [8]struct {
-        brick: usize,
-        loc: [2]f32,
-        normal: [2]f32,
-    } = undefined,
-    collision_count: usize = 0,
+    fn init(allocator: std.mem.Allocator) !GameScene {
+        const bricks = try allocator.alloc(Brick, num_rows * num_bricks);
+        errdefer allocator.free(bricks);
+        const balls = try allocator.alloc(Ball, max_balls);
+        errdefer allocator.free(balls);
 
-    fn init() GameScene {
-        var scene = GameScene{};
+        var scene = GameScene{
+            .allocator = allocator,
+            .bricks = bricks,
+            .balls = balls,
+        };
 
-        // spawn one ball to start
-        _ = scene.spawnBall(initial_ball_pos, initial_ball_dir) catch unreachable;
+        // intialize balls
+        for (scene.balls) |*b| b.* = .{};
 
         // initialize bricks
         const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
@@ -398,14 +416,25 @@ const GameScene = struct {
             }
         }
 
+        // spawn one ball to start
+        _ = scene.spawnBall(initial_ball_pos, initial_ball_dir) catch unreachable;
+
         return scene;
     }
 
-    fn update(scene: *GameScene, dt: f32) void {
-        // Reset data from previous frame
-        scene.collision_count = 0;
+    fn deinit(scene: GameScene) void {
+        scene.allocator.free(scene.bricks);
+        scene.allocator.free(scene.balls);
+    }
 
+    fn start(scene: *GameScene) void {
+        scene.flame_timer = 0;
+        scene.death_timer = 0;
+    }
+
+    fn update(scene: *GameScene, dt: f32) void {
         if (scene.paused()) return;
+
         scene.time += dt;
 
         { // Move paddle
@@ -472,7 +501,7 @@ const GameScene = struct {
         }
 
         // Move balls
-        for (&scene.balls) |*ball| {
+        for (scene.balls) |*ball| {
             if (!ball.active) continue;
             const old_ball_pos = ball.pos;
             switch (scene.ball_state) {
@@ -492,7 +521,7 @@ const GameScene = struct {
             { // Has the ball hit any bricks?
                 var collided = false;
                 var coll_dist = std.math.floatMax(f32);
-                for (&scene.bricks, 0..) |*brick, i| {
+                for (scene.bricks) |*brick| {
                     if (brick.destroyed) continue;
 
                     var r = @import("collision.zig").Rect{
@@ -526,9 +555,6 @@ const GameScene = struct {
                         scene.score += 100;
 
                         scene.spawnPowerup(brick.pos);
-
-                        scene.collisions[scene.collision_count] = .{ .brick = i, .loc = out, .normal = c_normal };
-                        scene.collision_count += 1;
                     }
                     collided = collided or c;
                 }
@@ -660,14 +686,14 @@ const GameScene = struct {
         }
 
         // TODO the particle system could be responsible to update all emitters (via handles)
-        for (&scene.balls) |*ball| {
+        for (scene.balls) |*ball| {
             ball.flame.pos = ball.pos;
             ball.flame.update(dt);
 
             ball.explosion.pos = ball.pos;
             ball.explosion.update(dt);
         }
-        for (&scene.bricks) |*brick| {
+        for (scene.bricks) |*brick| {
             brick.emitter.update(dt);
         }
 
@@ -678,7 +704,7 @@ const GameScene = struct {
 
             scene.flame_timer = 0;
 
-            for (&scene.balls) |*ball| {
+            for (scene.balls) |*ball| {
                 ball.flame.emitting = false;
             }
         }
@@ -691,7 +717,7 @@ const GameScene = struct {
             scene.death_timer = 0;
 
             if (scene.lives == 0) {
-                state.scene = Scene{ .title = .{} };
+                state.next_scene = Scene{ .title = .{} };
             } else {
                 scene.lives -= 1;
 
@@ -715,7 +741,7 @@ const GameScene = struct {
 
     fn addFlamePowerup(scene: *GameScene) void {
         scene.flame_timer = flame_duration;
-        for (&scene.balls) |*ball| {
+        for (scene.balls) |*ball| {
             if (!ball.active) continue;
             ball.flame.emitting = true;
         }
@@ -726,7 +752,7 @@ const GameScene = struct {
     }
 
     fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !*Ball {
-        for (&scene.balls) |*ball| {
+        for (scene.balls) |*ball| {
             if (ball.active) continue;
             ball.* = .{
                 .pos = pos,
@@ -784,7 +810,7 @@ const GameScene = struct {
     }
 
     fn updateIdleBall(scene: *GameScene) void {
-        for (&scene.balls) |*ball| {
+        for (scene.balls) |*ball| {
             if (!ball.active) continue;
             ball.pos[0] = scene.paddle_pos[0];
             ball.pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
@@ -980,7 +1006,7 @@ const GameScene = struct {
         sg.endPass();
     }
 
-    fn input(scene: *GameScene, ev: [*c]const sapp.Event) void {
+    fn input(scene: *GameScene, ev: [*c]const sapp.Event) !void {
         switch (scene.menu.state) {
             .none => {
                 switch (ev.*.type) {
@@ -1125,7 +1151,10 @@ fn renderGui() void {
     ig.igEnd();
 }
 
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+
 fn initializeGame() !void {
+    state.allocator = if (use_gpa) gpa.allocator() else std.heap.c_allocator;
     state.arena = std.heap.ArenaAllocator.init(state.allocator);
     errdefer state.arena.deinit();
 
@@ -1359,7 +1388,9 @@ export fn sokolFrame() void {
     state.time = time;
 
     const dt: f32 = @floatCast(sapp.frameDuration());
-    state.scene.update(dt);
+
+    var scene = &state.scene;
+    scene.update(dt);
 
     if (config.shader_reload and debug.reload) {
         state.bg.reload() catch {};
@@ -1375,7 +1406,7 @@ export fn sokolFrame() void {
         .dpi_scale = sapp.dpiScale(),
     });
 
-    state.scene.render();
+    scene.render();
 
     renderGui();
 
@@ -1392,6 +1423,13 @@ export fn sokolFrame() void {
     sg.endPass();
 
     sg.commit();
+
+    // Should we move to another scene?
+    if (state.next_scene) |next| {
+        scene.deinit();
+        state.scene = next;
+        state.next_scene = null;
+    }
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
@@ -1406,17 +1444,24 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             createOffscreenAttachments(viewport_size[0], viewport_size[1]);
         },
         else => {
-            state.scene.input(ev);
+            state.scene.input(ev) catch |err| {
+                std.log.err("Error while processing input: {}", .{err});
+            };
         },
     }
 }
 
 export fn sokolCleanup() void {
+    state.scene.deinit();
     saudio.shutdown();
     sg.shutdown();
     state.arena.deinit();
     if (config.shader_reload) {
         debug.watcher.deinit();
+    }
+
+    if (use_gpa) {
+        _ = gpa.deinit();
     }
 }
 
