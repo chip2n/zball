@@ -132,7 +132,7 @@ const state = struct {
     var arena: std.heap.ArenaAllocator = undefined;
 
     var scene: Scene = .{ .title = .{} };
-    var next_scene: ?Scene = null;
+    var next_scene: ?SceneType = null;
 
     var batch = BatchRenderer.init();
 
@@ -144,11 +144,11 @@ const BallState = enum {
     idle, // ball is on paddle and waiting to be shot
 };
 
+const SceneType = std.meta.Tag(Scene);
+
 const Scene = union(enum) {
     title: TitleScene,
     game: GameScene,
-
-    const count = std.enums.values(@typeInfo(Scene).Union.tag_type.?).len;
 
     fn deinit(scene: *Scene) void {
         switch (scene.*) {
@@ -181,13 +181,44 @@ const Scene = union(enum) {
 
 const TitleScene = struct {
     idx: usize = 0,
+    settings_idx: usize = 0,
+    settings: bool = false,
 
     fn update(scene: *TitleScene, dt: f32) void {
-        _ = scene;
         _ = dt;
+
+        { // Main menu
+            ui.begin(.{
+                .x = viewport_size[0] / 2,
+                .y = viewport_size[1] / 2 + 8,
+                .pivot = .{ 0.5, 0.5 },
+                .batch = &state.batch,
+                .tex_spritesheet = state.spritesheet_texture,
+                .tex_font = state.font_texture,
+                .style = .transparent,
+            });
+            defer ui.end();
+
+            if (scene.settings) {
+                if (renderSettingsMenu(scene.settings_idx)) {
+                    scene.settings = false;
+                }
+            } else {
+                if (ui.selectionItem("Start", .{ .selected = scene.idx == 0 })) {
+                    state.next_scene = .game;
+                }
+                if (ui.selectionItem("Settings", .{ .selected = scene.idx == 1 })) {
+                    scene.settings = true;
+                }
+                if (ui.selectionItem("Quit", .{ .selected = scene.idx == 2 })) {
+                    sapp.quit();
+                }
+            }
+        }
     }
 
     fn render(scene: *TitleScene) void {
+        _ = scene;
         state.batch.setTexture(state.spritesheet_texture);
 
         state.batch.render(.{
@@ -200,26 +231,26 @@ const TitleScene = struct {
             },
         });
 
-        { // Text
-            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+        // { // Text
+        //     state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
 
-            var y = @as(f32, @floatFromInt(viewport_size[1])) / 2;
-            { // Start
-                var text_renderer = TextRenderer{};
-                var buf: [32]u8 = undefined;
-                const label = std.fmt.bufPrint(&buf, "{s} start", .{if (scene.idx == 0) ">" else " "}) catch unreachable;
-                const measure = TextRenderer.measure(label);
-                text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
-                y += measure[1] + 4;
-            }
-            { // Quit
-                var text_renderer = TextRenderer{};
-                var buf: [32]u8 = undefined;
-                const label = std.fmt.bufPrint(&buf, "{s} quit", .{if (scene.idx == 1) ">" else " "}) catch unreachable;
-                const measure = TextRenderer.measure(label);
-                text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
-            }
-        }
+        //     var y = @as(f32, @floatFromInt(viewport_size[1])) / 2;
+        //     { // Start
+        //         var text_renderer = TextRenderer{};
+        //         var buf: [32]u8 = undefined;
+        //         const label = std.fmt.bufPrint(&buf, "{s} start", .{if (scene.idx == 0) ">" else " "}) catch unreachable;
+        //         const measure = TextRenderer.measure(label);
+        //         text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
+        //         y += measure[1] + 4;
+        //     }
+        //     { // Quit
+        //         var text_renderer = TextRenderer{};
+        //         var buf: [32]u8 = undefined;
+        //         const label = std.fmt.bufPrint(&buf, "{s} quit", .{if (scene.idx == 1) ">" else " "}) catch unreachable;
+        //         const measure = TextRenderer.measure(label);
+        //         text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
+        //     }
+        // }
 
         const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
@@ -242,23 +273,23 @@ const TitleScene = struct {
             .KEY_DOWN => {
                 switch (ev.*.key_code) {
                     .DOWN => {
-                        scene.idx = @mod(scene.idx + 1, Scene.count);
+                        scene.idx = @mod(scene.idx + 1, 3);
                     },
                     .UP => {
                         if (scene.idx == 0) {
-                            scene.idx = Scene.count - 1;
+                            scene.idx = 2;
                         } else {
                             scene.idx -= 1;
                         }
                     },
-                    .ENTER, .SPACE => {
-                        if (scene.idx == 0) {
-                            const game_scene = try GameScene.init(state.allocator);
-                            state.scene = Scene{ .game = game_scene };
-                        } else if (scene.idx == 1) {
-                            sapp.quit();
-                        }
-                    },
+                    // .ENTER, .SPACE => {
+                    //     if (scene.idx == 0) {
+                    //         const game_scene = try GameScene.init(state.allocator);
+                    //         state.scene = Scene{ .game = game_scene };
+                    //     } else if (scene.idx == 1) {
+                    //         sapp.quit();
+                    //     }
+                    // },
                     else => {},
                 }
             },
@@ -717,7 +748,7 @@ const GameScene = struct {
             scene.death_timer = 0;
 
             if (scene.lives == 0) {
-                state.next_scene = Scene{ .title = .{} };
+                state.next_scene = .title;
             } else {
                 scene.lives -= 1;
 
@@ -916,7 +947,7 @@ const GameScene = struct {
             var text_renderer = TextRenderer{};
             var buf: [32]u8 = undefined;
             const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
-            text_renderer.render(&state.batch, label, 32, 0);
+            text_renderer.render(&state.batch, label, 32, 0, 10);
         }
 
         // Render game menus
@@ -928,6 +959,7 @@ const GameScene = struct {
                 state.batch.render(.{
                     .src = sprite.sprites.overlay.bounds,
                     .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+                    .z = 5,
                 });
 
                 ui.begin(.{
@@ -951,28 +983,7 @@ const GameScene = struct {
                 }
             },
             .settings => {
-                // overlay
-                state.batch.setTexture(state.spritesheet_texture);
-                state.batch.render(.{
-                    .src = sprite.sprites.overlay.bounds,
-                    .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
-                });
-
-                ui.begin(.{
-                    .x = viewport_size[0] / 2,
-                    .y = viewport_size[1] / 2,
-                    .pivot = .{ 0.5, 0.5 },
-                    .batch = &state.batch,
-                    .tex_spritesheet = state.spritesheet_texture,
-                    .tex_font = state.font_texture,
-                });
-                defer ui.end();
-
-                _ = ui.selectionItem("Volume (sfx)", .{ .selected = scene.menu.settings_idx == 0 });
-                ui.slider(.{ .value = &state.audio.vol_sfx, .focused = scene.menu.settings_idx == 0 });
-                _ = ui.selectionItem("Volume (bg)", .{ .selected = scene.menu.settings_idx == 1 });
-                ui.slider(.{ .value = &state.audio.vol_bg, .focused = scene.menu.settings_idx == 1 });
-                if (ui.selectionItem("Back", .{ .selected = scene.menu.settings_idx == 2 })) {
+                if (renderSettingsMenu(scene.menu.settings_idx)) {
                     scene.menu.state = .pause;
                 }
             },
@@ -1101,6 +1112,36 @@ const GameScene = struct {
         }
     }
 };
+
+fn renderSettingsMenu(idx: usize) bool {
+    // overlay
+    state.batch.setTexture(state.spritesheet_texture);
+    state.batch.render(.{
+        .src = sprite.sprites.overlay.bounds,
+        .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
+        .z = 5,
+    });
+
+    ui.begin(.{
+        .x = viewport_size[0] / 2,
+        .y = viewport_size[1] / 2,
+        .pivot = .{ 0.5, 0.5 },
+        .batch = &state.batch,
+        .tex_spritesheet = state.spritesheet_texture,
+        .tex_font = state.font_texture,
+    });
+    defer ui.end();
+
+    _ = ui.selectionItem("Volume (sfx)", .{ .selected = idx == 0 });
+    ui.slider(.{ .value = &state.audio.vol_sfx, .focused = idx == 0 });
+    _ = ui.selectionItem("Volume (bg)", .{ .selected = idx == 1 });
+    ui.slider(.{ .value = &state.audio.vol_bg, .focused = idx == 1 });
+    if (ui.selectionItem("Back", .{ .selected = idx == 2 })) {
+        return true;
+    }
+
+    return false;
+}
 
 fn renderGui() void {
     //=== UI CODE STARTS HERE
@@ -1427,7 +1468,10 @@ export fn sokolFrame() void {
     // Should we move to another scene?
     if (state.next_scene) |next| {
         scene.deinit();
-        state.scene = next;
+        state.scene = switch (next) {
+            .title => Scene{ .title = .{} },
+            .game => Scene{ .game = GameScene.init(state.allocator) catch unreachable }, // TODO
+        };
         state.next_scene = null;
     }
 }

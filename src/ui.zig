@@ -25,6 +25,8 @@ var cursor: [2]f32 = .{ 0, 0 };
 var pivot: [2]f32 = .{ 0, 0 };
 var win_width: f32 = 0;
 var win_height: f32 = 0;
+var win_z: f32 = 0;
+var win_style: WindowStyle = .dialog;
 var draw_list: [128]DrawListEntry = undefined;
 var draw_list_idx: usize = 0;
 var batch: *BatchRenderer = undefined;
@@ -35,18 +37,27 @@ const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
 };
 
+const WindowStyle = enum {
+    dialog,
+    transparent,
+};
+
 pub const BeginDesc = struct {
     x: f32,
     y: f32,
+    z: f32 = 10,
     pivot: [2]f32 = .{ 0, 0 },
     batch: *BatchRenderer,
     tex_spritesheet: Texture,
     tex_font: Texture,
+    style: WindowStyle = .dialog,
 };
 
 pub fn begin(v: BeginDesc) void {
     win_width = 0;
     win_height = 0;
+    win_z = v.z;
+    win_style = v.style;
     origin[0] = v.x;
     origin[1] = v.y;
     cursor[0] = v.x;
@@ -70,16 +81,22 @@ pub fn end() void {
     h += padding * 2;
     const offset = .{ @round(-pivot[0] * w), @round(-pivot[1] * h) };
 
-    batch.renderNinePatch(.{
-        .src = dialog.bounds,
-        .center = dialog.center.?,
-        .dst = .{
-            .x = origin[0] + offset[0],
-            .y = origin[1] + offset[1],
-            .w = w,
-            .h = h,
+    switch (win_style) {
+        .dialog => {
+            batch.renderNinePatch(.{
+                .src = dialog.bounds,
+                .center = dialog.center.?,
+                .dst = .{
+                    .x = origin[0] + offset[0],
+                    .y = origin[1] + offset[1],
+                    .w = w,
+                    .h = h,
+                },
+                .z = win_z,
+            });
         },
-    });
+        .transparent => {},
+    }
 
     { // render draw list
         var text_renderer = TextRenderer{};
@@ -92,6 +109,7 @@ pub fn end() void {
                         t.s,
                         t.x + padding + offset[0],
                         t.y + padding + offset[1],
+                        win_z,
                     );
                 },
                 .slider => |s| {
@@ -108,6 +126,7 @@ pub fn end() void {
                             .w = win_width,
                             .h = rail_inactive.bounds.h,
                         },
+                        .z = win_z,
                     });
                     // active rail
                     batch.render(.{
@@ -118,6 +137,7 @@ pub fn end() void {
                             .w = win_width * s.value,
                             .h = rail_active.bounds.h,
                         },
+                        .z = win_z,
                     });
                     // thumb
                     batch.render(.{
@@ -128,6 +148,7 @@ pub fn end() void {
                             .w = thumb.bounds.w,
                             .h = thumb.bounds.h,
                         },
+                        .z = win_z,
                     });
                 },
             }

@@ -11,6 +11,7 @@ pub const TextRenderer = struct {
         text: []const u8,
         x: f32,
         y: f32,
+        z: f32,
     ) void {
         for (text) |ch| {
             const glyph = findGlyph(ch).?;
@@ -20,6 +21,7 @@ pub const TextRenderer = struct {
             batch.render(.{
                 .src = .{ .x = glyph.x, .y = glyph.y, .w = glyph.w, .h = glyph.h },
                 .dst = .{ .x = self.cursor_x + x, .y = y + font.ascent + baseline_offset, .w = gw, .h = gh },
+                .z = z,
             });
             self.cursor_x += @floatFromInt(glyph.advance);
         }
