@@ -243,7 +243,10 @@ const TitleScene = struct {
 
         const vs_params = computeVsParams();
 
-        sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
+        sg.beginPass(.{
+            .action = state.offscreen.pass_action,
+            .attachments = state.offscreen.attachments,
+        });
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
         for (result.batches) |b| {
@@ -986,7 +989,10 @@ const GameScene = struct {
 
         const vs_params = computeVsParams();
 
-        sg.beginPass(.{ .action = state.offscreen.pass_action, .attachments = state.offscreen.attachments });
+        sg.beginPass(.{
+            .action = state.offscreen.pass_action,
+            .attachments = state.offscreen.attachments,
+        });
 
         // render background
         sg.applyPipeline(state.bg.pip);
