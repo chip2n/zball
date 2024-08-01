@@ -54,6 +54,10 @@ pub fn magnitude(v: [2]f32) f32 {
     return @sqrt(v[0] * v[0] + v[1] * v[1]);
 }
 
+pub fn veq(v1: [2]f32, v2: [2]f32) bool {
+    return v1[0] == v2[0] and v1[1] == v2[1];
+}
+
 pub fn vadd(v1: [2]f32, v2: [2]f32) [2]f32 {
     return .{
         v1[0] + v2[0],

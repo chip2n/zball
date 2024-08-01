@@ -130,7 +130,8 @@ const state = struct {
     var window_size: [2]i32 = initial_screen_size;
 
     /// Mouse position in unscaled pixels
-    var mouse: [2]f32 = .{ 0, 0 };
+    var mouse_pos: [2]f32 = .{ 0, 0 };
+    var mouse_delta: [2]f32 = .{ 0, 0 };
 
     var allocator: std.mem.Allocator = undefined;
     var arena: std.heap.ArenaAllocator = undefined;
@@ -272,11 +273,7 @@ const TitleScene = struct {
     }
 };
 
-const GameMenu = struct {
-    state: enum { none, pause, settings } = .none,
-    pause_idx: usize = 0,
-    settings_idx: usize = 0,
-};
+const GameMenu = enum { none, pause, settings };
 
 const PowerupType = enum { split, flame };
 const Powerup = struct {
@@ -355,13 +352,34 @@ fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     };
 }
 
+fn globalToWorld(p: [2]f32) [2]f32 {
+    const vw: f32 = @floatFromInt(viewport_size[0]);
+    const vh: f32 = @floatFromInt(viewport_size[1]);
+    const ww: f32 = @floatFromInt(state.window_size[0]);
+    const wh: f32 = @floatFromInt(state.window_size[1]);
+    return .{ p[0] * (vw / ww), p[1] * (vh / wh) };
+}
+
+/// Get mouse coordinates, scaled to viewport size
+fn mouse() [2]f32 {
+    return globalToWorld(state.mouse_pos);
+}
+
+/// Get mouse delta, in unscaled coordinates
+fn mouseDelta() [2]f32 {
+    return state.mouse_delta;
+}
+
+const showMouse = sapp.showMouse;
+const lockMouse = sapp.lockMouse;
+
 const GameScene = struct {
     allocator: std.mem.Allocator,
 
     bricks: []Brick,
     powerups: [16]Powerup = .{.{}} ** 16,
 
-    menu: GameMenu = .{},
+    menu: GameMenu = .none,
 
     time: f32 = 0,
     lives: u8 = 3,
@@ -434,19 +452,32 @@ const GameScene = struct {
     }
 
     fn update(scene: *GameScene, dt: f32) !void {
-        if (scene.paused()) return;
+        if (scene.paused()) {
+            showMouse(true);
+            lockMouse(false);
+            return;
+        }
+        showMouse(false);
+        lockMouse(true);
+
+        const mouse_delta = mouseDelta();
 
         scene.time += dt;
 
         { // Move paddle
-            var paddle_dx: f32 = 0;
-            if (scene.inputs.left_down) {
-                paddle_dx -= 1;
-            }
-            if (scene.inputs.right_down) {
-                paddle_dx += 1;
-            }
-            const new_pos = scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+            const new_pos = blk: {
+                if (m.magnitude(mouse_delta) > 0) {
+                    break :blk scene.paddle_pos[0] + mouse_delta[0];
+                }
+                var paddle_dx: f32 = 0;
+                if (scene.inputs.left_down) {
+                    paddle_dx -= 1;
+                }
+                if (scene.inputs.right_down) {
+                    paddle_dx += 1;
+                }
+                break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+            };
             scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
         }
 
@@ -746,7 +777,7 @@ const GameScene = struct {
     }
 
     fn paused(scene: *GameScene) bool {
-        return scene.menu.state != .none;
+        return scene.menu != .none;
     }
 
     fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !*Ball {
@@ -931,7 +962,7 @@ const GameScene = struct {
             });
             defer ui.end();
 
-            switch (scene.menu.state) {
+            switch (scene.menu) {
                 .none => {},
                 .pause => {
                     if (try renderPauseMenu(&scene.menu)) {
@@ -944,7 +975,7 @@ const GameScene = struct {
                         sapp.quit();
                     }
                     if (try renderSettingsMenu()) {
-                        scene.menu.state = .pause;
+                        scene.menu = .pause;
                     }
                 },
             }
@@ -979,10 +1010,11 @@ const GameScene = struct {
     }
 
     fn input(scene: *GameScene, ev: [*c]const sapp.Event) !void {
-        switch (scene.menu.state) {
+        switch (scene.menu) {
             .none => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
+                        // TODO refactor input handling
                         switch (ev.*.key_code) {
                             .LEFT => {
                                 scene.inputs.left_down = true;
@@ -994,7 +1026,7 @@ const GameScene = struct {
                                 scene.inputs.space_down = true;
                             },
                             .ESCAPE => {
-                                scene.menu.state = .pause;
+                                scene.menu = .pause;
                             },
                             else => {},
                         }
@@ -1020,7 +1052,7 @@ const GameScene = struct {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
                         switch (ev.*.key_code) {
-                            .ESCAPE => scene.menu.state = .none,
+                            .ESCAPE => scene.menu = .none,
                             else => {},
                         }
                     },
@@ -1031,7 +1063,7 @@ const GameScene = struct {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
                         switch (ev.*.key_code) {
-                            .ESCAPE => scene.menu.state = .pause,
+                            .ESCAPE => scene.menu = .pause,
                             else => {},
                         }
                     },
@@ -1047,15 +1079,15 @@ fn renderPauseMenu(menu: *GameMenu) !bool {
         .x = viewport_size[0] / 2,
         .y = viewport_size[1] / 2,
         .pivot = .{ 0.5, 0.5 },
-        .style = if (menu.state == .settings) .hidden else .dialog,
+        .style = if (menu.* == .settings) .hidden else .dialog,
     });
     defer ui.endWindow();
 
     if (ui.selectionItem("Continue", .{})) {
-        menu.state = .none;
+        menu.* = .none;
     }
     if (ui.selectionItem("Settings", .{})) {
-        menu.state = .settings;
+        menu.* = .settings;
     }
     if (ui.selectionItem("Quit", .{})) {
         return true;
@@ -1095,7 +1127,7 @@ fn renderGui() void {
     ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Mouse: %.4g %.4g", state.mouse[0], state.mouse[1]);
+    _ = ig.igText("Mouse: %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
 
     switch (state.scene) {
@@ -1420,6 +1452,9 @@ export fn sokolFrame() void {
 
     sg.commit();
 
+    // Reset mouse delta
+    state.mouse_delta = .{ 0, 0 };
+
     // Should we move to another scene?
     if (state.next_scene) |next| {
         scene.deinit();
@@ -1443,7 +1478,8 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             createOffscreenAttachments(viewport_size[0], viewport_size[1]);
         },
         .MOUSE_MOVE => {
-            state.mouse = .{ ev.*.mouse_x, ev.*.mouse_y };
+            state.mouse_pos = .{ ev.*.mouse_x, ev.*.mouse_y };
+            state.mouse_delta = .{ ev.*.mouse_dx, ev.*.mouse_dy };
         },
         else => {
             state.scene.input(ev) catch |err| {
