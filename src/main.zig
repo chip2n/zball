@@ -18,6 +18,8 @@ const sprite = @import("sprite");
 const ui = @import("ui.zig");
 const fwatch = @import("fwatch");
 
+const Viewport = @import("Viewport.zig");
+const Camera = @import("Camera.zig");
 const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
@@ -36,7 +38,7 @@ const spritesheet = @embedFile("assets/sprites.png");
 
 const Texture = @import("Texture.zig");
 
-const offscreen_sample_count = 1;
+pub const offscreen_sample_count = 1;
 
 const num_audio_samples = 32;
 
@@ -49,7 +51,7 @@ const flame_duration = 5;
 const use_gpa = builtin.os.tag != .emscripten;
 
 const initial_screen_size = .{ 640, 480 };
-pub const viewport_size: [2]i32 = .{ 160, 120 };
+pub const viewport_size: [2]u32 = .{ 160, 120 };
 const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
 const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
 const paddle_speed: f32 = 80;
@@ -85,7 +87,8 @@ const Brick = struct {
     destroyed: bool = false,
 };
 
-const Vertex = extern struct {
+// TODO move?
+pub const Vertex = extern struct {
     x: f32,
     y: f32,
     z: f32,
@@ -101,17 +104,20 @@ const debug = if (builtin.os.tag == .linux) struct {
 
 // TODO refactor this a bit
 const state = struct {
+    var viewport: Viewport = undefined;
+    var camera: Camera = undefined;
+
     const offscreen = struct {
-        var pass_action: sg.PassAction = .{};
-        var attachments_desc: sg.AttachmentsDesc = .{};
-        var attachments: sg.Attachments = .{};
         var pip: sg.Pipeline = .{};
         var bind: sg.Bindings = .{};
+        var pass_action: sg.PassAction = .{};
     };
+
     const fsq = struct {
         var pip: sg.Pipeline = .{};
         var bind: sg.Bindings = .{};
     };
+
     var bg: Pipeline = undefined;
     const ui = struct {
         var pass_action: sg.PassAction = .{};
@@ -124,7 +130,6 @@ const state = struct {
 
     var spritesheet_texture: Texture = undefined;
     var font_texture: Texture = undefined;
-    var camera: [2]f32 = .{ viewport_size[0] / 2, viewport_size[1] / 2 };
     var textures: std.AutoHashMap(usize, sg.Image) = undefined;
 
     var window_size: [2]i32 = initial_screen_size;
@@ -241,11 +246,11 @@ const TitleScene = struct {
         const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
-        const vs_params = computeVsParams();
+        const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
 
         sg.beginPass(.{
             .action = state.offscreen.pass_action,
-            .attachments = state.offscreen.attachments,
+            .attachments = state.viewport.attachments,
         });
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
@@ -355,22 +360,14 @@ fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     };
 }
 
-fn globalToWorld(p: [2]f32) [2]f32 {
-    const vw: f32 = @floatFromInt(viewport_size[0]);
-    const vh: f32 = @floatFromInt(viewport_size[1]);
-    const ww: f32 = @floatFromInt(state.window_size[0]);
-    const wh: f32 = @floatFromInt(state.window_size[1]);
-    return .{ p[0] * (vw / ww), p[1] * (vh / wh) };
-}
-
 /// Get mouse coordinates, scaled to viewport size
 fn mouse() [2]f32 {
-    return globalToWorld(state.mouse_pos);
+    return state.camera.screenToWorld(state.mouse_pos);
 }
 
-/// Get mouse delta, in unscaled coordinates
+/// Get mouse delta, scaled based on zoom
 fn mouseDelta() [2]f32 {
-    return state.mouse_delta;
+    return m.vmul(state.mouse_delta, 1 / state.camera.zoom());
 }
 
 const showMouse = sapp.showMouse;
@@ -987,11 +984,11 @@ const GameScene = struct {
         const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
-        const vs_params = computeVsParams();
+        const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
 
         sg.beginPass(.{
             .action = state.offscreen.pass_action,
-            .attachments = state.offscreen.attachments,
+            .attachments = state.viewport.attachments,
         });
 
         // render background
@@ -1139,7 +1136,9 @@ fn renderGui() void {
     ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Mouse: %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
+    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Mouse (screen): %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
+    _ = ig.igText("Mouse (world): %.4g %.4g", mouse()[0], mouse()[1]);
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
 
     switch (state.scene) {
@@ -1156,7 +1155,9 @@ fn renderGui() void {
         else => {},
     }
 
-    _ = ig.igDragFloat2("Camera", &state.camera, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None);
+    if (ig.igDragFloat2("Camera", &state.camera.pos, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None)) {
+        state.camera.invalidate();
+    }
 
     if (ig.igButton("Play sound", .{})) {
         state.audio.play(.{ .clip = .bounce });
@@ -1225,6 +1226,19 @@ fn initializeGame() !void {
     // setup pass action for imgui
     state.ui.pass_action.colors[0] = .{ .load_action = .LOAD };
 
+    state.camera = Camera.init(.{
+        .pos = .{ viewport_size[0] / 2, viewport_size[1] / 2 },
+        .viewport_size = viewport_size,
+        .window_size = .{
+            @intCast(state.window_size[0]),
+            @intCast(state.window_size[1]),
+        },
+    });
+    state.viewport = Viewport.init(.{
+        .size = viewport_size,
+        .camera = &state.camera,
+    });
+
     // set pass action for offscreen render pass
     state.offscreen.pass_action.colors[0] = .{
         .load_action = .CLEAR,
@@ -1236,9 +1250,8 @@ fn initializeGame() !void {
         .size = max_verts * @sizeOf(Vertex),
     });
 
-    // setup the offscreen render pass resources
-    // this will also be called when the window resizes
-    createOffscreenAttachments(viewport_size[0], viewport_size[1]);
+    // update the fullscreen-quad texture bindings to contain the viewport image
+    state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc.colors[0].image;
 
     state.spritesheet_texture = Texture.init(spritesheet);
     state.font_texture = Texture.init(font.image);
@@ -1349,19 +1362,6 @@ fn quad(v: QuadOptions) void {
     // zig fmt: on
 }
 
-fn computeVsParams() shd.VsParams {
-    const model = m.identity();
-    const view = m.translation(-state.camera[0], -state.camera[1], 0);
-    const proj = m.orthographicRh(
-        @floatFromInt(viewport_size[0]),
-        @floatFromInt(viewport_size[1]),
-        -10,
-        10,
-    );
-    const mvp = m.mul(model, m.mul(view, proj));
-    return shd.VsParams{ .mvp = mvp };
-}
-
 fn computeFSQParams() shd.VsFsqParams {
     const width: f32 = @floatFromInt(state.window_size[0]);
     const height: f32 = @floatFromInt(state.window_size[1]);
@@ -1376,33 +1376,6 @@ fn computeFSQParams() shd.VsFsqParams {
         model = m.scaling((2 * viewport_aspect) / aspect, 2, 1);
     }
     return shd.VsFsqParams{ .mvp = model };
-}
-
-// helper function to create or re-create render target images and pass object for offscreen rendering
-fn createOffscreenAttachments(width: i32, height: i32) void {
-    // destroy previous resources (can be called with invalid ids)
-    sg.destroyAttachments(state.offscreen.attachments);
-    for (state.offscreen.attachments_desc.colors) |att| {
-        sg.destroyImage(att.image);
-    }
-    sg.destroyImage(state.offscreen.attachments_desc.depth_stencil.image);
-
-    // create offscreen render target images and pass
-    const color_img_desc: sg.ImageDesc = .{
-        .render_target = true,
-        .width = width,
-        .height = height,
-        .sample_count = offscreen_sample_count,
-    };
-    var depth_img_desc = color_img_desc;
-    depth_img_desc.pixel_format = .DEPTH;
-
-    state.offscreen.attachments_desc.colors[0].image = sg.makeImage(color_img_desc);
-    state.offscreen.attachments_desc.depth_stencil.image = sg.makeImage(depth_img_desc);
-    state.offscreen.attachments = sg.makeAttachments(state.offscreen.attachments_desc);
-
-    // update the fullscreen-quad texture bindings
-    state.fsq.bind.fs.images[shd.SLOT_tex] = state.offscreen.attachments_desc.colors[0].image;
 }
 
 fn onFileEvent(event_type: fwatch.FileEventType, path: []const u8, _: void) !void {
@@ -1487,11 +1460,14 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             const width = ev.*.window_width;
             const height = ev.*.window_height;
             state.window_size = .{ width, height };
-            createOffscreenAttachments(viewport_size[0], viewport_size[1]);
+            state.camera.window_size = .{
+                @intCast(@max(0, width)),
+                @intCast(@max(0, height))
+            };
         },
         .MOUSE_MOVE => {
             state.mouse_pos = .{ ev.*.mouse_x, ev.*.mouse_y };
-            state.mouse_delta = .{ ev.*.mouse_dx, ev.*.mouse_dy };
+            state.mouse_delta = m.vadd(state.mouse_delta, .{ ev.*.mouse_dx, ev.*.mouse_dy });
         },
         else => {
             state.scene.input(ev) catch |err| {
