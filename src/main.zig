@@ -1051,6 +1051,12 @@ const GameScene = struct {
                             else => {},
                         }
                     },
+                    .MOUSE_DOWN => {
+                        scene.inputs.space_down = true; // TODO rename
+                    },
+                    .MOUSE_UP => {
+                        scene.inputs.space_down = false; // TODO rename
+                    },
                     else => {},
                 }
             },
