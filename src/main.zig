@@ -718,10 +718,7 @@ const GameScene = struct {
             } else {
                 scene.lives -= 1;
 
-                scene.balls[0] = .{
-                    .active = true,
-                    .dir = initial_ball_dir,
-                };
+                _ = try scene.spawnBall(scene.ballOnPaddlePos(), initial_ball_dir);
                 scene.ball_state = .idle;
             }
         }
@@ -809,9 +806,15 @@ const GameScene = struct {
     fn updateIdleBall(scene: *GameScene) void {
         for (scene.balls) |*ball| {
             if (!ball.active) continue;
-            ball.pos[0] = scene.paddle_pos[0];
-            ball.pos[1] = scene.paddle_pos[1] - paddle_h - ball_h / 2;
+            ball.pos = scene.ballOnPaddlePos();
         }
+    }
+
+    fn ballOnPaddlePos(scene: GameScene) [2]f32 {
+        return .{
+            scene.paddle_pos[0],
+            scene.paddle_pos[1] - paddle_h - ball_h / 2,
+        };
     }
 
     fn render(scene: *GameScene) !void {
