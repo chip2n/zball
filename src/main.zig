@@ -48,7 +48,7 @@ const flame_duration = 5;
 const use_gpa = builtin.os.tag != .emscripten;
 
 const initial_screen_size = .{ 640, 480 };
-const viewport_size: [2]i32 = .{ 160, 120 };
+pub const viewport_size: [2]i32 = .{ 160, 120 };
 const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
 const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
 const paddle_speed: f32 = 80;
@@ -157,17 +157,17 @@ const Scene = union(enum) {
         }
     }
 
-    fn update(scene: *Scene, dt: f32) void {
+    fn update(scene: *Scene, dt: f32) !void {
         switch (scene.*) {
-            .title => scene.title.update(dt),
-            .game => scene.game.update(dt),
+            .title => try scene.title.update(dt),
+            .game => try scene.game.update(dt),
         }
     }
 
-    fn render(scene: *Scene) void {
+    fn render(scene: *Scene) !void {
         switch (scene.*) {
-            .title => scene.title.render(),
-            .game => scene.game.render(),
+            .title => try scene.title.render(),
+            .game => try scene.game.render(),
         }
     }
 
@@ -181,43 +181,45 @@ const Scene = union(enum) {
 
 const TitleScene = struct {
     idx: usize = 0,
-    settings_idx: usize = 0,
     settings: bool = false,
 
-    fn update(scene: *TitleScene, dt: f32) void {
+    fn update(scene: *TitleScene, dt: f32) !void {
         _ = dt;
 
+        try ui.begin(.{
+            .batch = &state.batch,
+            .tex_spritesheet = state.spritesheet_texture,
+            .tex_font = state.font_texture,
+        });
+        defer ui.end();
+
         { // Main menu
-            ui.begin(.{
+            try ui.beginWindow(.{
                 .x = viewport_size[0] / 2,
                 .y = viewport_size[1] / 2 + 8,
+                .z = 10,
                 .pivot = .{ 0.5, 0.5 },
-                .batch = &state.batch,
-                .tex_spritesheet = state.spritesheet_texture,
-                .tex_font = state.font_texture,
                 .style = .transparent,
             });
-            defer ui.end();
+            defer ui.endWindow();
 
-            if (scene.settings) {
-                if (renderSettingsMenu(scene.settings_idx)) {
-                    scene.settings = false;
-                }
-            } else {
-                if (ui.selectionItem("Start", .{ .selected = scene.idx == 0 })) {
-                    state.next_scene = .game;
-                }
-                if (ui.selectionItem("Settings", .{ .selected = scene.idx == 1 })) {
-                    scene.settings = true;
-                }
-                if (ui.selectionItem("Quit", .{ .selected = scene.idx == 2 })) {
-                    sapp.quit();
-                }
+            if (ui.selectionItem("Start", .{})) {
+                state.next_scene = .game;
             }
+            if (ui.selectionItem("Settings", .{})) {
+                scene.settings = true;
+            }
+            if (ui.selectionItem("Quit", .{})) {
+                sapp.quit();
+            }
+        }
+
+        if (scene.settings and try renderSettingsMenu()) {
+            scene.settings = false;
         }
     }
 
-    fn render(scene: *TitleScene) void {
+    fn render(scene: *TitleScene) !void {
         _ = scene;
         state.batch.setTexture(state.spritesheet_texture);
 
@@ -269,32 +271,8 @@ const TitleScene = struct {
     }
 
     fn input(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
-        switch (ev.*.type) {
-            .KEY_DOWN => {
-                switch (ev.*.key_code) {
-                    .DOWN => {
-                        scene.idx = @mod(scene.idx + 1, 3);
-                    },
-                    .UP => {
-                        if (scene.idx == 0) {
-                            scene.idx = 2;
-                        } else {
-                            scene.idx -= 1;
-                        }
-                    },
-                    // .ENTER, .SPACE => {
-                    //     if (scene.idx == 0) {
-                    //         const game_scene = try GameScene.init(state.allocator);
-                    //         state.scene = Scene{ .game = game_scene };
-                    //     } else if (scene.idx == 1) {
-                    //         sapp.quit();
-                    //     }
-                    // },
-                    else => {},
-                }
-            },
-            else => {},
-        }
+        _ = ev; // autofix
+        _ = scene; // autofix
     }
 
     fn deinit(scene: *TitleScene) void {
@@ -463,7 +441,7 @@ const GameScene = struct {
         scene.death_timer = 0;
     }
 
-    fn update(scene: *GameScene, dt: f32) void {
+    fn update(scene: *GameScene, dt: f32) !void {
         if (scene.paused()) return;
 
         scene.time += dt;
@@ -848,7 +826,7 @@ const GameScene = struct {
         }
     }
 
-    fn render(scene: *GameScene) void {
+    fn render(scene: *GameScene) !void {
         state.batch.setTexture(state.spritesheet_texture);
 
         // Render all bricks
@@ -950,43 +928,31 @@ const GameScene = struct {
             text_renderer.render(&state.batch, label, 32, 0, 10);
         }
 
-        // Render game menus
-        switch (scene.menu.state) {
-            .none => {},
-            .pause => {
-                // overlay
-                state.batch.setTexture(state.spritesheet_texture);
-                state.batch.render(.{
-                    .src = sprite.sprites.overlay.bounds,
-                    .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
-                    .z = 5,
-                });
+        { // Render game menus
+            try ui.begin(.{
+                .batch = &state.batch,
+                .tex_spritesheet = state.spritesheet_texture,
+                .tex_font = state.font_texture,
+            });
+            defer ui.end();
 
-                ui.begin(.{
-                    .x = viewport_size[0] / 2,
-                    .y = viewport_size[1] / 2,
-                    .pivot = .{ 0.5, 0.5 },
-                    .batch = &state.batch,
-                    .tex_spritesheet = state.spritesheet_texture,
-                    .tex_font = state.font_texture,
-                });
-                defer ui.end();
-
-                if (ui.selectionItem("Continue", .{ .selected = scene.menu.pause_idx == 0 })) {
-                    scene.menu.state = .none;
-                }
-                if (ui.selectionItem("Settings", .{ .selected = scene.menu.pause_idx == 1 })) {
-                    scene.menu.state = .settings;
-                }
-                if (ui.selectionItem("Quit", .{ .selected = scene.menu.pause_idx == 2 })) {
-                    sapp.quit();
-                }
-            },
-            .settings => {
-                if (renderSettingsMenu(scene.menu.settings_idx)) {
-                    scene.menu.state = .pause;
-                }
-            },
+            switch (scene.menu.state) {
+                .none => {},
+                .pause => {
+                    if (try renderPauseMenu(&scene.menu)) {
+                        sapp.quit();
+                    }
+                },
+                .settings => {
+                    // We still "render" the pause menu, but flagging it as hidden to preserve its state
+                    if (try renderPauseMenu(&scene.menu)) {
+                        sapp.quit();
+                    }
+                    if (try renderSettingsMenu()) {
+                        scene.menu.state = .pause;
+                    }
+                },
+            }
         }
 
         const result = state.batch.commit();
@@ -1059,23 +1025,7 @@ const GameScene = struct {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
                         switch (ev.*.key_code) {
-                            .UP => {
-                                if (scene.menu.pause_idx == 0) {
-                                    scene.menu.pause_idx = 2;
-                                } else {
-                                    scene.menu.pause_idx -= 1;
-                                }
-                            },
-                            .DOWN => {
-                                if (scene.menu.pause_idx == 2) {
-                                    scene.menu.pause_idx = 0;
-                                } else {
-                                    scene.menu.pause_idx += 1;
-                                }
-                            },
-                            .ESCAPE => {
-                                scene.menu.state = .none;
-                            },
+                            .ESCAPE => scene.menu.state = .none,
                             else => {},
                         }
                     },
@@ -1086,23 +1036,7 @@ const GameScene = struct {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
                         switch (ev.*.key_code) {
-                            .UP => {
-                                if (scene.menu.settings_idx == 0) {
-                                    scene.menu.settings_idx = 2;
-                                } else {
-                                    scene.menu.settings_idx -= 1;
-                                }
-                            },
-                            .DOWN => {
-                                if (scene.menu.settings_idx == 2) {
-                                    scene.menu.settings_idx = 0;
-                                } else {
-                                    scene.menu.settings_idx += 1;
-                                }
-                            },
-                            .ESCAPE => {
-                                scene.menu.state = .pause;
-                            },
+                            .ESCAPE => scene.menu.state = .pause,
                             else => {},
                         }
                     },
@@ -1113,30 +1047,46 @@ const GameScene = struct {
     }
 };
 
-fn renderSettingsMenu(idx: usize) bool {
-    // overlay
-    state.batch.setTexture(state.spritesheet_texture);
-    state.batch.render(.{
-        .src = sprite.sprites.overlay.bounds,
-        .dst = .{ .x = 0, .y = 0, .w = viewport_size[0], .h = viewport_size[1] },
-        .z = 5,
-    });
-
-    ui.begin(.{
+fn renderPauseMenu(menu: *GameMenu) !bool {
+    try ui.beginWindow(.{
         .x = viewport_size[0] / 2,
         .y = viewport_size[1] / 2,
         .pivot = .{ 0.5, 0.5 },
-        .batch = &state.batch,
-        .tex_spritesheet = state.spritesheet_texture,
-        .tex_font = state.font_texture,
+        .style = if (menu.state == .settings) .hidden else .dialog,
     });
-    defer ui.end();
+    defer ui.endWindow();
 
-    _ = ui.selectionItem("Volume (sfx)", .{ .selected = idx == 0 });
-    ui.slider(.{ .value = &state.audio.vol_sfx, .focused = idx == 0 });
-    _ = ui.selectionItem("Volume (bg)", .{ .selected = idx == 1 });
-    ui.slider(.{ .value = &state.audio.vol_bg, .focused = idx == 1 });
-    if (ui.selectionItem("Back", .{ .selected = idx == 2 })) {
+    if (ui.selectionItem("Continue", .{})) {
+        menu.state = .none;
+    }
+    if (ui.selectionItem("Settings", .{})) {
+        menu.state = .settings;
+    }
+    if (ui.selectionItem("Quit", .{})) {
+        return true;
+    }
+
+    return false;
+}
+
+fn renderSettingsMenu() !bool {
+    try ui.beginWindow(.{
+        .x = viewport_size[0] / 2,
+        .y = viewport_size[1] / 2,
+        .z = 20,
+        .pivot = .{ 0.5, 0.5 },
+    });
+    defer ui.endWindow();
+
+    var sfx_focused = false;
+    _ = ui.selectionItem("Volume (sfx)", .{ .focused = &sfx_focused });
+    ui.slider(.{ .value = &state.audio.vol_sfx, .focused = sfx_focused });
+
+    var bg_focused = false;
+    _ = ui.selectionItem("Volume (bg)", .{ .focused = &bg_focused });
+    ui.slider(.{ .value = &state.audio.vol_bg, .focused = bg_focused });
+
+    if (ui.selectionItem("Back", .{})) {
         return true;
     }
 
@@ -1222,6 +1172,8 @@ fn initializeGame() !void {
     simgui.setup(.{
         .logger = .{ .func = slog.func },
     });
+    ui.init(state.allocator);
+    errdefer ui.deinit();
 
     // setup pass action for default render pass
     state.default.pass_action.colors[0] = .{
@@ -1431,7 +1383,10 @@ export fn sokolFrame() void {
     const dt: f32 = @floatCast(sapp.frameDuration());
 
     var scene = &state.scene;
-    scene.update(dt);
+    scene.update(dt) catch |err| {
+        std.log.err("Unable to update scene: {}", .{err});
+        std.process.exit(1);
+    };
 
     if (config.shader_reload and debug.reload) {
         state.bg.reload() catch {};
@@ -1447,7 +1402,10 @@ export fn sokolFrame() void {
         .dpi_scale = sapp.dpiScale(),
     });
 
-    scene.render();
+    scene.render() catch |err| {
+        std.log.err("Unable to render scene: {}", .{err});
+        std.process.exit(1);
+    };
 
     renderGui();
 
@@ -1499,6 +1457,7 @@ export fn sokolCleanup() void {
     state.scene.deinit();
     saudio.shutdown();
     sg.shutdown();
+    ui.deinit();
     state.arena.deinit();
     if (config.shader_reload) {
         debug.watcher.deinit();

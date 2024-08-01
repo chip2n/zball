@@ -1,4 +1,5 @@
 const std = @import("std");
+const root = @import("root");
 const font = @import("font");
 const sprite = @import("sprite");
 const sokol = @import("sokol");
@@ -6,6 +7,21 @@ const sapp = sokol.app;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const Texture = @import("Texture.zig");
+
+const WindowData = struct {
+    focus_id: usize = 0,
+    focus_prev_id: usize = 0,
+    draw_list: [128]DrawListEntry = undefined, // TODO allocator instead?
+    draw_list_idx: usize = 0,
+
+    fn addDrawListEntry(data: *WindowData, entry: DrawListEntry) void {
+        std.debug.assert(data.draw_list_idx < data.draw_list.len - 1);
+        data.draw_list[data.draw_list_idx] = entry;
+        data.draw_list_idx += 1;
+    }
+};
+
+var window_data: std.AutoHashMap(usize, WindowData) = undefined;
 
 const DrawListEntry = union(enum) {
     text: struct {
@@ -23,15 +39,18 @@ const DrawListEntry = union(enum) {
 var origin: [2]f32 = .{ 0, 0 };
 var cursor: [2]f32 = .{ 0, 0 };
 var pivot: [2]f32 = .{ 0, 0 };
+var win_id: usize = 0;
 var win_width: f32 = 0;
 var win_height: f32 = 0;
 var win_z: f32 = 0;
 var win_style: WindowStyle = .dialog;
-var draw_list: [128]DrawListEntry = undefined;
-var draw_list_idx: usize = 0;
 var batch: *BatchRenderer = undefined;
 var tex_spritesheet: Texture = undefined;
 var tex_font: Texture = undefined;
+
+// Manage window focus
+var window_stack: std.ArrayList(usize) = undefined;
+var prev_window_stack: std.ArrayList(usize) = undefined;
 
 const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
@@ -40,20 +59,68 @@ const io = struct {
 const WindowStyle = enum {
     dialog,
     transparent,
+    hidden, // Used to preserve window state without displaying window
 };
 
 pub const BeginDesc = struct {
+    batch: *BatchRenderer,
+    tex_spritesheet: Texture,
+    tex_font: Texture,
+};
+
+pub fn init(allocator: std.mem.Allocator) void {
+    window_data = std.AutoHashMap(usize, WindowData).init(allocator);
+    window_stack = std.ArrayList(usize).init(allocator);
+    prev_window_stack = std.ArrayList(usize).init(allocator);
+}
+
+pub fn deinit() void {
+    window_data.deinit();
+    window_stack.deinit();
+    prev_window_stack.deinit();
+}
+
+pub fn begin(v: BeginDesc) !void {
+    window_stack.clearRetainingCapacity();
+    batch = v.batch;
+    tex_spritesheet = v.tex_spritesheet;
+    tex_font = v.tex_font;
+}
+
+pub fn end() void {
+    io.key_pressed = .INVALID;
+    win_id = 0;
+
+    { // If any window has been closed during this frame, clear its data
+        var iter = window_data.keyIterator();
+        while (iter.next()) |k| {
+            for (window_stack.items) |id| {
+                if (k.* == id) break;
+            } else {
+                _ = window_data.remove(k.*);
+            }
+        }
+    }
+
+    prev_window_stack.clearRetainingCapacity();
+    // TODO can we avoid memory shenanigans by allocating once in the beginning
+    // so that memory allocations cannot fail?
+    prev_window_stack.appendSlice(window_stack.items) catch unreachable;
+    window_stack.clearRetainingCapacity();
+}
+
+pub const BeginWindowDesc = struct {
     x: f32,
     y: f32,
     z: f32 = 10,
     pivot: [2]f32 = .{ 0, 0 },
-    batch: *BatchRenderer,
-    tex_spritesheet: Texture,
-    tex_font: Texture,
     style: WindowStyle = .dialog,
 };
 
-pub fn begin(v: BeginDesc) void {
+pub fn beginWindow(v: BeginWindowDesc) !void {
+    const id = genId();
+    win_id = id;
+
     win_width = 0;
     win_height = 0;
     win_z = v.z;
@@ -63,16 +130,27 @@ pub fn begin(v: BeginDesc) void {
     cursor[0] = v.x;
     cursor[1] = v.y;
     pivot = v.pivot;
-    batch = v.batch;
-    tex_spritesheet = v.tex_spritesheet;
-    tex_font = v.tex_font;
-    draw_list_idx = 0;
+
+    try window_stack.append(id);
+
+    const r = try window_data.getOrPut(id);
+    if (!r.found_existing) {
+        r.value_ptr.* = .{};
+    } else {
+        r.value_ptr.draw_list_idx = 0;
+    }
 }
 
-pub fn end() void {
+pub fn endWindow() void {
+    const win_data = window_data.get(win_id).?;
+    win_id = 0;
+
+    // TODO do we want to render it here? abstract away batch renderer so we
+    // store render commands instead?
     const padding = 8;
 
     const dialog = sprite.sprites.dialog;
+    // TODO separate sprite sheet for UI
     batch.setTexture(tex_spritesheet);
 
     var w = win_width + @as(f32, @floatFromInt(dialog.bounds.w - dialog.center.?.w));
@@ -83,6 +161,13 @@ pub fn end() void {
 
     switch (win_style) {
         .dialog => {
+            // Semi-transparent background overlay
+            batch.render(.{
+                .src = sprite.sprites.overlay.bounds,
+                .dst = .{ .x = 0, .y = 0, .w = root.viewport_size[0], .h = root.viewport_size[1] },
+                .z = win_z - 0.1,
+            });
+
             batch.renderNinePatch(.{
                 .src = dialog.bounds,
                 .center = dialog.center.?,
@@ -96,11 +181,12 @@ pub fn end() void {
             });
         },
         .transparent => {},
+        .hidden => return,
     }
 
     { // render draw list
         var text_renderer = TextRenderer{};
-        for (draw_list[0..draw_list_idx]) |e| {
+        for (win_data.draw_list[0..win_data.draw_list_idx]) |e| {
             switch (e) {
                 .text => |t| {
                     batch.setTexture(tex_font);
@@ -154,41 +240,67 @@ pub fn end() void {
             }
         }
     }
-
-    // clear IO
-    io.key_pressed = .INVALID;
 }
 
 pub const SelectionItemDesc = struct {
-    selected: bool = false,
+    focused: ?*bool = null,
 };
 
+inline fn genId() usize {
+    return @returnAddress();
+}
+
 pub fn selectionItem(s: []const u8, v: SelectionItemDesc) bool {
+    const id = genId();
     const arrow_w = 8;
     const sz = TextRenderer.measure(s);
     win_width = @max(win_width, sz[0] + arrow_w + 2);
 
-    if (v.selected) {
-        addDrawListEntry(.{
-            .text = .{
-                .s = ">",
-                .x = cursor[0],
-                .y = cursor[1],
-            },
-        });
+    var win_data = window_data.getPtr(win_id).?;
+    const focus_id = &win_data.focus_id;
+    const focus_prev_id = &win_data.focus_prev_id;
+
+    // If nothing is focused, we'll steal focus
+    if (focus_id.* == 0) {
+        focus_id.* = id;
     }
-    addDrawListEntry(.{
-        .text = .{
-            .s = s,
-            .x = cursor[0] + arrow_w,
-            .y = cursor[1],
-        },
-    });
+
+    const last_win = blk: {
+        if (prev_window_stack.items.len == 0) {
+            break :blk win_id;
+        }
+        break :blk prev_window_stack.items[prev_window_stack.items.len - 1];
+    };
+    const selected = win_id == last_win and focus_id.* == id;
+    if (v.focused) |f| {
+        f.* = selected;
+    }
+
+    if (selected) {
+        // Up/down arrows resigns focus
+        switch (io.key_pressed) {
+            .UP => {
+                focus_id.* = focus_prev_id.*;
+                io.key_pressed = .INVALID;
+            },
+            .DOWN => {
+                focus_id.* = 0;
+                io.key_pressed = .INVALID;
+            },
+            else => {},
+        }
+    }
+
+    if (selected) {
+        win_data.addDrawListEntry(.{ .text = .{ .s = ">", .x = cursor[0], .y = cursor[1] } });
+    }
+    win_data.addDrawListEntry(.{ .text = .{ .s = s, .x = cursor[0] + arrow_w, .y = cursor[1] } });
 
     cursor[1] += font.ascent + 4;
     win_height = cursor[1] - origin[1] - 4;
+    focus_prev_id.* = id;
 
-    return v.selected and io.key_pressed == .ENTER;
+    return selected and io.key_pressed == .ENTER;
 }
 
 const SliderDesc = struct {
@@ -196,12 +308,14 @@ const SliderDesc = struct {
     focused: bool,
 };
 pub fn slider(v: SliderDesc) void {
+    var win_data = window_data.getPtr(win_id).?;
+
     if (v.focused) {
         if (io.key_pressed == .LEFT) v.value.* = @max(0, v.value.* - 0.1);
         if (io.key_pressed == .RIGHT) v.value.* = @min(v.value.* + 0.1, 1);
     }
 
-    addDrawListEntry(.{
+    win_data.addDrawListEntry(.{
         .slider = .{
             .value = v.value.*,
             .x = cursor[0],
@@ -219,10 +333,4 @@ pub fn handleEvent(ev: sapp.Event) void {
         },
         else => {},
     }
-}
-
-fn addDrawListEntry(entry: DrawListEntry) void {
-    std.debug.assert(draw_list_idx < draw_list.len - 1);
-    draw_list[draw_list_idx] = entry;
-    draw_list_idx += 1;
 }
