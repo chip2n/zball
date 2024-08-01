@@ -233,27 +233,6 @@ const TitleScene = struct {
             },
         });
 
-        // { // Text
-        //     state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
-
-        //     var y = @as(f32, @floatFromInt(viewport_size[1])) / 2;
-        //     { // Start
-        //         var text_renderer = TextRenderer{};
-        //         var buf: [32]u8 = undefined;
-        //         const label = std.fmt.bufPrint(&buf, "{s} start", .{if (scene.idx == 0) ">" else " "}) catch unreachable;
-        //         const measure = TextRenderer.measure(label);
-        //         text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
-        //         y += measure[1] + 4;
-        //     }
-        //     { // Quit
-        //         var text_renderer = TextRenderer{};
-        //         var buf: [32]u8 = undefined;
-        //         const label = std.fmt.bufPrint(&buf, "{s} quit", .{if (scene.idx == 1) ">" else " "}) catch unreachable;
-        //         const measure = TextRenderer.measure(label);
-        //         text_renderer.render(&state.batch, label, (viewport_size[0] - measure[0]) / 2, y);
-        //     }
-        // }
-
         const result = state.batch.commit();
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
@@ -271,8 +250,17 @@ const TitleScene = struct {
     }
 
     fn input(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
-        _ = ev; // autofix
-        _ = scene; // autofix
+        if (scene.settings) {
+            switch (ev.*.type) {
+                .KEY_DOWN => {
+                    switch (ev.*.key_code) {
+                        .ESCAPE => scene.settings = false,
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
     }
 
     fn deinit(scene: *TitleScene) void {
