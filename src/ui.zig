@@ -57,9 +57,14 @@ const io = struct {
 };
 
 const WindowStyle = enum {
+    /// Frame contents in a dialog, with semi-transparent background overlay
     dialog,
+
+    /// No styling at all
     transparent,
-    hidden, // Used to preserve window state without displaying window
+
+    /// Used to preserve window state without displaying window
+    hidden,
 };
 
 pub const BeginDesc = struct {

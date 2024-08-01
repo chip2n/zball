@@ -11,6 +11,7 @@ const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 const simgui = sokol.imgui;
+
 const shd = @import("shader");
 const font = @import("font");
 const sprite = @import("sprite");
@@ -127,6 +128,9 @@ const state = struct {
     var textures: std.AutoHashMap(usize, sg.Image) = undefined;
 
     var window_size: [2]i32 = initial_screen_size;
+
+    /// Mouse position in unscaled pixels
+    var mouse: [2]f32 = .{ 0, 0 };
 
     var allocator: std.mem.Allocator = undefined;
     var arena: std.heap.ArenaAllocator = undefined;
@@ -1084,12 +1088,14 @@ fn renderSettingsMenu() !bool {
     return false;
 }
 
+// TODO move this
 fn renderGui() void {
     //=== UI CODE STARTS HERE
     ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
     ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
+    _ = ig.igText("Mouse: %.4g %.4g", state.mouse[0], state.mouse[1]);
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
 
     switch (state.scene) {
@@ -1435,6 +1441,9 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             const height = ev.*.window_height;
             state.window_size = .{ width, height };
             createOffscreenAttachments(viewport_size[0], viewport_size[1]);
+        },
+        .MOUSE_MOVE => {
+            state.mouse = .{ ev.*.mouse_x, ev.*.mouse_y };
         },
         else => {
             state.scene.input(ev) catch |err| {
