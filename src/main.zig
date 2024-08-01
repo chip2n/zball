@@ -54,10 +54,10 @@ const initial_screen_size = .{ 640, 480 };
 pub const viewport_size: [2]u32 = .{ 160, 120 };
 const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
 const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
-const paddle_speed: f32 = 80;
+const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
 const ball_h: f32 = sprite.sprites.ball.bounds.h;
-const ball_speed: f32 = 70;
+const ball_speed: f32 = 100;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
     viewport_size[1] - 4,
