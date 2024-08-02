@@ -40,6 +40,7 @@ const Texture = @import("Texture.zig");
 
 pub const offscreen_sample_count = 1;
 
+const pi = std.math.pi;
 const num_audio_samples = 32;
 
 pub const max_quads = 1024;
@@ -283,18 +284,101 @@ const TitleScene = struct {
 
 const GameMenu = enum { none, pause, settings };
 
-const PowerupType = enum { split, flame };
+const PowerupType = enum {
+    /// Splits the ball into two in a Y-shape
+    fork,
+
+    /// Splits the ball into four in an X-shape
+    scatter,
+
+    /// Make the ball pass through bricks
+    flame,
+};
+
 const Powerup = struct {
-    type: PowerupType = .split,
+    type: PowerupType = .fork,
     pos: [2]f32 = .{ 0, 0 },
     active: bool = false,
 };
 
 fn powerupSprite(p: PowerupType) sprite.SpriteData {
     return switch (p) {
-        .split => sprite.sprites.pow_fork,
+        .fork => sprite.sprites.pow_fork,
+        .scatter => sprite.sprites.pow_scatter,
         .flame => sprite.sprites.pow_flame,
     };
+}
+
+fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
+    switch (p) {
+        .fork => {
+            var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
+            for (scene.balls, 0..) |ball, i| {
+                if (!ball.active) continue;
+                active_balls.append(i) catch continue;
+            }
+            for (active_balls.constSlice()) |i| {
+                var ball = &scene.balls[i];
+                var d1 = ball.dir;
+                var d2 = ball.dir;
+                m.vrot(&d1, -pi / 8.0);
+                m.vrot(&d2, pi / 8.0);
+                ball.dir = d1;
+                const new_ball = scene.spawnBall(ball.pos, d2) catch break;
+                new_ball.flame.emitting = ball.flame.emitting;
+            }
+        },
+        .scatter => {
+            // TODO refactor?
+            var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
+            for (scene.balls, 0..) |ball, i| {
+                if (!ball.active) continue;
+                active_balls.append(i) catch continue;
+            }
+            const angles = [_]f32{
+                -pi / 4.0,
+                pi / 4.0,
+                3 * pi / 4.0,
+                5 * pi / 4.0,
+            };
+            for (active_balls.constSlice()) |i| {
+                var ball = &scene.balls[i];
+                var d1 = ball.dir;
+                m.vrot(&d1, angles[0]);
+                for (angles[1..]) |angle| {
+                    var d2 = ball.dir;
+                    m.vrot(&d2, angle);
+                    const new_ball = scene.spawnBall(ball.pos, d2) catch break;
+                    new_ball.flame.emitting = ball.flame.emitting;
+                }
+                ball.dir = d1;
+            }
+        },
+        .flame => {
+            scene.flame_timer = flame_duration;
+            for (scene.balls) |*ball| {
+                if (!ball.active) continue;
+                ball.flame.emitting = true;
+            }
+        },
+    }
+}
+
+fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
+    var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
+    const rng = prng.random();
+    const value = rng.float(f32);
+    if (value < 1 - powerup_freq) return;
+
+    for (&scene.powerups) |*p| {
+        if (p.active) continue;
+        p.* = .{
+            .type = rng.enumValue(PowerupType),
+            .pos = pos,
+            .active = true,
+        };
+        return;
+    }
 }
 
 const Ball = struct {
@@ -517,22 +601,7 @@ const GameScene = struct {
                 if (!paddle_bounds.overlaps(powerup_bounds)) continue;
                 p.active = false;
                 audio.play(.{ .clip = .powerup });
-                switch (p.type) {
-                    .split => {
-                        var new_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
-
-                        for (scene.balls, 0..) |ball, i| {
-                            if (!ball.active) continue;
-                            new_balls.append(i) catch continue;
-                        }
-                        for (new_balls.constSlice()) |i| {
-                            scene.splitBall(&scene.balls[i]) catch break;
-                        }
-                    },
-                    .flame => {
-                        scene.addFlamePowerup();
-                    },
-                }
+                acquirePowerup(scene, p.type);
             }
         }
 
@@ -590,7 +659,7 @@ const GameScene = struct {
                         audio.play(.{ .clip = .explode });
                         scene.score += 100;
 
-                        scene.spawnPowerup(brick.pos);
+                        spawnPowerup(scene, brick.pos);
                     }
                     collided = collided or c;
                 }
@@ -772,14 +841,6 @@ const GameScene = struct {
         };
     }
 
-    fn addFlamePowerup(scene: *GameScene) void {
-        scene.flame_timer = flame_duration;
-        for (scene.balls) |*ball| {
-            if (!ball.active) continue;
-            ball.flame.emitting = true;
-        }
-    }
-
     fn paused(scene: *GameScene) bool {
         return scene.menu != .none;
     }
@@ -803,34 +864,6 @@ const GameScene = struct {
             return ball;
         } else {
             return error.MaxBallsReached;
-        }
-    }
-
-    fn splitBall(scene: *GameScene, ball: *Ball) !void {
-        var d1 = ball.dir;
-        var d2 = ball.dir;
-        m.vrot(&d1, -std.math.pi / 8.0);
-        m.vrot(&d2, std.math.pi / 8.0);
-        ball.dir = d1;
-        const new_ball = try scene.spawnBall(ball.pos, d2);
-        new_ball.flame.emitting = ball.flame.emitting;
-    }
-
-    fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
-        // TODO don't recreate
-        var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
-        const rng = prng.random();
-        const value = rng.float(f32);
-        if (value < 1 - powerup_freq) return;
-
-        for (&scene.powerups) |*p| {
-            if (p.active) continue;
-            p.* = .{
-                .type = rng.enumValue(PowerupType),
-                .pos = pos,
-                .active = true,
-            };
-            return;
         }
     }
 
@@ -1149,7 +1182,10 @@ fn renderGui() void {
             _ = ig.igText("Death timer: %.4g", s.death_timer);
             _ = ig.igText("Flame timer: %.4g", s.flame_timer);
             if (ig.igButton("Enable flame", .{})) {
-                s.addFlamePowerup();
+                acquirePowerup(s, .flame);
+            }
+            if (ig.igButton("Enable fork", .{})) {
+                acquirePowerup(s, .fork);
             }
 
             // @import("debug.zig").renderEmitterGui(s.explosion_emitter);
