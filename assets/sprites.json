@@ -36,7 +36,18 @@
    { "name": "particle_flame_2", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 251, "y": 13, "w": 1, "h": 1 } }] },
    { "name": "particle_flame_1", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 251, "y": 11, "w": 1, "h": 1 } }] },
    { "name": "particle_flame_6", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 245, "y": 3, "w": 6, "h": 6 } }] },
-   { "name": "particle_flame_4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 246, "y": 10, "w": 4, "h": 4 } }] }
+   { "name": "particle_flame_4", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 246, "y": 10, "w": 4, "h": 4 } }] },
+   { "name": "pow_laser", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 19, "w": 13, "h": 13 } }] },
+   { "name": "pow_flame", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 175, "y": 19, "w": 13, "h": 13 } }] },
+   { "name": "pow_scatter", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 33, "w": 13, "h": 13 } }] },
+   { "name": "pow_fork", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 175, "y": 33, "w": 13, "h": 13 } }] },
+   { "name": "pow_paddlegrow", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 47, "w": 13, "h": 13 } }] },
+   { "name": "pow_paddleshrink", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 175, "y": 47, "w": 13, "h": 13 } }] },
+   { "name": "pow_magnet", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 61, "w": 13, "h": 13 } }] },
+   { "name": "pow_ballshrink", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 175, "y": 61, "w": 13, "h": 13 } }] },
+   { "name": "pow_ballgrow", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 75, "w": 13, "h": 13 } }] },
+   { "name": "pow_ballfast", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 175, "y": 75, "w": 13, "h": 13 } }] },
+   { "name": "pow_ballslow", "color": "#0000ffff", "keys": [{ "frame": 0, "bounds": {"x": 161, "y": 89, "w": 13, "h": 13 } }] }
   ]
  }
 }

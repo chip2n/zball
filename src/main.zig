@@ -290,6 +290,13 @@ const Powerup = struct {
     active: bool = false,
 };
 
+fn powerupSprite(p: PowerupType) sprite.SpriteData {
+    return switch (p) {
+        .split => sprite.sprites.pow_fork,
+        .flame => sprite.sprites.pow_flame,
+    };
+}
+
 const Ball = struct {
     pos: [2]f32 = initial_ball_pos,
     dir: [2]f32 = initial_ball_dir,
@@ -499,10 +506,7 @@ const GameScene = struct {
             const paddle_bounds = scene.paddleBounds();
             for (&scene.powerups) |*p| {
                 if (!p.active) continue;
-                const sp = switch (p.type) {
-                    .split => sprite.sprites.powerup_split,
-                    .flame => sprite.sprites.powerup_flame,
-                };
+                const sp = powerupSprite(p.type);
                 const powerup_bounds = m.Rect{
                     // TODO just store bounds? also using hard coded split sprite here
                     .x = p.pos[0],
@@ -896,11 +900,7 @@ const GameScene = struct {
         // Render powerups
         for (scene.powerups) |p| {
             if (!p.active) continue;
-            // TODO duplicated
-            const sp = switch (p.type) {
-                .split => sprite.sprites.powerup_split,
-                .flame => sprite.sprites.powerup_flame,
-            };
+            const sp = powerupSprite(p.type);
             state.batch.render(.{
                 .src = sp.bounds,
                 .dst = .{
@@ -1454,10 +1454,7 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             const width = ev.*.window_width;
             const height = ev.*.window_height;
             state.window_size = .{ width, height };
-            state.camera.window_size = .{
-                @intCast(@max(0, width)),
-                @intCast(@max(0, height))
-            };
+            state.camera.window_size = .{ @intCast(@max(0, width)), @intCast(@max(0, height)) };
         },
         .MOUSE_MOVE => {
             state.mouse_pos = .{ ev.*.mouse_x, ev.*.mouse_y };

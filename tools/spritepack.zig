@@ -74,7 +74,7 @@ pub fn main() !void {
         \\const math = @import("math");
         \\
         \\pub const Sprite = std.meta.FieldEnum(@TypeOf(sprites));
-        \\const SpriteData = struct {
+        \\pub const SpriteData = struct {
         \\    name: []const u8,
         \\    bounds: math.IRect,
         \\    center: ?math.IRect = null,
