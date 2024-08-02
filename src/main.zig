@@ -46,15 +46,17 @@ const num_audio_samples = 32;
 pub const max_quads = 1024;
 pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
+const max_entities = 128;
 const powerup_freq = 0.3;
 const flame_duration = 5;
+const laser_duration = 5;
+const laser_speed = 200;
+const laser_cooldown = 0.2;
 
 const use_gpa = builtin.os.tag != .emscripten;
 
 const initial_screen_size = .{ 640, 480 };
 pub const viewport_size: [2]u32 = .{ 160, 120 };
-const paddle_w: f32 = sprite.sprites.paddle.bounds.w;
-const paddle_h: f32 = sprite.sprites.paddle.bounds.h;
 const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
 const ball_h: f32 = sprite.sprites.ball.bounds.h;
@@ -64,10 +66,6 @@ const initial_paddle_pos: [2]f32 = .{
     viewport_size[1] - 4,
 };
 
-const initial_ball_pos: [2]f32 = .{
-    initial_paddle_pos[0],
-    initial_paddle_pos[1] - paddle_h - ball_h / 2,
-};
 const initial_ball_dir: [2]f32 = blk: {
     var dir: [2]f32 = .{ 0.3, -1 };
     m.normalize(&dir);
@@ -284,6 +282,18 @@ const TitleScene = struct {
 
 const GameMenu = enum { none, pause, settings };
 
+const PaddleType = enum {
+    normal,
+    laser,
+};
+
+fn paddleSprite(p: PaddleType) sprite.SpriteData {
+    return switch (p) {
+        .normal => sprite.sprites.paddle_normal,
+        .laser => sprite.sprites.paddle_laser,
+    };
+}
+
 const PowerupType = enum {
     /// Splits the ball into two in a Y-shape
     fork,
@@ -293,6 +303,9 @@ const PowerupType = enum {
 
     /// Make the ball pass through bricks
     flame,
+
+    /// Make the paddle shoot lasers
+    laser,
 };
 
 const Powerup = struct {
@@ -306,6 +319,7 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .fork => sprite.sprites.pow_fork,
         .scatter => sprite.sprites.pow_scatter,
         .flame => sprite.sprites.pow_flame,
+        .laser => sprite.sprites.pow_laser,
     };
 }
 
@@ -323,28 +337,34 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         }),
         .flame => {
             scene.flame_timer = flame_duration;
-            for (scene.balls) |*ball| {
-                if (!ball.active) continue;
-                ball.flame.emitting = true;
+            for (scene.entities) |*e| {
+                if (!e.active) continue;
+                if (e.type != .ball) continue;
+                e.flame.emitting = true;
             }
+        },
+        .laser => {
+            scene.laser_timer = laser_duration;
+            scene.paddle_type = .laser;
         },
     }
 }
 
 fn splitBall(scene: *GameScene, angles: []const f32) void {
     var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
-    for (scene.balls, 0..) |ball, i| {
-        if (!ball.active) continue;
+    for (scene.entities, 0..) |e, i| {
+        if (!e.active) continue;
+        if (e.type != .ball) continue;
         active_balls.append(i) catch continue;
     }
     for (active_balls.constSlice()) |i| {
-        var ball = &scene.balls[i];
+        var ball = &scene.entities[i];
         var d1 = ball.dir;
         m.vrot(&d1, angles[0]);
         for (angles[1..]) |angle| {
             var d2 = ball.dir;
             m.vrot(&d2, angle);
-            const new_ball = scene.spawnBall(ball.pos, d2) catch break;
+            const new_ball = scene.spawnEntity(.ball, ball.pos, d2) catch break;
             new_ball.flame.emitting = ball.flame.emitting;
         }
         ball.dir = d1;
@@ -368,13 +388,18 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
     }
 }
 
-const Ball = struct {
-    pos: [2]f32 = initial_ball_pos,
+const EntityType = enum {
+    ball,
+    laser,
+};
+
+const Entity = struct {
+    type: EntityType = .ball, // TODO introduce null-entity and use that instead of active field?
+    active: bool = false,
+    pos: [2]f32 = .{ 0, 0 },
     dir: [2]f32 = initial_ball_dir,
     flame: FlameEmitter = undefined,
-    // TODO: make this explosion unique
     explosion: ExplosionEmitter = undefined,
-    active: bool = false,
 };
 
 const FlameEmitter = particle.Emitter(.{
@@ -463,37 +488,41 @@ const GameScene = struct {
     lives: u8 = 3,
     score: u32 = 0,
 
+    paddle_type: PaddleType = .normal,
+    paddle_pos: [2]f32 = initial_paddle_pos,
+
+    entities: []Entity,
+
+    ball_state: BallState = .idle,
+
     // When player dies, we start a timer. When it reaches zero, we start a new
     // round (or send them to the title screen).
     death_timer: f32 = 0,
 
-    paddle_pos: [2]f32 = initial_paddle_pos,
-
-    balls: []Ball,
-    ball_state: BallState = .idle,
-
     flame_timer: f32 = 0,
+    laser_timer: f32 = 0,
+    laser_cooldown: f32 = 0,
 
     inputs: struct {
         left_down: bool = false,
         right_down: bool = false,
-        space_down: bool = false,
+        shoot_down: bool = false,
     } = .{},
 
     fn init(allocator: std.mem.Allocator) !GameScene {
         const bricks = try allocator.alloc(Brick, num_rows * num_bricks);
         errdefer allocator.free(bricks);
-        const balls = try allocator.alloc(Ball, max_balls);
-        errdefer allocator.free(balls);
+        const entities = try allocator.alloc(Entity, max_entities);
+        errdefer allocator.free(entities);
 
         var scene = GameScene{
             .allocator = allocator,
             .bricks = bricks,
-            .balls = balls,
+            .entities = entities,
         };
 
-        // intialize balls
-        for (scene.balls) |*b| b.* = .{};
+        // zero-intialize entities
+        for (scene.entities) |*e| e.* = .{};
 
         // initialize bricks
         const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
@@ -514,19 +543,21 @@ const GameScene = struct {
         }
 
         // spawn one ball to start
-        _ = scene.spawnBall(initial_ball_pos, initial_ball_dir) catch unreachable;
+        const initial_ball_pos = scene.ballOnPaddlePos();
+        _ = scene.spawnEntity(.ball, initial_ball_pos, initial_ball_dir) catch unreachable;
 
         return scene;
     }
 
     fn deinit(scene: GameScene) void {
         scene.allocator.free(scene.bricks);
-        scene.allocator.free(scene.balls);
+        scene.allocator.free(scene.entities);
     }
 
     fn start(scene: *GameScene) void {
-        scene.flame_timer = 0;
         scene.death_timer = 0;
+        scene.flame_timer = 0;
+        scene.laser_timer = 0;
     }
 
     fn update(scene: *GameScene, dt: f32) !void {
@@ -556,12 +587,21 @@ const GameScene = struct {
                 }
                 break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
             };
-            scene.paddle_pos[0] = std.math.clamp(new_pos, paddle_w / 2, viewport_size[0] - paddle_w / 2);
+
+            const bounds = scene.paddleBounds();
+            scene.paddle_pos[0] = std.math.clamp(new_pos, bounds.w / 2, viewport_size[0] - bounds.w / 2);
         }
 
-        // Fire ball when pressing space
-        if (scene.inputs.space_down and scene.ball_state == .idle) {
-            scene.ball_state = .alive;
+        // Handle shoot input
+        if (scene.inputs.shoot_down) {
+            if (scene.ball_state == .idle) {
+                scene.ball_state = .alive;
+            } else if (scene.paddle_type == .laser and scene.laser_cooldown <= 0) {
+                const bounds = scene.paddleBounds();
+                _ = try scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 });
+                _ = try scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 });
+                scene.laser_cooldown = laser_cooldown;
+            }
         }
 
         // Move powerups
@@ -592,239 +632,260 @@ const GameScene = struct {
             }
         }
 
-        // Move balls
-        for (scene.balls) |*ball| {
-            if (!ball.active) continue;
-            const old_ball_pos = ball.pos;
-            switch (scene.ball_state) {
-                .idle => {
-                    scene.updateIdleBall();
-                },
-                .alive => {
-                    ball.pos[0] += ball.dir[0] * ball_speed * dt;
-                    ball.pos[1] += ball.dir[1] * ball_speed * dt;
-                },
-            }
-            const new_ball_pos = ball.pos;
+        // Update entities
+        for (scene.entities) |*e| {
+            if (!e.active) continue;
+            switch (e.type) {
+                .ball => {
+                    const ball = e;
+                    const old_ball_pos = ball.pos;
+                    switch (scene.ball_state) {
+                        .idle => {
+                            scene.updateIdleBall();
+                        },
+                        .alive => {
+                            ball.pos[0] += ball.dir[0] * ball_speed * dt;
+                            ball.pos[1] += ball.dir[1] * ball_speed * dt;
+                        },
+                    }
+                    const new_ball_pos = ball.pos;
 
-            var out: [2]f32 = undefined;
-            var normal: [2]f32 = undefined;
+                    var out: [2]f32 = undefined;
+                    var normal: [2]f32 = undefined;
 
-            { // Has the ball hit any bricks?
-                var collided = false;
-                var coll_dist = std.math.floatMax(f32);
-                for (scene.bricks) |*brick| {
-                    if (brick.destroyed) continue;
+                    { // Has the ball hit any bricks?
+                        var collided = false;
+                        var coll_dist = std.math.floatMax(f32);
+                        for (scene.bricks) |*brick| {
+                            if (brick.destroyed) continue;
 
-                    var r = @import("collision.zig").Rect{
-                        .min = .{ brick.pos[0], brick.pos[1] },
-                        .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
-                    };
-                    r.grow(.{ ball_w / 2, ball_h / 2 });
-                    var c_normal: [2]f32 = undefined;
-                    const c = box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
-                    if (c) {
-                        // always use the normal of the closest brick for ball reflection
-                        const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-                        const brick_dist = m.magnitude(m.vsub(brick_pos, ball.pos));
-                        if (brick_dist < coll_dist) {
-                            normal = c_normal;
-                            coll_dist = brick_dist;
+                            var r = @import("collision.zig").Rect{
+                                .min = .{ brick.pos[0], brick.pos[1] },
+                                .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+                            };
+                            r.grow(.{ ball_w / 2, ball_h / 2 });
+                            var c_normal: [2]f32 = undefined;
+                            const c = box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
+                            if (c) {
+                                // always use the normal of the closest brick for ball reflection
+                                const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+                                const brick_dist = m.magnitude(m.vsub(brick_pos, ball.pos));
+                                if (brick_dist < coll_dist) {
+                                    normal = c_normal;
+                                    coll_dist = brick_dist;
+                                }
+                                brick.destroyed = true;
+                                brick.emitter = ExplosionEmitter.init(.{
+                                    .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                                    .sprites = particleExplosionSprites(brick.sprite),
+                                });
+                                brick.emitter.pos = brick_pos;
+                                brick.emitter.emitting = true;
+                                // state.particles.emit(.{
+                                //     .origin = brick_pos,
+                                //     .count = 10,
+                                //     .effect = .{ .explosion = .{ .sprite = brick.sprite } },
+                                // });
+                                audio.play(.{ .clip = .explode });
+                                scene.score += 100;
+
+                                spawnPowerup(scene, brick.pos);
+                            }
+                            collided = collided or c;
                         }
-                        brick.destroyed = true;
-                        brick.emitter = ExplosionEmitter.init(.{
-                            .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                            .sprites = particleExplosionSprites(brick.sprite),
-                        });
-                        brick.emitter.pos = brick_pos;
-                        brick.emitter.emitting = true;
-                        // state.particles.emit(.{
-                        //     .origin = brick_pos,
-                        //     .count = 10,
-                        //     .effect = .{ .explosion = .{ .sprite = brick.sprite } },
-                        // });
-                        audio.play(.{ .clip = .explode });
-                        scene.score += 100;
-
-                        spawnPowerup(scene, brick.pos);
+                        if (collided and scene.flame_timer <= 0) {
+                            ball.pos = out;
+                            ball.dir = m.reflect(ball.dir, normal);
+                        }
                     }
-                    collided = collided or c;
-                }
-                if (collided and scene.flame_timer <= 0) {
-                    ball.pos = out;
-                    ball.dir = m.reflect(ball.dir, normal);
-                }
-            }
 
-            const vw: f32 = @floatFromInt(viewport_size[0]);
-            const vh: f32 = @floatFromInt(viewport_size[1]);
+                    const vw: f32 = @floatFromInt(viewport_size[0]);
+                    const vh: f32 = @floatFromInt(viewport_size[1]);
 
-            // Has the ball hit the paddle?
-            paddle_check: {
-                // NOTE: We only check for collision if the ball is heading
-                // downward, because there are situations the ball could be
-                // temporarily inside the paddle (and I don't know a better way
-                // to solve that which look good or feel good gameplay-wise)
-                if (ball.dir[1] < 0) break :paddle_check;
+                    // Has the ball hit the paddle?
+                    paddle_check: {
+                        // NOTE: We only check for collision if the ball is heading
+                        // downward, because there are situations the ball could be
+                        // temporarily inside the paddle (and I don't know a better way
+                        // to solve that which look good or feel good gameplay-wise)
+                        if (ball.dir[1] < 0) break :paddle_check;
 
-                var paddle_bounds = scene.paddleBounds();
-                const ball_bounds = Rect{
-                    .x = old_ball_pos[0] - ball_w,
-                    .y = old_ball_pos[1] - ball_h,
-                    .w = ball_w,
-                    .h = ball_h,
-                };
+                        var paddle_bounds = scene.paddleBounds();
+                        const paddle_w = paddle_bounds.w;
+                        const paddle_h = paddle_bounds.h;
+                        const ball_bounds = Rect{
+                            .x = old_ball_pos[0] - ball_w,
+                            .y = old_ball_pos[1] - ball_h,
+                            .w = ball_w,
+                            .h = ball_h,
+                        };
 
-                var collided = false;
+                        var collided = false;
 
-                // After we've moved the paddle, a ball may be inside it. If so,
-                // consider it collided.
-                if (paddle_bounds.overlaps(ball_bounds)) {
-                    collided = true;
-                    out = old_ball_pos;
-                } else {
-                    // TODO reuse
-                    var r = @import("collision.zig").Rect{
-                        .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
-                        .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
-                    };
-                    r.grow(.{ ball_w / 2, ball_h / 2 });
-                    collided = box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-                }
+                        // After we've moved the paddle, a ball may be inside it. If so,
+                        // consider it collided.
+                        if (paddle_bounds.overlaps(ball_bounds)) {
+                            collided = true;
+                            out = old_ball_pos;
+                        } else {
+                            // TODO reuse
+                            var r = @import("collision.zig").Rect{
+                                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+                            };
+                            r.grow(.{ ball_w / 2, ball_h / 2 });
+                            collided = box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
+                        }
 
-                if (collided) {
-                    audio.play(.{ .clip = .bounce });
-                    ball.pos = out;
-                    ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
-                }
-            }
-
-            { // Has the ball hit the ceiling?
-                const c = line_intersection(
-                    old_ball_pos,
-                    ball.pos,
-                    .{ 0, brick_start_y },
-                    .{ vw - ball_w / 2, brick_start_y },
-                    &out,
-                );
-                if (c) {
-                    audio.play(.{ .clip = .bounce });
-                    normal = .{ 0, 1 };
-                    ball.pos = out;
-                    ball.dir = m.reflect(ball.dir, normal);
-                }
-            }
-
-            { // Has the ball hit the right wall?
-                const c = line_intersection(
-                    old_ball_pos,
-                    ball.pos,
-                    .{ vw - ball_w / 2, 0 },
-                    .{ vw - ball_w / 2, vh },
-                    &out,
-                );
-                if (c) {
-                    audio.play(.{ .clip = .bounce });
-                    normal = .{ -1, 0 };
-                    ball.pos = out;
-                    ball.dir = m.reflect(ball.dir, normal);
-                }
-            }
-
-            { // Has the ball hit the left wall?
-                const c = line_intersection(
-                    old_ball_pos,
-                    ball.pos,
-                    .{ ball_w / 2, 0 },
-                    .{ ball_w / 2, vh },
-                    &out,
-                );
-                if (c) {
-                    audio.play(.{ .clip = .bounce });
-                    normal = .{ -1, 0 };
-                    ball.pos = out;
-                    ball.dir = m.reflect(ball.dir, normal);
-                }
-            }
-
-            { // Has a ball hit the floor?
-                const c = line_intersection(
-                    old_ball_pos,
-                    ball.pos,
-                    .{ 0, vh - ball_h / 2 },
-                    .{ vw, vh - ball_h / 2 },
-                    &out,
-                );
-                if (c) {
-                    audio.play(.{ .clip = .explode, .vol = 0.5 });
-                    // TODO avoid recreation
-                    ball.explosion = ExplosionEmitter.init(.{
-                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = particleExplosionSprites(.ball),
-                    });
-                    ball.explosion.emitting = true;
-                    ball.active = false;
-                    ball.flame.emitting = false;
-
-                    // If the ball was the final ball, start a death timer
-                    for (scene.balls) |balls| {
-                        if (balls.active) break;
-                    } else {
-                        audio.play(.{ .clip = .death });
-                        scene.death_timer = 2.5;
+                        if (collided) {
+                            audio.play(.{ .clip = .bounce });
+                            ball.pos = out;
+                            ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
+                        }
                     }
-                }
+
+                    { // Has the ball hit the ceiling?
+                        const c = line_intersection(
+                            old_ball_pos,
+                            ball.pos,
+                            .{ 0, brick_start_y },
+                            .{ vw - ball_w / 2, brick_start_y },
+                            &out,
+                        );
+                        if (c) {
+                            audio.play(.{ .clip = .bounce });
+                            normal = .{ 0, 1 };
+                            ball.pos = out;
+                            ball.dir = m.reflect(ball.dir, normal);
+                        }
+                    }
+
+                    { // Has the ball hit the right wall?
+                        const c = line_intersection(
+                            old_ball_pos,
+                            ball.pos,
+                            .{ vw - ball_w / 2, 0 },
+                            .{ vw - ball_w / 2, vh },
+                            &out,
+                        );
+                        if (c) {
+                            audio.play(.{ .clip = .bounce });
+                            normal = .{ -1, 0 };
+                            ball.pos = out;
+                            ball.dir = m.reflect(ball.dir, normal);
+                        }
+                    }
+
+                    { // Has the ball hit the left wall?
+                        const c = line_intersection(
+                            old_ball_pos,
+                            ball.pos,
+                            .{ ball_w / 2, 0 },
+                            .{ ball_w / 2, vh },
+                            &out,
+                        );
+                        if (c) {
+                            audio.play(.{ .clip = .bounce });
+                            normal = .{ -1, 0 };
+                            ball.pos = out;
+                            ball.dir = m.reflect(ball.dir, normal);
+                        }
+                    }
+
+                    { // Has a ball hit the floor?
+                        const c = line_intersection(
+                            old_ball_pos,
+                            ball.pos,
+                            .{ 0, vh - ball_h / 2 },
+                            .{ vw, vh - ball_h / 2 },
+                            &out,
+                        );
+                        if (c) {
+                            audio.play(.{ .clip = .explode, .vol = 0.5 });
+                            // TODO avoid recreation
+                            ball.explosion = ExplosionEmitter.init(.{
+                                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                                .sprites = particleExplosionSprites(.ball),
+                            });
+                            ball.explosion.emitting = true;
+                            ball.active = false;
+                            ball.flame.emitting = false;
+
+                            // If the ball was the final ball, start a death timer
+                            for (scene.entities) |entity| {
+                                if (entity.type != .ball) continue;
+                                if (entity.active) break;
+                            } else {
+                                audio.play(.{ .clip = .death });
+                                scene.death_timer = 2.5;
+                            }
+                        }
+                    }
+                },
+                .laser => {
+                    e.pos[1] -= laser_speed * dt;
+                },
             }
         }
 
         // TODO the particle system could be responsible to update all emitters (via handles)
-        for (scene.balls) |*ball| {
-            ball.flame.pos = ball.pos;
-            ball.flame.update(dt);
+        for (scene.entities) |*e| {
+            e.flame.pos = e.pos;
+            e.flame.update(dt);
 
-            ball.explosion.pos = ball.pos;
-            ball.explosion.update(dt);
+            e.explosion.pos = e.pos;
+            e.explosion.update(dt);
         }
         for (scene.bricks) |*brick| {
             brick.emitter.update(dt);
         }
 
         flame: {
-            if (scene.flame_timer <= 0) break :flame;
-            scene.flame_timer -= dt;
-            if (scene.flame_timer > 0) break :flame;
-
-            scene.flame_timer = 0;
-
-            for (scene.balls) |*ball| {
-                ball.flame.emitting = false;
+            if (!scene.tickDownTimer("flame_timer", dt)) break :flame;
+            for (scene.entities) |*e| {
+                if (e.type != .ball) continue;
+                e.flame.emitting = false;
             }
         }
 
-        death: {
-            if (scene.death_timer <= 0) break :death;
-            scene.death_timer -= dt;
-            if (scene.death_timer > 0) break :death;
+        laser: { // Laser powerup
+            _ = scene.tickDownTimer("laser_cooldown", dt);
+            if (!scene.tickDownTimer("laser_timer", dt)) break :laser;
+            scene.paddle_type = .normal;
+        }
 
-            scene.death_timer = 0;
+        death: {
+            if (!scene.tickDownTimer("death_timer", dt)) break :death;
 
             if (scene.lives == 0) {
                 state.next_scene = .title;
             } else {
                 scene.lives -= 1;
-
-                _ = try scene.spawnBall(scene.ballOnPaddlePos(), initial_ball_dir);
+                _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), initial_ball_dir);
                 scene.ball_state = .idle;
             }
         }
     }
 
+    fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
+        if (@field(scene, field) <= 0) return false;
+        @field(scene, field) -= dt;
+        if (@field(scene, field) > 0) return false;
+
+        @field(scene, field) = 0;
+        return true;
+    }
+
     fn paddleBounds(scene: GameScene) Rect {
+        const sp = paddleSprite(scene.paddle_type);
+        const w: f32 = @floatFromInt(sp.bounds.w);
+        // NOTE: Hard coded because we can't extract this based on sprite bounds
+        const h: f32 = 7;
         return m.Rect{
-            .x = scene.paddle_pos[0] - paddle_w / 2,
-            .y = scene.paddle_pos[1] - paddle_h,
-            .w = paddle_w,
-            .h = paddle_h,
+            .x = scene.paddle_pos[0] - w / 2,
+            .y = scene.paddle_pos[1] - h,
+            .w = w,
+            .h = h,
         };
     }
 
@@ -832,12 +893,14 @@ const GameScene = struct {
         return scene.menu != .none;
     }
 
-    fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !*Ball {
-        for (scene.balls) |*ball| {
-            if (ball.active) continue;
-            ball.* = .{
+    fn spawnEntity(scene: *GameScene, entity_type: EntityType, pos: [2]f32, dir: [2]f32) !*Entity {
+        for (scene.entities) |*e| {
+            if (e.active) continue;
+            e.* = .{
+                .type = entity_type,
                 .pos = pos,
                 .dir = dir,
+                // TODO some entities don't need emitters...
                 .flame = FlameEmitter.init(.{
                     .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
                     .sprites = particleFlameSprites,
@@ -848,9 +911,9 @@ const GameScene = struct {
                 }),
                 .active = true,
             };
-            return ball;
+            return e;
         } else {
-            return error.MaxBallsReached;
+            return error.MaxEntitiesReached;
         }
     }
 
@@ -863,16 +926,19 @@ const GameScene = struct {
     }
 
     fn updateIdleBall(scene: *GameScene) void {
-        for (scene.balls) |*ball| {
-            if (!ball.active) continue;
-            ball.pos = scene.ballOnPaddlePos();
+        // TODO make iterator for this
+        for (scene.entities) |*e| {
+            if (!e.active) continue;
+            if (e.type != .ball) continue;
+            e.pos = scene.ballOnPaddlePos();
         }
     }
 
     fn ballOnPaddlePos(scene: GameScene) [2]f32 {
+        const bounds = scene.paddleBounds();
         return .{
             scene.paddle_pos[0],
-            scene.paddle_pos[1] - paddle_h - ball_h / 2,
+            scene.paddle_pos[1] - bounds.h - ball_h / 2,
         };
     }
 
@@ -891,31 +957,52 @@ const GameScene = struct {
             });
         }
 
-        // Render balls
-        for (scene.balls) |ball| {
-            if (!ball.active) continue;
-            state.batch.render(.{
-                .src = sprite.sprites.ball.bounds,
-                .dst = .{
-                    .x = ball.pos[0] - ball_w / 2,
-                    .y = ball.pos[1] - ball_h / 2,
-                    .w = ball_w,
-                    .h = ball_h,
+        // Render entities
+        for (scene.entities) |e| {
+            if (!e.active) continue;
+            switch (e.type) {
+                .ball => {
+                    state.batch.render(.{
+                        .src = sprite.sprites.ball.bounds,
+                        .dst = .{
+                            .x = e.pos[0] - ball_w / 2,
+                            .y = e.pos[1] - ball_h / 2,
+                            .w = ball_w,
+                            .h = ball_h,
+                        },
+                        .z = 2,
+                    });
                 },
-                .z = 2,
-            });
+                .laser => {
+                    const sp = sprite.sprites.particle_laser;
+                    state.batch.render(.{
+                        .src = sp.bounds,
+                        .dst = .{
+                            .x = e.pos[0] - sp.bounds.w / 2,
+                            .y = e.pos[1] - sp.bounds.h / 2,
+                            .w = sp.bounds.w,
+                            .h = sp.bounds.h,
+                        },
+                        .z = 2,
+                    });
+                },
+            }
         }
 
-        // Render paddle
-        state.batch.render(.{
-            .src = sprite.sprites.paddle.bounds,
-            .dst = .{
-                .x = scene.paddle_pos[0] - paddle_w / 2,
-                .y = scene.paddle_pos[1] - paddle_h,
-                .w = paddle_w,
-                .h = paddle_h,
-            },
-        });
+        { // Render paddle
+            const sp = paddleSprite(scene.paddle_type);
+            const w: f32 = @floatFromInt(sp.bounds.w);
+            const h: f32 = @floatFromInt(sp.bounds.h);
+            state.batch.render(.{
+                .src = sp.bounds,
+                .dst = .{
+                    .x = scene.paddle_pos[0] - w / 2,
+                    .y = scene.paddle_pos[1] - h,
+                    .w = w,
+                    .h = h,
+                },
+            });
+        }
 
         // Render powerups
         for (scene.powerups) |p| {
@@ -933,9 +1020,9 @@ const GameScene = struct {
         }
 
         // Render particles
-        for (scene.balls) |ball| {
-            ball.flame.render(&state.batch);
-            ball.explosion.render(&state.batch);
+        for (scene.entities) |e| {
+            e.flame.render(&state.batch);
+            e.explosion.render(&state.batch);
         }
         for (scene.bricks) |brick| {
             brick.emitter.render(&state.batch);
@@ -1046,7 +1133,7 @@ const GameScene = struct {
                                 scene.inputs.right_down = true;
                             },
                             .SPACE => {
-                                scene.inputs.space_down = true;
+                                scene.inputs.shoot_down = true;
                             },
                             .ESCAPE => {
                                 scene.menu = .pause;
@@ -1063,16 +1150,16 @@ const GameScene = struct {
                                 scene.inputs.right_down = false;
                             },
                             .SPACE => {
-                                scene.inputs.space_down = false;
+                                scene.inputs.shoot_down = false;
                             },
                             else => {},
                         }
                     },
                     .MOUSE_DOWN => {
-                        scene.inputs.space_down = true; // TODO rename
+                        scene.inputs.shoot_down = true;
                     },
                     .MOUSE_UP => {
-                        scene.inputs.space_down = false; // TODO rename
+                        scene.inputs.shoot_down = false;
                     },
                     else => {},
                 }
@@ -1168,15 +1255,13 @@ fn renderGui() void {
         .game => |*s| {
             _ = ig.igText("Death timer: %.4g", s.death_timer);
             _ = ig.igText("Flame timer: %.4g", s.flame_timer);
+            _ = ig.igText("Laser timer: %.4g", s.laser_timer);
             if (ig.igButton("Enable flame", .{})) {
                 acquirePowerup(s, .flame);
             }
             if (ig.igButton("Enable fork", .{})) {
                 acquirePowerup(s, .fork);
             }
-
-            // @import("debug.zig").renderEmitterGui(s.explosion_emitter);
-            @import("debug.zig").renderEmitterGui(s.balls[0].flame);
         },
         else => {},
     }

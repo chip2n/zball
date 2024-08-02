@@ -96,6 +96,7 @@ pub const BatchRenderer = struct {
             },
         };
         self.idx += 1;
+        // TODO I've hit this during development
         std.debug.assert(self.idx < self.buf.len);
     }
 
