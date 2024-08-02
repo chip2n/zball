@@ -1,5 +1,9 @@
 * sokol-breakout
 
+** Implementation
+
+Matrices are row-major.
+
 ** Building for desktop
 
 #+begin_src bash
