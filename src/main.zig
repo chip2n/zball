@@ -311,49 +311,16 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
 
 fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
     switch (p) {
-        .fork => {
-            var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
-            for (scene.balls, 0..) |ball, i| {
-                if (!ball.active) continue;
-                active_balls.append(i) catch continue;
-            }
-            for (active_balls.constSlice()) |i| {
-                var ball = &scene.balls[i];
-                var d1 = ball.dir;
-                var d2 = ball.dir;
-                m.vrot(&d1, -pi / 8.0);
-                m.vrot(&d2, pi / 8.0);
-                ball.dir = d1;
-                const new_ball = scene.spawnBall(ball.pos, d2) catch break;
-                new_ball.flame.emitting = ball.flame.emitting;
-            }
-        },
-        .scatter => {
-            // TODO refactor?
-            var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
-            for (scene.balls, 0..) |ball, i| {
-                if (!ball.active) continue;
-                active_balls.append(i) catch continue;
-            }
-            const angles = [_]f32{
-                -pi / 4.0,
-                pi / 4.0,
-                3 * pi / 4.0,
-                5 * pi / 4.0,
-            };
-            for (active_balls.constSlice()) |i| {
-                var ball = &scene.balls[i];
-                var d1 = ball.dir;
-                m.vrot(&d1, angles[0]);
-                for (angles[1..]) |angle| {
-                    var d2 = ball.dir;
-                    m.vrot(&d2, angle);
-                    const new_ball = scene.spawnBall(ball.pos, d2) catch break;
-                    new_ball.flame.emitting = ball.flame.emitting;
-                }
-                ball.dir = d1;
-            }
-        },
+        .fork => splitBall(scene, &.{
+            -pi / 8.0,
+            pi / 8.0,
+        }),
+        .scatter => splitBall(scene, &.{
+            -pi / 4.0,
+            pi / 4.0,
+            3 * pi / 4.0,
+            5 * pi / 4.0,
+        }),
         .flame => {
             scene.flame_timer = flame_duration;
             for (scene.balls) |*ball| {
@@ -361,6 +328,26 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
                 ball.flame.emitting = true;
             }
         },
+    }
+}
+
+fn splitBall(scene: *GameScene, angles: []const f32) void {
+    var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
+    for (scene.balls, 0..) |ball, i| {
+        if (!ball.active) continue;
+        active_balls.append(i) catch continue;
+    }
+    for (active_balls.constSlice()) |i| {
+        var ball = &scene.balls[i];
+        var d1 = ball.dir;
+        m.vrot(&d1, angles[0]);
+        for (angles[1..]) |angle| {
+            var d2 = ball.dir;
+            m.vrot(&d2, angle);
+            const new_ball = scene.spawnBall(ball.pos, d2) catch break;
+            new_ball.flame.emitting = ball.flame.emitting;
+        }
+        ball.dir = d1;
     }
 }
 
