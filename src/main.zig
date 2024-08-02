@@ -203,6 +203,7 @@ const TitleScene = struct {
 
         { // Main menu
             try ui.beginWindow(.{
+                .id = "main",
                 .x = viewport_size[0] / 2,
                 .y = viewport_size[1] / 2 + 8,
                 .z = 10,
@@ -1083,6 +1084,7 @@ const GameScene = struct {
 
 fn renderPauseMenu(menu: *GameMenu) !bool {
     try ui.beginWindow(.{
+        .id = "pause",
         .x = viewport_size[0] / 2,
         .y = viewport_size[1] / 2,
         .pivot = .{ 0.5, 0.5 },
@@ -1105,6 +1107,7 @@ fn renderPauseMenu(menu: *GameMenu) !bool {
 
 fn renderSettingsMenu() !bool {
     try ui.beginWindow(.{
+        .id = "settings",
         .x = viewport_size[0] / 2,
         .y = viewport_size[1] / 2,
         .z = 20,

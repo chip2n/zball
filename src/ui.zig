@@ -9,8 +9,8 @@ const TextRenderer = @import("ttf.zig").TextRenderer;
 const Texture = @import("Texture.zig");
 
 const WindowData = struct {
-    focus_id: usize = 0,
-    focus_prev_id: usize = 0,
+    focus_id: u64 = 0,
+    focus_prev_id: u64 = 0,
     draw_list: [128]DrawListEntry = undefined, // TODO allocator instead?
     draw_list_idx: usize = 0,
 
@@ -21,7 +21,7 @@ const WindowData = struct {
     }
 };
 
-var window_data: std.AutoHashMap(usize, WindowData) = undefined;
+var window_data: std.AutoHashMap(u64, WindowData) = undefined;
 
 const DrawListEntry = union(enum) {
     text: struct {
@@ -39,7 +39,7 @@ const DrawListEntry = union(enum) {
 var origin: [2]f32 = .{ 0, 0 };
 var cursor: [2]f32 = .{ 0, 0 };
 var pivot: [2]f32 = .{ 0, 0 };
-var win_id: usize = 0;
+var win_id: u64 = 0;
 var win_width: f32 = 0;
 var win_height: f32 = 0;
 var win_z: f32 = 0;
@@ -49,8 +49,8 @@ var tex_spritesheet: Texture = undefined;
 var tex_font: Texture = undefined;
 
 // Manage window focus
-var window_stack: std.ArrayList(usize) = undefined;
-var prev_window_stack: std.ArrayList(usize) = undefined;
+var window_stack: std.ArrayList(u64) = undefined;
+var prev_window_stack: std.ArrayList(u64) = undefined;
 
 const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
@@ -74,9 +74,9 @@ pub const BeginDesc = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator) void {
-    window_data = std.AutoHashMap(usize, WindowData).init(allocator);
-    window_stack = std.ArrayList(usize).init(allocator);
-    prev_window_stack = std.ArrayList(usize).init(allocator);
+    window_data = std.AutoHashMap(u64, WindowData).init(allocator);
+    window_stack = std.ArrayList(u64).init(allocator);
+    prev_window_stack = std.ArrayList(u64).init(allocator);
 }
 
 pub fn deinit() void {
@@ -115,6 +115,7 @@ pub fn end() void {
 }
 
 pub const BeginWindowDesc = struct {
+    id: []const u8,
     x: f32,
     y: f32,
     z: f32 = 10,
@@ -123,7 +124,7 @@ pub const BeginWindowDesc = struct {
 };
 
 pub fn beginWindow(v: BeginWindowDesc) !void {
-    const id = genId();
+    const id = genId(v.id);
     win_id = id;
 
     win_width = 0;
@@ -247,16 +248,18 @@ pub fn endWindow() void {
     }
 }
 
+fn genId(key: anytype) u64 {
+    var hasher = std.hash.Wyhash.init(0);
+    std.hash.autoHashStrat(&hasher, key, .DeepRecursive);
+    return hasher.final();
+}
+
 pub const SelectionItemDesc = struct {
     focused: ?*bool = null,
 };
 
-inline fn genId() usize {
-    return @returnAddress();
-}
-
 pub fn selectionItem(s: []const u8, v: SelectionItemDesc) bool {
-    const id = genId();
+    const id = genId(s);
     const arrow_w = 8;
     const sz = TextRenderer.measure(s);
     win_width = @max(win_width, sz[0] + arrow_w + 2);
