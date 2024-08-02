@@ -24,12 +24,46 @@ const AudioClip = std.meta.FieldEnum(@TypeOf(audio_data));
 
 const clips = std.enums.EnumArray(AudioClip, WavData).init(audio_data);
 
-pub const AudioSystem = struct {
+var state = AudioState{};
+
+pub fn init() void {
+    saudio.setup(.{
+        // TODO: The sample_rate and num_channels parameters are only hints for
+        // the audio backend, it isn't guaranteed that those are the values used
+        // for actual playback.
+        .num_channels = 2,
+        .buffer_frames = 512, // lowers audio latency (TODO shitty on web though)
+        .logger = .{ .func = sokol.log.func },
+    });
+}
+
+pub fn deinit() void {
+    saudio.shutdown();
+}
+
+pub inline fn update(time: f64) void {
+    state.update(time);
+}
+
+pub const PlayDesc = struct {
+    clip: AudioClip,
+    loop: bool = false,
+    vol: f32 = 1.0,
+    category: AudioCategory = .sfx,
+};
+pub inline fn play(v: PlayDesc) void {
+    state.play(v);
+}
+
+pub var vol_bg: f32 = 0.5;
+pub var vol_sfx: f32 = 0.5;
+
+pub const AudioState = struct {
+    const Self = @This();
+
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
-    vol_bg: f32 = 0.5,
-    vol_sfx: f32 = 0.5,
 
     const AudioTrack = struct {
         clip: ?AudioClip = null,
@@ -39,18 +73,12 @@ pub const AudioSystem = struct {
         category: AudioCategory = .sfx,
     };
 
-    const PlayDesc = struct {
-        clip: AudioClip,
-        loop: bool = false,
-        vol: f32 = 1.0,
-        category: AudioCategory = .sfx,
-    };
-    pub fn play(sys: *AudioSystem, v: PlayDesc) void {
+    fn play(self: *Self, v: PlayDesc) void {
         // Check if we've played this clip recently - if we have, ignore it
-        for (&sys.playing) |p| {
+        for (&self.playing) |p| {
             if (p.clip == v.clip and p.frame == 0) return;
         }
-        for (&sys.playing) |*p| {
+        for (&self.playing) |*p| {
             if (p.clip != null) continue;
             p.clip = v.clip;
             p.frame = 0;
@@ -64,20 +92,20 @@ pub const AudioSystem = struct {
         }
     }
 
-    pub fn update(sys: *AudioSystem, time: f64) void {
-        const num_frames: i32 = @intFromFloat(@ceil(sample_rate * (time - sys.time)));
+    fn update(self: *Self, time: f64) void {
+        const num_frames: i32 = @intFromFloat(@ceil(sample_rate * (time - self.time)));
 
-        sys.time = time;
+        self.time = time;
 
         // Clear out sample buffer
-        for (&sys.samples) |*s| s.* = 0.0;
+        for (&self.samples) |*s| s.* = 0.0;
 
-        const dst: []f32 = &sys.samples;
+        const dst: []f32 = &self.samples;
 
-        for (&sys.playing) |*p| {
+        for (&self.playing) |*p| {
             if (p.clip == null) continue;
             const clip = clips.get(p.clip.?);
-            const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, sys.trackVolume(p.*));
+            const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, self.trackVolume(p.*));
             p.frame += count;
 
             if (p.frame >= clip.frameCount()) {
@@ -92,14 +120,15 @@ pub const AudioSystem = struct {
         }
 
         if (num_frames > 0) {
-            _ = saudio.push(&(sys.samples[0]), num_frames);
+            _ = saudio.push(&(self.samples[0]), num_frames);
         }
     }
 
-    fn trackVolume(sys: AudioSystem, track: AudioTrack) f32 {
+    fn trackVolume(self: Self, track: AudioTrack) f32 {
+        _ = self;
         const cat_vol = switch (track.category) {
-            .bg => sys.vol_bg,
-            .sfx => sys.vol_sfx,
+            .bg => vol_bg,
+            .sfx => vol_sfx,
         };
         return track.vol * cat_vol;
     }

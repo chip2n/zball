@@ -5,7 +5,6 @@ const assert = std.debug.assert;
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
-const saudio = sokol.audio;
 const stm = sokol.time;
 const slog = sokol.log;
 const sapp = sokol.app;
@@ -23,7 +22,8 @@ const Camera = @import("Camera.zig");
 const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
-const AudioSystem = @import("audio.zig").AudioSystem;
+
+const audio = @import("audio.zig");
 
 const box_intersection = @import("collision.zig").box_intersection;
 const line_intersection = @import("collision.zig").line_intersection;
@@ -145,8 +145,6 @@ const state = struct {
     var next_scene: ?SceneType = null;
 
     var batch = BatchRenderer.init();
-
-    var audio = AudioSystem{};
 };
 
 const BallState = enum {
@@ -512,7 +510,7 @@ const GameScene = struct {
                 };
                 if (!paddle_bounds.overlaps(powerup_bounds)) continue;
                 p.active = false;
-                state.audio.play(.{ .clip = .powerup });
+                audio.play(.{ .clip = .powerup });
                 switch (p.type) {
                     .split => {
                         var new_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
@@ -583,7 +581,7 @@ const GameScene = struct {
                         //     .count = 10,
                         //     .effect = .{ .explosion = .{ .sprite = brick.sprite } },
                         // });
-                        state.audio.play(.{ .clip = .explode });
+                        audio.play(.{ .clip = .explode });
                         scene.score += 100;
 
                         scene.spawnPowerup(brick.pos);
@@ -633,7 +631,7 @@ const GameScene = struct {
                 }
 
                 if (collided) {
-                    state.audio.play(.{ .clip = .bounce });
+                    audio.play(.{ .clip = .bounce });
                     ball.pos = out;
                     ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
                 }
@@ -648,7 +646,7 @@ const GameScene = struct {
                     &out,
                 );
                 if (c) {
-                    state.audio.play(.{ .clip = .bounce });
+                    audio.play(.{ .clip = .bounce });
                     normal = .{ 0, 1 };
                     ball.pos = out;
                     ball.dir = m.reflect(ball.dir, normal);
@@ -664,7 +662,7 @@ const GameScene = struct {
                     &out,
                 );
                 if (c) {
-                    state.audio.play(.{ .clip = .bounce });
+                    audio.play(.{ .clip = .bounce });
                     normal = .{ -1, 0 };
                     ball.pos = out;
                     ball.dir = m.reflect(ball.dir, normal);
@@ -680,7 +678,7 @@ const GameScene = struct {
                     &out,
                 );
                 if (c) {
-                    state.audio.play(.{ .clip = .bounce });
+                    audio.play(.{ .clip = .bounce });
                     normal = .{ -1, 0 };
                     ball.pos = out;
                     ball.dir = m.reflect(ball.dir, normal);
@@ -696,7 +694,7 @@ const GameScene = struct {
                     &out,
                 );
                 if (c) {
-                    state.audio.play(.{ .clip = .explode, .vol = 0.5 });
+                    audio.play(.{ .clip = .explode, .vol = 0.5 });
                     // TODO avoid recreation
                     ball.explosion = ExplosionEmitter.init(.{
                         .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
@@ -710,7 +708,7 @@ const GameScene = struct {
                     for (scene.balls) |balls| {
                         if (balls.active) break;
                     } else {
-                        state.audio.play(.{ .clip = .death });
+                        audio.play(.{ .clip = .death });
                         scene.death_timer = 2.5;
                     }
                 }
@@ -1116,11 +1114,11 @@ fn renderSettingsMenu() !bool {
 
     var sfx_focused = false;
     _ = ui.selectionItem("Volume (sfx)", .{ .focused = &sfx_focused });
-    ui.slider(.{ .value = &state.audio.vol_sfx, .focused = sfx_focused });
+    ui.slider(.{ .value = &audio.vol_sfx, .focused = sfx_focused });
 
     var bg_focused = false;
     _ = ui.selectionItem("Volume (bg)", .{ .focused = &bg_focused });
-    ui.slider(.{ .value = &state.audio.vol_bg, .focused = bg_focused });
+    ui.slider(.{ .value = &audio.vol_bg, .focused = bg_focused });
 
     if (ui.selectionItem("Back", .{})) {
         return true;
@@ -1160,19 +1158,19 @@ fn renderGui() void {
     }
 
     if (ig.igButton("Play sound", .{})) {
-        state.audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play sound twice", .{})) {
-        state.audio.play(.{ .clip = .bounce });
-        state.audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play sound thrice", .{})) {
-        state.audio.play(.{ .clip = .bounce });
-        state.audio.play(.{ .clip = .bounce });
-        state.audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
+        audio.play(.{ .clip = .bounce });
     }
     if (ig.igButton("Play music", .{})) {
-        state.audio.play(.{ .clip = .music, .loop = true, .vol = 0.5, .category = .bg });
+        audio.play(.{ .clip = .music, .loop = true, .vol = 0.5, .category = .bg });
     }
 
     if (config.shader_reload) {
@@ -1199,15 +1197,8 @@ fn initializeGame() !void {
     });
     errdefer sg.shutdown();
 
-    saudio.setup(.{
-        // TODO: The sample_rate and num_channels parameters are only hints for
-        // the audio backend, it isn't guaranteed that those are the values used
-        // for actual playback.
-        .num_channels = 2,
-        .buffer_frames = 512, // lowers audio latency (TODO shitty on web though)
-        .logger = .{ .func = slog.func },
-    });
-    errdefer saudio.shutdown();
+    audio.init();
+    errdefer audio.deinit();
 
     stm.setup();
 
@@ -1407,7 +1398,7 @@ export fn sokolFrame() void {
         debug.reload = false;
     }
 
-    state.audio.update(time);
+    audio.update(time);
 
     simgui.newFrame(.{
         .width = sapp.width(),
@@ -1479,7 +1470,7 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 
 export fn sokolCleanup() void {
     state.scene.deinit();
-    saudio.shutdown();
+    audio.deinit();
     sg.shutdown();
     ui.deinit();
     state.arena.deinit();
