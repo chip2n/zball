@@ -127,6 +127,7 @@ const state = struct {
     };
 
     var time: f64 = 0;
+    var dt: f32 = 0;
 
     var spritesheet_texture: Texture = undefined;
     var font_texture: Texture = undefined;
@@ -1136,6 +1137,7 @@ fn renderGui() void {
     ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
     ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
+    _ = ig.igText("Delta: %.4g", state.dt);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
     _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
     _ = ig.igText("Mouse (screen): %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
@@ -1386,9 +1388,9 @@ export fn sokolInit() void {
 export fn sokolFrame() void {
     const ticks = stm.now();
     const time = stm.sec(ticks);
+    const dt: f32 = @floatCast(time - state.time);
+    state.dt = dt;
     state.time = time;
-
-    const dt: f32 = @floatCast(sapp.frameDuration());
 
     var scene = &state.scene;
     scene.update(dt) catch |err| {
