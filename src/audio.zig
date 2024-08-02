@@ -33,8 +33,35 @@ pub fn init() void {
         // for actual playback.
         .num_channels = 2,
         .buffer_frames = 512, // lowers audio latency (TODO shitty on web though)
+        .stream_cb = stream_callback,
         .logger = .{ .func = sokol.log.func },
     });
+}
+
+fn stream_callback(buffer: [*c]f32, num_frames: i32, num_chan: i32) callconv(.C) void {
+    const num_samples: usize = @intCast(num_frames * num_chan);
+
+    const dst = buffer[0..num_samples];
+
+    // Clear out sample buffer
+    for (dst) |*s| s.* = 0.0;
+
+    for (&state.playing) |*p| {
+        if (p.clip == null) continue;
+        const clip = clips.get(p.clip.?);
+        const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, p.volume());
+        p.frame += count;
+
+        if (p.frame >= clip.frameCount()) {
+            if (p.loop) {
+                // TODO I don't think this is a perfect loop
+                p.frame = 0;
+            } else {
+                p.clip = null;
+                p.frame = 0;
+            }
+        }
+    }
 }
 
 pub fn deinit() void {
@@ -58,20 +85,28 @@ pub inline fn play(v: PlayDesc) void {
 pub var vol_bg: f32 = 0.5;
 pub var vol_sfx: f32 = 0.5;
 
+const AudioTrack = struct {
+    clip: ?AudioClip = null,
+    frame: usize = 0,
+    loop: bool = false,
+    vol: f32 = 1.0,
+    category: AudioCategory = .sfx,
+
+    fn volume(track: AudioTrack) f32 {
+        const cat_vol = switch (track.category) {
+            .bg => vol_bg,
+            .sfx => vol_sfx,
+        };
+        return track.vol * cat_vol;
+    }
+};
+
 pub const AudioState = struct {
     const Self = @This();
 
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
-
-    const AudioTrack = struct {
-        clip: ?AudioClip = null,
-        frame: usize = 0,
-        loop: bool = false,
-        vol: f32 = 1.0,
-        category: AudioCategory = .sfx,
-    };
 
     fn play(self: *Self, v: PlayDesc) void {
         // Check if we've played this clip recently - if we have, ignore it
@@ -91,79 +126,38 @@ pub const AudioState = struct {
             return;
         }
     }
-
-    fn update(self: *Self, time: f64) void {
-        const num_frames: i32 = @intFromFloat(@ceil(sample_rate * (time - self.time)));
-
-        self.time = time;
-
-        // Clear out sample buffer
-        for (&self.samples) |*s| s.* = 0.0;
-
-        const dst: []f32 = &self.samples;
-
-        for (&self.playing) |*p| {
-            if (p.clip == null) continue;
-            const clip = clips.get(p.clip.?);
-            const count = writeSamples(clip, p.frame, @as(usize, @intCast(num_frames)), dst, self.trackVolume(p.*));
-            p.frame += count;
-
-            if (p.frame >= clip.frameCount()) {
-                if (p.loop) {
-                    // TODO I don't think this is a perfect loop
-                    p.frame = 0;
-                } else {
-                    p.clip = null;
-                    p.frame = 0;
-                }
-            }
-        }
-
-        if (num_frames > 0) {
-            _ = saudio.push(&(self.samples[0]), num_frames);
-        }
-    }
-
-    fn trackVolume(self: Self, track: AudioTrack) f32 {
-        _ = self;
-        const cat_vol = switch (track.category) {
-            .bg => vol_bg,
-            .sfx => vol_sfx,
-        };
-        return track.vol * cat_vol;
-    }
-
-    fn writeSamples(
-        clip: WavData,
-        frame_offset: usize,
-        frame_count: usize,
-        output: []f32,
-        volume: f32,
-    ) usize {
-        const clip_samples = clip.samples();
-        const sample_offset = frame_offset * clip.header.nbrChannels;
-        const frames_left = @divExact(clip_samples.len, clip.header.nbrChannels) - frame_offset;
-        const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left)); // TODO rename sample_buf_length?
-
-        const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
-        const dst = output[0 .. frames_to_write * num_channels];
-
-        for (src, 0..) |s, i| {
-            const fs: f32 = @floatFromInt(s);
-            const div: usize = if (fs < 0) @abs(std.math.minInt(i16)) else std.math.maxInt(i16);
-            const result = (fs / @as(f32, @floatFromInt(div)));
-            std.debug.assert(-1 <= result and result <= 1);
-            if (clip.header.nbrChannels == 1) {
-                dst[i * num_channels + 0] += result * volume;
-                dst[i * num_channels + 1] += result * volume;
-            } else if (clip.header.nbrChannels == 2) {
-                dst[i] += result * volume;
-            } else unreachable;
-        }
-
-        return frames_to_write;
-    }
 };
+
+fn writeSamples(
+    clip: WavData,
+    frame_offset: usize,
+    frame_count: usize,
+    output: []f32,
+    volume: f32,
+) usize {
+    const clip_samples = clip.samples();
+    const sample_offset = frame_offset * clip.header.nbrChannels;
+    const frames_left = @divExact(clip_samples.len, clip.header.nbrChannels) - frame_offset;
+    const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left)); // TODO rename sample_buf_length?
+
+    const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
+    const dst = output[0 .. frames_to_write * num_channels];
+
+    for (src, 0..) |s, i| {
+        const fs: f32 = @floatFromInt(s);
+        const div: usize = if (fs < 0) @abs(std.math.minInt(i16)) else std.math.maxInt(i16);
+        const result = (fs / @as(f32, @floatFromInt(div)));
+        std.debug.assert(-1 <= result and result <= 1);
+        if (clip.header.nbrChannels == 1) {
+            dst[i * num_channels + 0] += result * volume;
+            dst[i * num_channels + 1] += result * volume;
+        } else if (clip.header.nbrChannels == 2) {
+            dst[i] += result * volume;
+        } else unreachable;
+    }
+
+    return frames_to_write;
+}
 
 // * Wav parsing
 

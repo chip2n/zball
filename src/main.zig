@@ -1401,8 +1401,6 @@ export fn sokolFrame() void {
         debug.reload = false;
     }
 
-    audio.update(time);
-
     simgui.newFrame(.{
         .width = sapp.width(),
         .height = sapp.height(),
