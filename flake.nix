@@ -23,7 +23,8 @@
         pkgs.xorg.libXcursor
       ];
       shellHook = ''
-        echo "zig `zig version`"
+        export ALSA_PLUGIN_DIR=${pkgs.alsa-plugins}/lib/alsa-lib
+        echo "zig $(zig version)"
       '';
     };
   };
