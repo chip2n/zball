@@ -650,54 +650,15 @@ const GameScene = struct {
                     }
                     const new_ball_pos = ball.pos;
 
-                    var out: [2]f32 = undefined;
-                    var normal: [2]f32 = undefined;
-
-                    { // Has the ball hit any bricks?
-                        var collided = false;
-                        var coll_dist = std.math.floatMax(f32);
-                        for (scene.bricks) |*brick| {
-                            if (brick.destroyed) continue;
-
-                            var r = @import("collision.zig").Rect{
-                                .min = .{ brick.pos[0], brick.pos[1] },
-                                .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
-                            };
-                            r.grow(.{ ball_w / 2, ball_h / 2 });
-                            var c_normal: [2]f32 = undefined;
-                            const c = box_intersection(old_ball_pos, new_ball_pos, r, &out, &c_normal);
-                            if (c) {
-                                // always use the normal of the closest brick for ball reflection
-                                const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-                                const brick_dist = m.magnitude(m.vsub(brick_pos, ball.pos));
-                                if (brick_dist < coll_dist) {
-                                    normal = c_normal;
-                                    coll_dist = brick_dist;
-                                }
-                                brick.destroyed = true;
-                                brick.emitter = ExplosionEmitter.init(.{
-                                    .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                                    .sprites = particleExplosionSprites(brick.sprite),
-                                });
-                                brick.emitter.pos = brick_pos;
-                                brick.emitter.emitting = true;
-                                // state.particles.emit(.{
-                                //     .origin = brick_pos,
-                                //     .count = 10,
-                                //     .effect = .{ .explosion = .{ .sprite = brick.sprite } },
-                                // });
-                                audio.play(.{ .clip = .explode });
-                                scene.score += 100;
-
-                                spawnPowerup(scene, brick.pos);
-                            }
-                            collided = collided or c;
-                        }
-                        if (collided and scene.flame_timer <= 0) {
-                            ball.pos = out;
-                            ball.dir = m.reflect(ball.dir, normal);
+                    if (scene.collideBricks(old_ball_pos, new_ball_pos)) |coll| {
+                        if (scene.flame_timer <= 0) {
+                            ball.pos = coll.out;
+                            ball.dir = m.reflect(ball.dir, coll.normal);
                         }
                     }
+
+                    var out: [2]f32 = undefined;
+                    var normal: [2]f32 = undefined;
 
                     const vw: f32 = @floatFromInt(viewport_size[0]);
                     const vh: f32 = @floatFromInt(viewport_size[1]);
@@ -823,7 +784,14 @@ const GameScene = struct {
                     }
                 },
                 .laser => {
-                    e.pos[1] -= laser_speed * dt;
+                    const old_pos = e.pos;
+                    var new_pos = e.pos;
+                    new_pos[1] -= laser_speed * dt;
+                    e.pos = new_pos;
+
+                    if (scene.collideBricks(old_pos, new_pos)) |_| {
+                        e.active = false;
+                    }
                 },
             }
         }
@@ -865,6 +833,52 @@ const GameScene = struct {
                 scene.ball_state = .idle;
             }
         }
+    }
+
+    fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
+        out: [2]f32,
+        normal: [2]f32,
+    } {
+        var out: [2]f32 = undefined;
+        var normal: [2]f32 = undefined;
+
+        var collided = false;
+        var coll_dist = std.math.floatMax(f32);
+        for (scene.bricks) |*brick| {
+            if (brick.destroyed) continue;
+
+            var r = @import("collision.zig").Rect{
+                .min = .{ brick.pos[0], brick.pos[1] },
+                .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+            };
+            r.grow(.{ ball_w / 2, ball_h / 2 });
+            var c_normal: [2]f32 = undefined;
+            const c = box_intersection(old_pos, new_pos, r, &out, &c_normal);
+            if (c) {
+                // always use the normal of the closest brick for ball reflection
+                const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+                const brick_dist = m.magnitude(m.vsub(brick_pos, new_pos));
+                if (brick_dist < coll_dist) {
+                    normal = c_normal;
+                    coll_dist = brick_dist;
+                }
+                brick.destroyed = true;
+                brick.emitter = ExplosionEmitter.init(.{
+                    .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                    .sprites = particleExplosionSprites(brick.sprite),
+                });
+                brick.emitter.pos = brick_pos;
+                brick.emitter.emitting = true;
+                audio.play(.{ .clip = .explode });
+                scene.score += 100;
+
+                spawnPowerup(scene, brick.pos);
+            }
+            collided = collided or c;
+        }
+
+        if (collided) return .{ .out = out, .normal = normal };
+        return null;
     }
 
     fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
