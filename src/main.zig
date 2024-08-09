@@ -104,7 +104,10 @@ pub const Vertex = extern struct {
 const debug = if (builtin.os.tag == .linux) struct {
     var watcher: *fwatch.FileWatcher(void) = undefined;
     var reload: bool = false;
-} else struct {};
+    var verts_rendered: usize = 0;
+} else struct {
+    var verts_rendered: usize = 0;
+};
 
 // TODO refactor this a bit
 const state = struct {
@@ -1135,6 +1138,8 @@ const GameScene = struct {
         }
 
         const result = state.batch.commit();
+        debug.verts_rendered = result.verts.len;
+
         sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
 
         const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
@@ -1295,6 +1300,7 @@ fn renderGui() void {
     _ = ig.igText("Mouse (screen): %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
     _ = ig.igText("Mouse (world): %.4g %.4g", mouse()[0], mouse()[1]);
     _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
+    _ = ig.igText("Verts rendered: %d", debug.verts_rendered);
 
     switch (state.scene) {
         .game => |*s| {
