@@ -43,7 +43,11 @@ pub const offscreen_sample_count = 1;
 const pi = std.math.pi;
 const num_audio_samples = 32;
 
-pub const max_quads = 1024;
+pub const std_options = .{
+    .log_level = if (builtin.mode == .Debug) .debug else .info,
+};
+
+pub const max_quads = 2048;
 pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const max_entities = 128;
@@ -781,6 +785,15 @@ const GameScene = struct {
                                 scene.death_timer = 2.5;
                             }
                         }
+                    }
+
+                    // If the ball direction is almost horizontal, adjust it so
+                    // that it isn't. If we don't do this, the ball may be stuck
+                    // for a very long time.
+                    if (@abs(ball.dir[1]) < 0.10) {
+                        std.log.debug("Ball direction is almost horizontal - making it less horizontal.", .{});
+                        ball.dir[1] = std.math.sign(ball.dir[1]) * 0.10;
+                        m.normalize(&ball.dir);
                     }
                 },
                 .laser => {
