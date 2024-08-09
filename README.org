@@ -1,5 +1,11 @@
 * sokol-breakout
 
+Current Zig compiler (through Nix and zig-overlay):
+
+#+begin_src bash
+nix shell 'github:mitchellh/zig-overlay#master-2024-08-08'
+#+end_src
+
 ** Implementation
 
 Matrices are row-major.
