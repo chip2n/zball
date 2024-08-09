@@ -52,6 +52,7 @@ pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const max_entities = 128;
 const powerup_freq = 0.3;
+const powerup_fall_speed = 100;
 const flame_duration = 5;
 const laser_duration = 5;
 const laser_speed = 200;
@@ -629,7 +630,7 @@ const GameScene = struct {
         // Move powerups
         for (&scene.powerups) |*p| {
             if (!p.active) continue;
-            p.pos[1] += dt * 40;
+            p.pos[1] += dt * powerup_fall_speed;
             if (p.pos[1] > viewport_size[1]) {
                 p.active = false;
             }
@@ -1285,7 +1286,6 @@ fn renderSettingsMenu() !bool {
 
 // TODO move this
 fn renderGui() void {
-    //=== UI CODE STARTS HERE
     ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
     ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
     _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
