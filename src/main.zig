@@ -14,8 +14,15 @@ const simgui = sokol.imgui;
 const shd = @import("shader");
 const font = @import("font");
 const sprite = @import("sprite");
-const ui = @import("ui.zig");
 const fwatch = @import("fwatch");
+const ig = @import("cimgui");
+const m = @import("math");
+
+const ui = @import("ui.zig");
+const level = @import("level.zig");
+const audio = @import("audio.zig");
+const particle = @import("particle.zig");
+const utils = @import("utils.zig");
 
 const Viewport = @import("Viewport.zig");
 const Camera = @import("Camera.zig");
@@ -23,18 +30,11 @@ const Pipeline = @import("shader.zig").Pipeline;
 const TextRenderer = @import("ttf.zig").TextRenderer;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 
-const audio = @import("audio.zig");
-
 const box_intersection = @import("collision.zig").box_intersection;
 const line_intersection = @import("collision.zig").line_intersection;
 
-const particle = @import("particle.zig");
-const utils = @import("utils.zig");
-
-const ig = @import("cimgui");
-const m = @import("math");
-
 const spritesheet = @embedFile("assets/sprites.png");
+const level_data = @embedFile("assets/level1.lvl");
 
 const Texture = @import("Texture.zig");
 
@@ -60,11 +60,11 @@ const laser_cooldown = 0.2;
 const use_gpa = builtin.os.tag != .emscripten;
 
 const initial_screen_size = .{ 640, 480 };
-pub const viewport_size: [2]u32 = .{ 160, 120 };
+pub const viewport_size: [2]u32 = .{ 320, 240 };
 const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
 const ball_h: f32 = sprite.sprites.ball.bounds.h;
-const ball_speed: f32 = 100;
+const ball_speed: f32 = 200;
 const initial_paddle_pos: [2]f32 = .{
     viewport_size[0] / 2,
     viewport_size[1] - 4,
@@ -75,8 +75,8 @@ const initial_ball_dir: [2]f32 = blk: {
     m.normalize(&dir);
     break :blk dir;
 };
-const num_bricks = 10;
-const num_rows = 4;
+
+// TODO read these from sprites
 pub const brick_w = 16;
 pub const brick_h = 8;
 const brick_start_y = 8;
@@ -84,10 +84,10 @@ const brick_start_y = 8;
 const Rect = m.Rect;
 
 const Brick = struct {
-    pos: [2]f32,
-    sprite: sprite.Sprite,
+    pos: [2]f32 = .{ 0, 0 },
+    sprite: sprite.Sprite = .brick1,
     emitter: ExplosionEmitter = undefined,
-    destroyed: bool = false,
+    destroyed: bool = true,
 };
 
 // TODO move?
@@ -514,7 +514,13 @@ const GameScene = struct {
     } = .{},
 
     fn init(allocator: std.mem.Allocator) !GameScene {
-        const bricks = try allocator.alloc(Brick, num_rows * num_bricks);
+        // Load level data
+        // TODO: Do at comptime?
+        var fbs = std.io.fixedBufferStream(level_data);
+        const lvl = try level.parseLevel(allocator, fbs.reader());
+        defer lvl.deinit(allocator);
+
+        const bricks = try allocator.alloc(Brick, lvl.width * lvl.height);
         errdefer allocator.free(bricks);
         const entities = try allocator.alloc(Entity, max_entities);
         errdefer allocator.free(entities);
@@ -529,19 +535,31 @@ const GameScene = struct {
         for (scene.entities) |*e| e.* = .{};
 
         // initialize bricks
-        const brick_sprites = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
-        for (0..num_rows) |y| {
-            for (0..num_bricks) |x| {
+        for (0..lvl.height) |y| {
+            for (0..lvl.width) |x| {
+                const i = y * lvl.width + x;
+                const brick = lvl.bricks[i];
+                if (brick.id == 0) {
+                    scene.bricks[i] = .{};
+                    continue;
+                }
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
-                const s = brick_sprites[y];
-                scene.bricks[y * num_bricks + x] = .{
+                const s: sprite.Sprite = switch (brick.id) {
+                    1 => .brick1,
+                    2 => .brick2,
+                    3 => .brick3,
+                    4 => .brick4,
+                    else => return error.UnknownBrickId,
+                };
+                scene.bricks[i] = .{
                     .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
                     .sprite = s,
                     .emitter = ExplosionEmitter.init(.{
                         .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
                         .sprites = particleExplosionSprites(s),
                     }),
+                    .destroyed = false,
                 };
             }
         }

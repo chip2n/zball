@@ -133,6 +133,7 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
         });
 
+        addDeps(b, tests, deps);
         try addAssets(b, tests);
         const run_tests = b.addRunArtifact(tests);
         const test_step = b.step("test", "Run tests");
@@ -205,6 +206,7 @@ fn shouldIncludeAsset(name: []const u8) bool {
     if (std.mem.eql(u8, ".wav", ext)) return true;
     if (std.mem.eql(u8, ".png", ext)) return true;
     if (std.mem.eql(u8, ".json", ext)) return true;
+    if (std.mem.eql(u8, ".lvl", ext)) return true;
     return false;
 }
 
