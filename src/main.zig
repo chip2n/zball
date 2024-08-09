@@ -209,7 +209,7 @@ const TitleScene = struct {
             try ui.beginWindow(.{
                 .id = "main",
                 .x = viewport_size[0] / 2,
-                .y = viewport_size[1] / 2 + 8,
+                .y = viewport_size[1] / 2 + 24,
                 .z = 10,
                 .pivot = .{ 0.5, 0.5 },
                 .style = .transparent,
