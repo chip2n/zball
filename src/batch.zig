@@ -20,6 +20,7 @@ const RenderCommand = union(enum) {
         src: ?IRect,
         dst: Rect,
         z: f32,
+        alpha: u8,
         tex: TextureInfo,
     },
     nine_patch: struct {
@@ -27,6 +28,7 @@ const RenderCommand = union(enum) {
         center: IRect,
         dst: Rect,
         z: f32,
+        alpha: u8,
         tex: TextureInfo,
     },
 
@@ -86,7 +88,7 @@ pub const BatchRenderer = struct {
         // std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0 };
+    const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         const tw: f32 = @floatFromInt(self.tex.?.desc.width);
         const th: f32 = @floatFromInt(self.tex.?.desc.height);
@@ -95,12 +97,13 @@ pub const BatchRenderer = struct {
                 .src = v.src,
                 .dst = v.dst,
                 .z = v.z,
+                .alpha = v.alpha,
                 .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
         });
     }
 
-    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0 };
+    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         const tw: f32 = @floatFromInt(self.tex.?.desc.width);
         const th: f32 = @floatFromInt(self.tex.?.desc.height);
@@ -110,6 +113,7 @@ pub const BatchRenderer = struct {
                 .center = v.center,
                 .dst = v.dst,
                 .z = v.z,
+                .alpha = v.alpha,
                 .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
         });
@@ -157,11 +161,13 @@ pub const BatchRenderer = struct {
 
             switch (cmd) {
                 .sprite => |c| {
+                    const color: u32 = 0xFFFFFF + (@as(u32, @intCast(c.alpha)) << 24);
                     quad(.{
                         .buf = self.verts[i..],
                         .src = c.src,
                         .dst = c.dst,
                         .z = c.z,
+                        .color = color,
                         .tw = tw,
                         .th = th,
                     });
@@ -169,6 +175,7 @@ pub const BatchRenderer = struct {
                     i += 6;
                 },
                 .nine_patch => |c| {
+                    const color: u32 = 0xFFFFFF + (@as(u32, @intCast(c.alpha)) << 24);
                     // TODO refactor this
                     { // top-left corner
                         const w = c.center.x;
@@ -180,6 +187,7 @@ pub const BatchRenderer = struct {
                             .src = src,
                             .dst = dst,
                             .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -206,6 +214,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -232,6 +242,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -258,6 +270,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -284,6 +298,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -310,6 +326,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -336,6 +354,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -362,6 +382,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -388,6 +410,8 @@ pub const BatchRenderer = struct {
                             .buf = self.verts[i..],
                             .src = src,
                             .dst = dst,
+                            .z = c.z,
+                            .color = color,
                             .tw = tw,
                             .th = th,
                         });
@@ -440,6 +464,7 @@ const QuadOptions = struct {
     src: ?IRect = null,
     dst: Rect,
     z: f32 = 0,
+    color: u32 = 0xFFFFFFFF,
     // reference texture dimensions
     tw: f32,
     th: f32,
@@ -465,11 +490,11 @@ inline fn quad(v: QuadOptions) void {
     const uv1 = .{ src.x / tw, src.y / th };
     const uv2 = .{ (src.x + src.w) / tw, (src.y + src.h) / th };
     // zig fmt: off
-    buf[0] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[1] = .{ .x = x,      .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv2[1] };
-    buf[2] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[3] = .{ .x = x,      .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv1[0], .v = uv1[1] };
-    buf[4] = .{ .x = x + w,  .y = y + h,      .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv2[1] };
-    buf[5] = .{ .x = x + w,  .y = y,          .z = z, .color = 0xFFFFFFFF, .u = uv2[0], .v = uv1[1] };
+    buf[0] = .{ .x = x,      .y = y,          .z = z, .color = v.color, .u = uv1[0], .v = uv1[1] };
+    buf[1] = .{ .x = x,      .y = y + h,      .z = z, .color = v.color, .u = uv1[0], .v = uv2[1] };
+    buf[2] = .{ .x = x + w,  .y = y + h,      .z = z, .color = v.color, .u = uv2[0], .v = uv2[1] };
+    buf[3] = .{ .x = x,      .y = y,          .z = z, .color = v.color, .u = uv1[0], .v = uv1[1] };
+    buf[4] = .{ .x = x + w,  .y = y + h,      .z = z, .color = v.color, .u = uv2[0], .v = uv2[1] };
+    buf[5] = .{ .x = x + w,  .y = y,          .z = z, .color = v.color, .u = uv2[0], .v = uv1[1] };
     // zig fmt: on
 }

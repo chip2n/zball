@@ -240,6 +240,16 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                     break :blk sprite.bounds;
                 };
 
+                // Start fading out particles when 400ms left of particle life
+                const particle_fade_start = 0.4;
+                const time_left = p.lifetime - p.time;
+                var alpha: u8 = 0xFF;
+                if (time_left <= particle_fade_start) {
+                    const factor = time_left / particle_fade_start;
+                    const new_alpha = @as(f32, @floatFromInt(alpha)) * factor;
+                    alpha = @intFromFloat(new_alpha);
+                }
+
                 const w: f32 = @floatFromInt(src.w);
                 const h: f32 = @floatFromInt(src.h);
                 batch.render(.{
@@ -251,6 +261,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                         .h = h,
                     },
                     .z = p.z,
+                    .alpha = alpha,
                 });
             }
         }
