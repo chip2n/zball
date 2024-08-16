@@ -62,6 +62,9 @@ pub const BatchRenderer = struct {
     buf: [max_cmds]RenderCommand = undefined,
     idx: usize = 0,
 
+    num_cmds_submitted: usize = 0,
+    num_cmds_accepted: usize = 0,
+
     tex: ?Texture = null,
 
     pub fn init() BatchRenderer {
@@ -87,24 +90,21 @@ pub const BatchRenderer = struct {
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         const tw: f32 = @floatFromInt(self.tex.?.desc.width);
         const th: f32 = @floatFromInt(self.tex.?.desc.height);
-        self.buf[self.idx] = .{
+        self.command(.{
             .sprite = .{
                 .src = v.src,
                 .dst = v.dst,
                 .z = v.z,
                 .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
-        };
-        self.idx += 1;
-        // TODO I've hit this during development
-        std.debug.assert(self.idx < self.buf.len);
+        });
     }
 
     const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0 };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         const tw: f32 = @floatFromInt(self.tex.?.desc.width);
         const th: f32 = @floatFromInt(self.tex.?.desc.height);
-        self.buf[self.idx] = .{
+        self.command(.{
             .nine_patch = .{
                 .src = v.src,
                 .center = v.center,
@@ -112,9 +112,16 @@ pub const BatchRenderer = struct {
                 .z = v.z,
                 .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
             },
-        };
+        });
+    }
+
+    fn command(self: *BatchRenderer, cmd: RenderCommand) void {
+        self.num_cmds_submitted += 1;
+        if (self.idx == self.buf.len) return;
+
+        self.num_cmds_accepted += 1;
+        self.buf[self.idx] = cmd;
         self.idx += 1;
-        std.debug.assert(self.idx < self.buf.len);
     }
 
     pub fn commit(self: *BatchRenderer) BatchResult {
@@ -391,9 +398,18 @@ pub const BatchRenderer = struct {
             }
         }
 
-        self.idx = 0;
+        if (self.num_cmds_accepted < self.num_cmds_submitted) {
+            std.log.debug("Some render commands were dropped", .{});
+        }
 
-        return .{ .verts = self.verts[0..i], .batches = self.batches[0..batch_count] };
+        self.idx = 0;
+        self.num_cmds_submitted = 0;
+        self.num_cmds_accepted = 0;
+
+        return .{
+            .verts = self.verts[0..i],
+            .batches = self.batches[0..batch_count],
+        };
     }
 
     fn cmdLessThan(_: void, lhs: RenderCommand, rhs: RenderCommand) bool {
@@ -429,7 +445,7 @@ const QuadOptions = struct {
     th: f32,
 };
 
-fn quad(v: QuadOptions) void {
+inline fn quad(v: QuadOptions) void {
     const buf = v.buf;
     const x = v.dst.x;
     const y = v.dst.y;

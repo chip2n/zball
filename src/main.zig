@@ -619,13 +619,13 @@ const GameScene = struct {
         }
 
         // Handle shoot input
-        if (scene.inputs.shoot_down) {
+        if (scene.inputs.shoot_down) shoot: {
             if (scene.ball_state == .idle) {
                 scene.ball_state = .alive;
             } else if (scene.paddle_type == .laser and scene.laser_cooldown <= 0) {
                 const bounds = scene.paddleBounds();
-                _ = try scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 });
-                _ = try scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 });
+                _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
+                _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
                 scene.laser_cooldown = laser_cooldown;
             }
         }
