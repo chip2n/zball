@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("root");
-const Texture = @import("Texture.zig");
+const texture = @import("texture.zig");
+const Texture = texture.Texture;
 const m = @import("math");
 const Rect = m.Rect;
 const IRect = m.IRect;
@@ -13,7 +14,7 @@ const max_tex = 4;
 const TextureId = usize;
 
 // TODO we can look up tw and th afterwards. Also, tex could be just u8
-const TextureInfo = struct { id: usize, tw: f32, th: f32 };
+const TextureInfo = struct { handle: Texture, tw: f32, th: f32 };
 
 const RenderCommand = union(enum) {
     sprite: struct {
@@ -55,7 +56,7 @@ pub const BatchResult = struct {
 pub const Batch = struct {
     offset: usize,
     len: usize,
-    tex: usize,
+    tex: Texture,
 };
 
 pub const BatchRenderer = struct {
@@ -90,23 +91,25 @@ pub const BatchRenderer = struct {
 
     const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
-        const tw: f32 = @floatFromInt(self.tex.?.desc.width);
-        const th: f32 = @floatFromInt(self.tex.?.desc.height);
+        const tex = texture.get(self.tex.?) catch return;
+        const tw: f32 = @floatFromInt(tex.width);
+        const th: f32 = @floatFromInt(tex.height);
         self.command(.{
             .sprite = .{
                 .src = v.src,
                 .dst = v.dst,
                 .z = v.z,
                 .alpha = v.alpha,
-                .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
+                .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
             },
         });
     }
 
     const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
-        const tw: f32 = @floatFromInt(self.tex.?.desc.width);
-        const th: f32 = @floatFromInt(self.tex.?.desc.height);
+        const tex = texture.get(self.tex.?) catch return;
+        const tw: f32 = @floatFromInt(tex.width);
+        const th: f32 = @floatFromInt(tex.height);
         self.command(.{
             .nine_patch = .{
                 .src = v.src,
@@ -114,7 +117,7 @@ pub const BatchRenderer = struct {
                 .dst = v.dst,
                 .z = v.z,
                 .alpha = v.alpha,
-                .tex = .{ .id = self.tex.?.id, .tw = tw, .th = th },
+                .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
             },
         });
     }
@@ -134,7 +137,8 @@ pub const BatchRenderer = struct {
         // Order draw calls by z-index first and texture ID second
         std.mem.sort(RenderCommand, buf, {}, cmdLessThan);
 
-        var tex = buf[0].tex().id;
+        // TODO maybe an easier way?
+        var tex = buf[0].tex().handle;
         var tw = buf[0].tex().tw;
         var th = buf[0].tex().th;
 
@@ -146,9 +150,9 @@ pub const BatchRenderer = struct {
         self.batches[0].tex = tex;
 
         for (buf) |cmd| {
-            if (tex != cmd.tex().id) {
+            if (tex.id != cmd.tex().handle.id) {
                 // Make new batch
-                tex = cmd.tex().id;
+                tex = cmd.tex().handle;
                 tw = cmd.tex().tw;
                 th = cmd.tex().th;
 
@@ -438,13 +442,11 @@ pub const BatchRenderer = struct {
 
     fn cmdLessThan(_: void, lhs: RenderCommand, rhs: RenderCommand) bool {
         const lz = lhs.z_index();
-        const lt = lhs.tex();
         const rz = rhs.z_index();
-        const rt = rhs.tex();
 
         if (lz < rz) return true;
         if (lz > rz) return false;
-        return lt.id < rt.id;
+        return false;
     }
 };
 

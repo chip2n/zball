@@ -1,18 +1,22 @@
 const std = @import("std");
 const root = @import("root");
 const font = @import("font");
-const sprite = @import("sprite");
+const m = @import("math");
+const sprites = @import("sprite");
+const Sprite = sprites.Sprite;
 const sokol = @import("sokol");
 const sapp = sokol.app;
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 const TextRenderer = @import("ttf.zig").TextRenderer;
-const Texture = @import("Texture.zig");
+const Texture = @import("texture.zig").Texture;
 
 const WindowData = struct {
     focus_id: u64 = 0,
     focus_prev_id: u64 = 0,
     draw_list: [128]DrawListEntry = undefined, // TODO allocator instead?
     draw_list_idx: usize = 0,
+    same_line: bool = false,
+    cursor_advance: [2]f32 = .{ 0, 0 },
 
     fn addDrawListEntry(data: *WindowData, entry: DrawListEntry) void {
         std.debug.assert(data.draw_list_idx < data.draw_list.len - 1);
@@ -31,6 +35,11 @@ const DrawListEntry = union(enum) {
     },
     slider: struct {
         value: f32,
+        x: f32,
+        y: f32,
+    },
+    sprite: struct {
+        sprite: Sprite,
         x: f32,
         y: f32,
     },
@@ -54,6 +63,8 @@ var prev_window_stack: std.ArrayList(u64) = undefined;
 
 const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
+    var mouse_pressed: sapp.Mousebutton = .INVALID;
+    var mouse_pos: [2]f32 = .{ 0, 0 };
 };
 
 const WindowStyle = enum {
@@ -65,12 +76,6 @@ const WindowStyle = enum {
 
     /// Used to preserve window state without displaying window
     hidden,
-};
-
-pub const BeginDesc = struct {
-    batch: *BatchRenderer,
-    tex_spritesheet: Texture,
-    tex_font: Texture,
 };
 
 pub fn init(allocator: std.mem.Allocator) void {
@@ -85,6 +90,12 @@ pub fn deinit() void {
     prev_window_stack.deinit();
 }
 
+pub const BeginDesc = struct {
+    batch: *BatchRenderer,
+    tex_spritesheet: Texture,
+    tex_font: Texture,
+};
+
 pub fn begin(v: BeginDesc) !void {
     window_stack.clearRetainingCapacity();
     batch = v.batch;
@@ -94,6 +105,7 @@ pub fn begin(v: BeginDesc) !void {
 
 pub fn end() void {
     io.key_pressed = .INVALID;
+    io.mouse_pressed = .INVALID;
     win_id = 0;
 
     { // If any window has been closed during this frame, clear its data
@@ -112,6 +124,30 @@ pub fn end() void {
     // so that memory allocations cannot fail?
     prev_window_stack.appendSlice(window_stack.items) catch unreachable;
     window_stack.clearRetainingCapacity();
+}
+
+// TODO maybe feed our own events? mouse pos needs to be scaled...
+pub fn handleEvent(ev: sapp.Event) void {
+    switch (ev.type) {
+        .KEY_DOWN => {
+            io.key_pressed = ev.key_code;
+        },
+        .MOUSE_DOWN => {
+            io.mouse_pressed = ev.mouse_button;
+        },
+        else => {},
+    }
+}
+
+pub fn handleMouseMove(x: f32, y: f32) void {
+    io.mouse_pos[0] = x;
+    io.mouse_pos[1] = y;
+}
+
+fn genId(key: anytype) u64 {
+    var hasher = std.hash.Wyhash.init(0);
+    std.hash.autoHashStrat(&hasher, key, .DeepRecursive);
+    return hasher.final();
 }
 
 pub const BeginWindowDesc = struct {
@@ -144,6 +180,9 @@ pub fn beginWindow(v: BeginWindowDesc) !void {
         r.value_ptr.* = .{};
     } else {
         r.value_ptr.draw_list_idx = 0;
+        r.value_ptr.same_line = false;
+        r.value_ptr.cursor_advance[0] = 0;
+        r.value_ptr.cursor_advance[1] = 0;
     }
 }
 
@@ -153,9 +192,12 @@ pub fn endWindow() void {
 
     // TODO do we want to render it here? abstract away batch renderer so we
     // store render commands instead?
-    const padding = 8;
+    const padding: f32 = switch (win_style) {
+        .dialog => 8,
+        else => 0,
+    };
 
-    const dialog = sprite.sprites.dialog;
+    const dialog = sprites.get(.dialog);
     // TODO separate sprite sheet for UI
     batch.setTexture(tex_spritesheet);
 
@@ -169,7 +211,7 @@ pub fn endWindow() void {
         .dialog => {
             // Semi-transparent background overlay
             batch.render(.{
-                .src = sprite.sprites.overlay.bounds,
+                .src = sprites.get(.overlay).bounds,
                 .dst = .{ .x = 0, .y = 0, .w = root.viewport_size[0], .h = root.viewport_size[1] },
                 .z = win_z - 0.1,
             });
@@ -206,9 +248,9 @@ pub fn endWindow() void {
                 },
                 .slider => |s| {
                     batch.setTexture(tex_spritesheet);
-                    const thumb = sprite.sprites.slider_thumb;
-                    const rail_inactive = sprite.sprites.slider_rail_inactive;
-                    const rail_active = sprite.sprites.slider_rail_active;
+                    const thumb = sprites.get(.slider_thumb);
+                    const rail_inactive = sprites.get(.slider_rail_inactive);
+                    const rail_active = sprites.get(.slider_rail_active);
                     // inactive rail
                     batch.render(.{
                         .src = rail_inactive.bounds,
@@ -216,7 +258,7 @@ pub fn endWindow() void {
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
                             .w = win_width,
-                            .h = rail_inactive.bounds.h,
+                            .h = @floatFromInt(rail_inactive.bounds.h),
                         },
                         .z = win_z,
                     });
@@ -227,7 +269,7 @@ pub fn endWindow() void {
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
                             .w = win_width * s.value,
-                            .h = rail_active.bounds.h,
+                            .h = @floatFromInt(rail_active.bounds.h),
                         },
                         .z = win_z,
                     });
@@ -235,23 +277,31 @@ pub fn endWindow() void {
                     batch.render(.{
                         .src = thumb.bounds,
                         .dst = .{
-                            .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, thumb.bounds.w) / 2),
-                            .y = s.y + padding + offset[1] - @floor(@as(f32, thumb.bounds.h) / 2),
-                            .w = thumb.bounds.w,
-                            .h = thumb.bounds.h,
+                            .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, @floatFromInt(thumb.bounds.w)) / 2),
+                            .y = s.y + padding + offset[1] - @floor(@as(f32, @floatFromInt(thumb.bounds.h)) / 2),
+                            .w = @floatFromInt(thumb.bounds.w),
+                            .h = @floatFromInt(thumb.bounds.h),
                         },
                         .z = win_z,
+                    });
+                },
+                .sprite => |s| {
+                    batch.setTexture(tex_spritesheet);
+                    const sp = sprites.get(s.sprite);
+
+                    batch.render(.{
+                        .src = sp.bounds,
+                        .dst = .{
+                            .x = s.x,
+                            .y = s.y,
+                            .w = @floatFromInt(sp.bounds.w),
+                            .h = @floatFromInt(sp.bounds.h),
+                        },
                     });
                 },
             }
         }
     }
-}
-
-fn genId(key: anytype) u64 {
-    var hasher = std.hash.Wyhash.init(0);
-    std.hash.autoHashStrat(&hasher, key, .DeepRecursive);
-    return hasher.final();
 }
 
 pub const SelectionItemDesc = struct {
@@ -334,11 +384,49 @@ pub fn slider(v: SliderDesc) void {
     win_height += 4;
 }
 
-pub fn handleEvent(ev: sapp.Event) void {
-    switch (ev.type) {
-        .KEY_DOWN => {
-            io.key_pressed = ev.key_code;
-        },
-        else => {},
+const SpriteDesc = struct {
+    sprite: Sprite,
+};
+pub fn sprite(v: SpriteDesc) bool {
+    var win_data = window_data.getPtr(win_id).?;
+
+    if (win_data.same_line) {
+        cursor[0] += win_data.cursor_advance[0];
+    } else {
+        cursor[1] += win_data.cursor_advance[1];
     }
+    win_data.cursor_advance[0] = 0;
+    win_data.cursor_advance[1] = 0;
+
+    win_data.addDrawListEntry(.{
+        .sprite = .{
+            .sprite = v.sprite,
+            .x = cursor[0],
+            .y = cursor[1],
+        },
+    });
+
+    const sp = sprites.get(v.sprite);
+    const bounds = m.Rect{
+        .x = cursor[0],
+        .y = cursor[1],
+        .w = @floatFromInt(sp.bounds.w),
+        .h = @floatFromInt(sp.bounds.h),
+    };
+    const pressed = io.mouse_pressed == .LEFT and bounds.containsPoint(io.mouse_pos[0], io.mouse_pos[1]);
+    if (io.mouse_pressed == .LEFT) {
+        std.log.warn("{d:.2} {d:.2}", .{ io.mouse_pos[0], io.mouse_pos[1] });
+    }
+
+    // TODO also do this on the other elements
+    win_data.same_line = false;
+    win_data.cursor_advance[0] = @floatFromInt(sp.bounds.w);
+    win_data.cursor_advance[1] = @floatFromInt(sp.bounds.h);
+
+    return pressed;
+}
+
+pub fn sameLine() void {
+    var win_data = window_data.getPtr(win_id).?;
+    win_data.same_line = true;
 }

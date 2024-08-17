@@ -39,7 +39,7 @@ fn GenRect(comptime T: type) type {
             return true;
         }
 
-        pub fn containsPoint(self: Self, px: f32, py: f32) bool {
+        pub fn containsPoint(self: Self, px: T, py: T) bool {
             if (px < self.x or px > self.x + self.w) return false;
             if (py < self.y or py > self.y + self.h) return false;
             return true;

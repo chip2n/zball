@@ -21,6 +21,7 @@ const m = @import("math");
 const ui = @import("ui.zig");
 const level = @import("level.zig");
 const audio = @import("audio.zig");
+const texture = @import("texture.zig");
 const particle = @import("particle.zig");
 const utils = @import("utils.zig");
 
@@ -36,7 +37,7 @@ const line_intersection = @import("collision.zig").line_intersection;
 const spritesheet = @embedFile("assets/sprites.png");
 const level_data = @embedFile("assets/level1.lvl");
 
-const Texture = @import("Texture.zig");
+const Texture = texture.Texture;
 
 pub const offscreen_sample_count = 1;
 
@@ -138,7 +139,6 @@ const state = struct {
 
     var spritesheet_texture: Texture = undefined;
     var font_texture: Texture = undefined;
-    var textures: std.AutoHashMap(usize, sg.Image) = undefined;
 
     var window_size: [2]i32 = initial_screen_size;
 
@@ -165,11 +165,13 @@ const SceneType = std.meta.Tag(Scene);
 const Scene = union(enum) {
     title: TitleScene,
     game: GameScene,
+    editor: EditorScene,
 
     fn deinit(scene: *Scene) void {
         switch (scene.*) {
             .title => scene.title.deinit(),
             .game => scene.game.deinit(),
+            .editor => scene.editor.deinit(),
         }
     }
 
@@ -177,6 +179,7 @@ const Scene = union(enum) {
         switch (scene.*) {
             .title => try scene.title.update(dt),
             .game => try scene.game.update(dt),
+            .editor => try scene.editor.update(dt),
         }
     }
 
@@ -184,6 +187,7 @@ const Scene = union(enum) {
         switch (scene.*) {
             .title => try scene.title.render(),
             .game => try scene.game.render(),
+            .editor => try scene.editor.render(),
         }
     }
 
@@ -191,6 +195,220 @@ const Scene = union(enum) {
         switch (scene.*) {
             .title => try scene.title.input(ev),
             .game => try scene.game.input(ev),
+            .editor => try scene.editor.input(ev),
+        }
+    }
+};
+
+const EditorScene = struct {
+    allocator: std.mem.Allocator,
+
+    bricks: []Brick,
+    tex: Texture,
+    brush: sprite.Sprite = .brick1,
+
+    inputs: struct {
+        mouse_left_down: bool = false,
+        mouse_right_down: bool = false,
+    } = .{},
+
+    fn init(allocator: std.mem.Allocator) !EditorScene {
+        const bricks = try allocator.alloc(Brick, 20 * 20);
+        errdefer allocator.free(bricks);
+
+        // TODO reuse
+        for (0..20) |y| {
+            for (0..20) |x| {
+                const i = y * 20 + x;
+                const fx: f32 = @floatFromInt(x);
+                const fy: f32 = @floatFromInt(y);
+                bricks[i] = .{
+                    .pos = .{ fx * brick_w, fy * brick_h },
+                    .sprite = .brick1,
+                    .emitter = ExplosionEmitter.init(.{
+                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                        .sprites = particleExplosionSprites(.brick1),
+                    }),
+                    .destroyed = true,
+                };
+            }
+        }
+
+        // TODO handle allocated memory properly
+        const width = viewport_size[0];
+        const height = viewport_size[1];
+        const editor_texture_data = try allocator.alloc(u32, width * height);
+        for (editor_texture_data) |*d| {
+            d.* = 0x000000;
+        }
+        // Horizontal lines
+        for (1..21) |y| {
+            for (0..width) |x| {
+                editor_texture_data[y * width * 8 + x] = 0x10FFFFFF;
+            }
+        }
+
+        // Vertical lines
+        for (1..20) |x| {
+            for (0..height - 80) |y| {
+                editor_texture_data[x * 16 + y * width] = 0x10FFFFFF;
+            }
+        }
+        const tex = try texture.loadRGB8(.{
+            .data = std.mem.sliceAsBytes(editor_texture_data),
+            .width = width,
+            .height = height,
+            .usage = .mutable,
+        });
+
+        return EditorScene{
+            .allocator = allocator,
+            .bricks = bricks,
+            .tex = tex,
+        };
+    }
+
+    fn deinit(scene: *EditorScene) void {
+        scene.allocator.free(scene.bricks);
+    }
+
+    fn update(scene: *EditorScene, dt: f32) !void {
+        _ = dt; // autofix
+
+        const mouse_pos = mouse();
+        if (mouse_pos[0] < 0) return;
+        if (mouse_pos[1] < 0) return;
+
+        const x: usize = @intFromFloat(mouse_pos[0]);
+        const y: usize = @intFromFloat(mouse_pos[1]);
+
+        const brick_x = x / 16;
+        const brick_y = y / 8;
+        if (brick_x >= 20) return;
+        if (brick_y >= 20) return;
+
+        var brick = &scene.bricks[brick_y * 20 + brick_x];
+
+        if (scene.inputs.mouse_left_down) {
+            brick.sprite = scene.brush;
+            brick.destroyed = false;
+        }
+        if (scene.inputs.mouse_right_down) {
+            brick.destroyed = true;
+        }
+
+        // const editor_texture = try texture.get(scene.tex);
+        // if (x >= editor_texture.width) return;
+        // if (y >= editor_texture.height) return;
+        // try texture.draw(scene.tex, x, y);
+    }
+
+    fn render(scene: *EditorScene) !void {
+        // Render all bricks
+        // TODO refactor?
+        state.batch.setTexture(state.spritesheet_texture);
+        for (scene.bricks) |brick| {
+            if (brick.destroyed) continue;
+            const x = brick.pos[0];
+            const y = brick.pos[1];
+            const slice = sprite.get(brick.sprite);
+            state.batch.render(.{
+                .src = slice.bounds,
+                .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
+            });
+        }
+
+        { // Render grid
+            state.batch.setTexture(scene.tex);
+            const tex = try texture.get(scene.tex);
+            state.batch.render(.{
+                .dst = .{ .x = 0, .y = 0, .w = @floatFromInt(tex.width), .h = @floatFromInt(tex.height) },
+            });
+        }
+
+        { // Palette
+            try ui.begin(.{
+                .batch = &state.batch,
+                .tex_spritesheet = state.spritesheet_texture,
+                .tex_font = state.font_texture,
+            });
+            defer ui.end();
+
+            try ui.beginWindow(.{
+                .id = "palette",
+                .x = 0,
+                .y = viewport_size[1] - 8,
+                .style = .transparent,
+            });
+            defer ui.endWindow();
+
+            const palette = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
+            for (palette) |s| {
+                if (ui.sprite(.{ .sprite = s })) {
+                    scene.brush = s;
+                }
+                ui.sameLine();
+            }
+        }
+
+        const result = state.batch.commit();
+        sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
+
+        const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
+        sg.beginPass(.{
+            .action = state.offscreen.pass_action,
+            .attachments = state.viewport.attachments,
+        });
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+
+        for (result.batches) |b| {
+            const tex = try texture.get(b.tex);
+            state.offscreen.bind.fs.images[shd.SLOT_tex] = tex.img;
+            sg.applyBindings(state.offscreen.bind);
+            sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+        }
+        sg.endPass();
+    }
+
+    fn input(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
+        switch (ev.*.type) {
+            .MOUSE_DOWN => {
+                switch (ev.*.mouse_button) {
+                    .LEFT => scene.inputs.mouse_left_down = true,
+                    .RIGHT => scene.inputs.mouse_right_down = true,
+                    else => {},
+                }
+            },
+            .MOUSE_UP => {
+                switch (ev.*.mouse_button) {
+                    .LEFT => scene.inputs.mouse_left_down = false,
+                    .RIGHT => scene.inputs.mouse_right_down = false,
+                    else => {},
+                }
+            },
+            .KEY_DOWN => {
+                switch (ev.*.key_code) {
+                    .ENTER => {
+                        std.log.warn("SAVE", .{});
+                        // TODO overwrite if already exists
+                        const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
+                        defer file.close();
+                        // TODO stop with this 20 nonsense
+                        var data: [20 * 20]level.Brick = undefined;
+                        for (scene.bricks, 0..) |b, i| {
+                            var id: u8 = 0;
+                            if (!b.destroyed) {
+                                id = try spriteToBrickId(b.sprite);
+                            }
+                            data[i] = .{ .id = id };
+                        }
+                        try level.writeLevel(&data, file.writer());
+                    },
+                    else => {},
+                }
+            },
+            else => {},
         }
     }
 };
@@ -202,6 +420,7 @@ const TitleScene = struct {
     fn update(scene: *TitleScene, dt: f32) !void {
         _ = dt;
 
+        // TODO this is in update, but gamescene menu is in render. maybe silly to break update/render up?
         try ui.begin(.{
             .batch = &state.batch,
             .tex_spritesheet = state.spritesheet_texture,
@@ -225,6 +444,9 @@ const TitleScene = struct {
             }
             if (ui.selectionItem("Settings", .{})) {
                 scene.settings = true;
+            }
+            if (ui.selectionItem("Editor", .{})) {
+                state.next_scene = .editor;
             }
             if (ui.selectionItem("Quit", .{})) {
                 sapp.quit();
@@ -262,7 +484,8 @@ const TitleScene = struct {
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
         for (result.batches) |b| {
-            state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
+            const tex = try texture.get(b.tex);
+            state.offscreen.bind.fs.images[shd.SLOT_tex] = tex.img;
             sg.applyBindings(state.offscreen.bind);
             sg.draw(@intCast(b.offset), @intCast(b.len), 1);
         }
@@ -511,6 +734,7 @@ const GameScene = struct {
     laser_timer: f32 = 0,
     laser_cooldown: f32 = 0,
 
+    // TODO make a better input system
     inputs: struct {
         left_down: bool = false,
         right_down: bool = false,
@@ -549,13 +773,7 @@ const GameScene = struct {
                 }
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
-                const s: sprite.Sprite = switch (brick.id) {
-                    1 => .brick1,
-                    2 => .brick2,
-                    3 => .brick3,
-                    4 => .brick4,
-                    else => return error.UnknownBrickId,
-                };
+                const s: sprite.Sprite = try brickIdToSprite(brick.id);
                 scene.bricks[i] = .{
                     .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
                     .sprite = s,
@@ -1162,7 +1380,8 @@ const GameScene = struct {
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
         for (result.batches) |b| {
-            state.offscreen.bind.fs.images[shd.SLOT_tex] = state.textures.get(b.tex).?;
+            const tex = try texture.get(b.tex);
+            state.offscreen.bind.fs.images[shd.SLOT_tex] = tex.img;
             sg.applyBindings(state.offscreen.bind);
             sg.draw(@intCast(b.offset), @intCast(b.len), 1);
         }
@@ -1346,6 +1565,26 @@ fn renderGui() void {
     ig.igEnd();
 }
 
+fn brickIdToSprite(id: u8) !sprite.Sprite {
+    return switch (id) {
+        1 => .brick1,
+        2 => .brick2,
+        3 => .brick3,
+        4 => .brick4,
+        else => return error.UnknownBrickId,
+    };
+}
+
+fn spriteToBrickId(sp: sprite.Sprite) !u8 {
+    return switch (sp) {
+        .brick1 => 1,
+        .brick2 => 2,
+        .brick3 => 3,
+        .brick4 => 4,
+        else => return error.BrickSpriteMissing,
+    };
+}
+
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 fn initializeGame() !void {
@@ -1363,6 +1602,9 @@ fn initializeGame() !void {
 
     audio.init();
     errdefer audio.deinit();
+
+    texture.init(state.allocator);
+    errdefer texture.deinit();
 
     stm.setup();
 
@@ -1408,12 +1650,9 @@ fn initializeGame() !void {
     // update the fullscreen-quad texture bindings to contain the viewport image
     state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc.colors[0].image;
 
-    state.spritesheet_texture = Texture.init(spritesheet);
-    state.font_texture = Texture.init(font.image);
+    state.spritesheet_texture = try texture.loadPNG(.{ .data = spritesheet });
+    state.font_texture = try texture.loadPNG(.{ .data = font.image });
 
-    state.textures = std.AutoHashMap(usize, sg.Image).init(allocator);
-    try state.textures.put(state.spritesheet_texture.id, sg.makeImage(state.spritesheet_texture.desc));
-    try state.textures.put(state.font_texture.id, sg.makeImage(state.font_texture.desc));
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
 
     // create a shader and pipeline object
@@ -1599,6 +1838,7 @@ export fn sokolFrame() void {
         state.scene = switch (next) {
             .title => Scene{ .title = .{} },
             .game => Scene{ .game = GameScene.init(state.allocator) catch unreachable }, // TODO
+            .editor => Scene{ .editor = EditorScene.init(state.allocator) catch unreachable }, // TODO
         };
         state.next_scene = null;
     }
@@ -1618,6 +1858,9 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
         .MOUSE_MOVE => {
             state.mouse_pos = .{ ev.*.mouse_x, ev.*.mouse_y };
             state.mouse_delta = m.vadd(state.mouse_delta, .{ ev.*.mouse_dx, ev.*.mouse_dy });
+
+            const world_mouse_pos = mouse();
+            ui.handleMouseMove(world_mouse_pos[0], world_mouse_pos[1]);
         },
         else => {
             state.scene.input(ev) catch |err| {
@@ -1629,6 +1872,7 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 
 export fn sokolCleanup() void {
     state.scene.deinit();
+    texture.deinit();
     audio.deinit();
     sg.shutdown();
     ui.deinit();
