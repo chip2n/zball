@@ -10,6 +10,7 @@ const CoreDependencies = struct {
     cimgui: *Build.Dependency,
     stb: *Build.Dependency,
     zmath: *Build.Dependency,
+    zpool: *Build.Dependency,
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
@@ -42,6 +43,7 @@ pub fn build(b: *Build) !void {
     const cimgui_root = dep_cimgui.namedWriteFiles("cimgui").getDirectory();
     dep_sokol.artifact("sokol_clib").addIncludePath(cimgui_root);
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
+    const dep_zpool = b.dependency("zpool", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
     const dep_fwatch = b.dependency("zig_file_watch", .{ .target = target, .optimize = optimize });
 
@@ -102,6 +104,7 @@ pub fn build(b: *Build) !void {
         .cimgui = dep_cimgui,
         .stb = dep_stb,
         .zmath = dep_zmath,
+        .zpool = dep_zpool,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
         .sprite_path = tool_spritepack_output,
@@ -161,6 +164,10 @@ fn addDeps(
     // zmath
     const mod_zmath = deps.zmath.module("root");
     step.root_module.addImport("zmath", mod_zmath);
+
+    // zpool
+    const mod_zpool = deps.zpool.module("root");
+    step.root_module.addImport("zpool", mod_zpool);
 
     // math
     const mod_math = b.addModule("math", .{
