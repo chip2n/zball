@@ -124,13 +124,11 @@ const state = struct {
     const fsq = struct {
         var pip: sg.Pipeline = .{};
         var bind: sg.Bindings = .{};
+        var pass_action: sg.PassAction = .{};
     };
 
     var bg: Pipeline = undefined;
     const ui = struct {
-        var pass_action: sg.PassAction = .{};
-    };
-    const default = struct {
         var pass_action: sg.PassAction = .{};
     };
 
@@ -1614,12 +1612,6 @@ fn initializeGame() !void {
     ui.init(state.allocator);
     errdefer ui.deinit();
 
-    // setup pass action for default render pass
-    state.default.pass_action.colors[0] = .{
-        .load_action = .CLEAR,
-        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
-    };
-
     // setup pass action for imgui
     state.ui.pass_action.colors[0] = .{ .load_action = .LOAD };
 
@@ -1692,6 +1684,11 @@ fn initializeGame() !void {
     };
     fsq_pip_desc.layout.attrs[shd.ATTR_vs_fsq_pos].format = .FLOAT2;
     state.fsq.pip = sg.makePipeline(fsq_pip_desc);
+    // setup pass action for fsq render pass
+    state.fsq.pass_action.colors[0] = .{
+        .load_action = .CLEAR,
+        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+    };
 
     // a sampler to sample the offscreen render target as texture
     const smp = sg.makeSampler(.{
@@ -1816,7 +1813,7 @@ export fn sokolFrame() void {
     renderGui();
 
     const fsq_params = computeFSQParams();
-    sg.beginPass(.{ .action = state.default.pass_action, .swapchain = sglue.swapchain() });
+    sg.beginPass(.{ .action = state.fsq.pass_action, .swapchain = sglue.swapchain() });
     sg.applyPipeline(state.fsq.pip);
     sg.applyBindings(state.fsq.bind);
     sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
