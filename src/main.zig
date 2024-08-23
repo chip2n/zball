@@ -20,6 +20,7 @@ const m = @import("math");
 
 const ui = @import("ui.zig");
 const level = @import("level.zig");
+const Level = level.Level;
 const audio = @import("audio.zig");
 const texture = @import("texture.zig");
 const particle = @import("particle.zig");
@@ -35,7 +36,11 @@ const box_intersection = @import("collision.zig").box_intersection;
 const line_intersection = @import("collision.zig").line_intersection;
 
 const spritesheet = @embedFile("assets/sprites.png");
-const level_data = @embedFile("assets/level1.lvl");
+
+const levels = .{
+    "assets/level1.lvl",
+    "assets/level2.lvl",
+};
 
 const Texture = texture.Texture;
 
@@ -146,6 +151,9 @@ const state = struct {
 
     var allocator: std.mem.Allocator = undefined;
     var arena: std.heap.ArenaAllocator = undefined;
+
+    var levels: std.ArrayList(Level) = undefined;
+    var level_idx: usize = 0;
 
     var scene: Scene = .{ .title = .{} };
     var next_scene: ?SceneType = null;
@@ -739,13 +747,7 @@ const GameScene = struct {
         shoot_down: bool = false,
     } = .{},
 
-    fn init(allocator: std.mem.Allocator) !GameScene {
-        // Load level data
-        // TODO: Do at comptime?
-        var fbs = std.io.fixedBufferStream(level_data);
-        const lvl = try level.parseLevel(allocator, fbs.reader());
-        defer lvl.deinit(allocator);
-
+    fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
         const bricks = try allocator.alloc(Brick, lvl.width * lvl.height);
         errdefer allocator.free(bricks);
         const entities = try allocator.alloc(Entity, max_entities);
@@ -1057,6 +1059,25 @@ const GameScene = struct {
         }
         for (scene.bricks) |*brick| {
             brick.emitter.update(dt);
+        }
+
+        // Are all bricks destroyed?
+        var bricks_destroyed = false;
+        for (scene.bricks) |brick| {
+            if (!brick.destroyed) break;
+        } else {
+            bricks_destroyed = true;
+        }
+
+        if (bricks_destroyed) {
+            if (state.level_idx < state.levels.items.len - 1) {
+                state.level_idx += 1;
+                state.next_scene = .game;
+            } else {
+                state.level_idx = 0;
+                state.next_scene = .title;
+            }
+            return;
         }
 
         flame: {
@@ -1718,6 +1739,17 @@ fn initializeGame() !void {
         state.bg = try Pipeline.init();
     }
     state.bg.bind.vertex_buffers[0] = quad_vbuf;
+
+    // load all levels
+    state.levels = std.ArrayList(Level).init(allocator);
+    errdefer state.levels.deinit();
+    inline for (levels) |path| {
+        const data = @embedFile(path);
+        var fbs = std.io.fixedBufferStream(data);
+        const lvl = try level.parseLevel(allocator, fbs.reader());
+        errdefer lvl.deinit(allocator);
+        try state.levels.append(lvl);
+    }
 }
 
 const QuadOptions = struct {
@@ -1833,7 +1865,7 @@ export fn sokolFrame() void {
         scene.deinit();
         state.scene = switch (next) {
             .title => Scene{ .title = .{} },
-            .game => Scene{ .game = GameScene.init(state.allocator) catch unreachable }, // TODO
+            .game => Scene{ .game = GameScene.init(state.allocator, state.levels.items[state.level_idx]) catch unreachable }, // TODO
             .editor => Scene{ .editor = EditorScene.init(state.allocator) catch unreachable }, // TODO
         };
         state.next_scene = null;
