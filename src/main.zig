@@ -1250,6 +1250,39 @@ const GameScene = struct {
     }
 
     fn render(scene: *GameScene) !void {
+        { // Top status bar
+            state.batch.setTexture(state.spritesheet_texture);
+            const d = sprite.sprites.dialog;
+            state.batch.render(.{
+                .src = .{
+                    .x = d.bounds.x + d.center.?.x,
+                    .y = d.bounds.y + d.center.?.y,
+                    .w = d.center.?.w,
+                    .h = d.center.?.h,
+                },
+                .dst = .{
+                    .x = 0,
+                    .y = 0,
+                    .w = viewport_size[0],
+                    .h = 8,
+                },
+            });
+            for (0..scene.lives) |i| {
+                const fi: f32 = @floatFromInt(i);
+                state.batch.render(.{
+                    .src = sprite.sprites.ball.bounds,
+                    .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+                });
+            }
+
+            // Score
+            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            var text_renderer = TextRenderer{};
+            var buf: [32]u8 = undefined;
+            const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
+            text_renderer.render(&state.batch, label, 32, 0, 10);
+        }
+
         state.batch.setTexture(state.spritesheet_texture);
 
         // Render all bricks
@@ -1333,39 +1366,6 @@ const GameScene = struct {
         }
         for (scene.bricks) |brick| {
             brick.emitter.render(&state.batch);
-        }
-
-        { // Top status bar
-            const d = sprite.sprites.dialog;
-            state.batch.render(.{
-                .src = .{
-                    .x = d.bounds.x + d.center.?.x,
-                    .y = d.bounds.y + d.center.?.y,
-                    .w = d.center.?.w,
-                    .h = d.center.?.h,
-                },
-                .dst = .{
-                    .x = 0,
-                    .y = 0,
-                    .w = viewport_size[0],
-                    .h = 8,
-                },
-            });
-            for (0..scene.lives) |i| {
-                const fi: f32 = @floatFromInt(i);
-                state.batch.render(.{
-                    .src = sprite.sprites.ball.bounds,
-                    .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
-                });
-            }
-        }
-
-        { // Score
-            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
-            var text_renderer = TextRenderer{};
-            var buf: [32]u8 = undefined;
-            const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
-            text_renderer.render(&state.batch, label, 32, 0, 10);
         }
 
         { // Render game menus
