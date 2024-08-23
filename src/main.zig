@@ -732,7 +732,12 @@ const GameScene = struct {
 
     ball_state: BallState = .idle,
 
-    // When player dies, we start a timer. When it reaches zero, we start a new
+    // When player clears the board, we start this timer. When it reaches zero,
+    // we switch to the next board (or the title screen, if the board cleared
+    // was the last one).
+    clear_timer: f32 = 0,
+
+    // When player dies, we start this timer. When it reaches zero, we start a new
     // round (or send them to the title screen).
     death_timer: f32 = 0,
 
@@ -1061,25 +1066,6 @@ const GameScene = struct {
             brick.emitter.update(dt);
         }
 
-        // Are all bricks destroyed?
-        var bricks_destroyed = false;
-        for (scene.bricks) |brick| {
-            if (!brick.destroyed) break;
-        } else {
-            bricks_destroyed = true;
-        }
-
-        if (bricks_destroyed) {
-            if (state.level_idx < state.levels.items.len - 1) {
-                state.level_idx += 1;
-                state.next_scene = .game;
-            } else {
-                state.level_idx = 0;
-                state.next_scene = .title;
-            }
-            return;
-        }
-
         flame: {
             if (!scene.tickDownTimer("flame_timer", dt)) break :flame;
             for (scene.entities) |*e| {
@@ -1104,6 +1090,28 @@ const GameScene = struct {
                 _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), initial_ball_dir);
                 scene.ball_state = .idle;
             }
+        }
+
+        clear: {
+            // Has player cleared all the bricks?
+            if (scene.clear_timer == 0) {
+                for (scene.bricks) |brick| {
+                    if (!brick.destroyed) break :clear;
+                }
+                scene.clear_timer = 2.5;
+                break :clear;
+            }
+
+            if (!scene.tickDownTimer("clear_timer", dt)) break :clear;
+
+            if (state.level_idx < state.levels.items.len - 1) {
+                state.level_idx += 1;
+                state.next_scene = .game;
+            } else {
+                state.level_idx = 0;
+                state.next_scene = .title;
+            }
+            return;
         }
     }
 
