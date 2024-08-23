@@ -1676,8 +1676,7 @@ fn initializeGame() !void {
         .data = sg.asRange(&[_]f32{ -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5 }),
     });
 
-    // shader and pipeline object to render a fullscreen quad which composes
-    // the 3 offscreen render targets into the default framebuffer
+    // shader and pipeline object to render a fullscreen quad
     var fsq_pip_desc: sg.PipelineDesc = .{
         .shader = sg.makeShader(shd.fsqShaderDesc(sg.queryBackend())),
         .primitive_type = .TRIANGLE_STRIP,

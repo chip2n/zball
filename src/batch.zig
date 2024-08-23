@@ -132,6 +132,8 @@ pub const BatchRenderer = struct {
     }
 
     pub fn commit(self: *BatchRenderer) BatchResult {
+        if (self.idx == 0) return .{ .verts = &.{}, .batches = &.{} };
+
         const buf = self.buf[0..self.idx];
 
         // Order draw calls by z-index first and texture ID second
