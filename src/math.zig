@@ -110,3 +110,7 @@ pub fn vangle(v1: [2]f32, v2: [2]f32) f32 {
         v2[0] * v1[0] + v2[1] * v1[1],
     );
 }
+
+pub fn lerp(start: f32, end: f32, t: f32) f32 {
+    return start * (1 - t) + end * t;
+}

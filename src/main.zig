@@ -722,6 +722,8 @@ const GameScene = struct {
     menu: GameMenu = .none,
 
     time: f32 = 0,
+    time_scale: f32 = 1,
+
     lives: u8 = 3,
     score: u32 = 0,
 
@@ -810,6 +812,10 @@ const GameScene = struct {
     }
 
     fn update(scene: *GameScene, dt: f32) !void {
+        // The delta time used by the game itself (minus "global
+        // timers"). Scaled by `time_scale` to support slowdown effects.
+        const game_dt = scene.time_scale * dt;
+
         if (scene.paused()) {
             showMouse(true);
             lockMouse(false);
@@ -820,13 +826,15 @@ const GameScene = struct {
 
         const mouse_delta = mouseDelta();
 
-        scene.time += dt;
+        scene.time += game_dt;
 
         { // Move paddle
             const new_pos = blk: {
+                // Mouse
                 if (m.magnitude(mouse_delta) > 0) {
-                    break :blk scene.paddle_pos[0] + mouse_delta[0];
+                    break :blk scene.paddle_pos[0] + (mouse_delta[0] * scene.time_scale);
                 }
+                // Keyboard
                 var paddle_dx: f32 = 0;
                 if (scene.inputs.left_down) {
                     paddle_dx -= 1;
@@ -834,7 +842,7 @@ const GameScene = struct {
                 if (scene.inputs.right_down) {
                     paddle_dx += 1;
                 }
-                break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * dt;
+                break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * game_dt;
             };
 
             const bounds = scene.paddleBounds();
@@ -856,7 +864,7 @@ const GameScene = struct {
         // Move powerups
         for (&scene.powerups) |*p| {
             if (!p.active) continue;
-            p.pos[1] += dt * powerup_fall_speed;
+            p.pos[1] += game_dt * powerup_fall_speed;
             if (p.pos[1] > viewport_size[1]) {
                 p.active = false;
             }
@@ -893,8 +901,8 @@ const GameScene = struct {
                             scene.updateIdleBall();
                         },
                         .alive => {
-                            ball.pos[0] += ball.dir[0] * ball_speed * dt;
-                            ball.pos[1] += ball.dir[1] * ball_speed * dt;
+                            ball.pos[0] += ball.dir[0] * ball_speed * game_dt;
+                            ball.pos[1] += ball.dir[1] * ball_speed * game_dt;
                         },
                     }
                     const new_ball_pos = ball.pos;
@@ -1044,7 +1052,7 @@ const GameScene = struct {
                 .laser => {
                     const old_pos = e.pos;
                     var new_pos = e.pos;
-                    new_pos[1] -= laser_speed * dt;
+                    new_pos[1] -= laser_speed * game_dt;
                     e.pos = new_pos;
 
                     if (scene.collideBricks(old_pos, new_pos)) |_| {
@@ -1057,17 +1065,17 @@ const GameScene = struct {
         // TODO the particle system could be responsible to update all emitters (via handles)
         for (scene.entities) |*e| {
             e.flame.pos = e.pos;
-            e.flame.update(dt);
+            e.flame.update(game_dt);
 
             e.explosion.pos = e.pos;
-            e.explosion.update(dt);
+            e.explosion.update(game_dt);
         }
         for (scene.bricks) |*brick| {
-            brick.emitter.update(dt);
+            brick.emitter.update(game_dt);
         }
 
         flame: {
-            if (!scene.tickDownTimer("flame_timer", dt)) break :flame;
+            if (!scene.tickDownTimer("flame_timer", game_dt)) break :flame;
             for (scene.entities) |*e| {
                 if (e.type != .ball) continue;
                 e.flame.emitting = false;
@@ -1075,8 +1083,8 @@ const GameScene = struct {
         }
 
         laser: { // Laser powerup
-            _ = scene.tickDownTimer("laser_cooldown", dt);
-            if (!scene.tickDownTimer("laser_timer", dt)) break :laser;
+            _ = scene.tickDownTimer("laser_cooldown", game_dt);
+            if (!scene.tickDownTimer("laser_timer", game_dt)) break :laser;
             scene.paddle_type = .normal;
         }
 
@@ -1093,16 +1101,21 @@ const GameScene = struct {
         }
 
         clear: {
+            const clear_delay = 4;
+
             // Has player cleared all the bricks?
             if (scene.clear_timer == 0) {
                 for (scene.bricks) |brick| {
                     if (!brick.destroyed) break :clear;
                 }
-                scene.clear_timer = 2.5;
+                scene.clear_timer = clear_delay;
                 break :clear;
             }
 
-            if (!scene.tickDownTimer("clear_timer", dt)) break :clear;
+            if (!scene.tickDownTimer("clear_timer", dt)) {
+                scene.time_scale = m.lerp(1, 0.1, 1 - (scene.clear_timer / clear_delay));
+                break :clear;
+            }
 
             if (state.level_idx < state.levels.items.len - 1) {
                 state.level_idx += 1;
