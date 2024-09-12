@@ -313,7 +313,7 @@ fn buildWeb(
         .use_emmalloc = true,
         .use_filesystem = false,
         .extra_args = &.{"-sUSE_OFFSET_CONVERTER=1"},
-        .shell_file_path = b.path("src/shell.html").getPath(b),
+        .shell_file_path = b.path("src/minshell.html"),
     });
 
     const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
