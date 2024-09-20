@@ -58,12 +58,12 @@
 
       # nix run .#build
       apps.build = env.app [
-        alsa-lib
-        alsa-plugins
-        glfw
-        xorg.libX11
-        xorg.libXi
-        xorg.libXcursor
+        pkgs2.alsa-lib
+        pkgs2.alsa-plugins
+        pkgs2.glfw
+        pkgs2.xorg.libX11
+        pkgs2.xorg.libXi
+        pkgs2.xorg.libXcursor
       ] "zig build \"$@\"";
 
       # nix run .#test
