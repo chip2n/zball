@@ -15,7 +15,8 @@ jobs:
         run: |
           sudo apt-get install -y \
             libxi-dev \
-            libxcursor-dev
+            libxcursor-dev \
+            libglfw3-dev
 
       - uses: mlugg/setup-zig@v1
       - run: zig build
