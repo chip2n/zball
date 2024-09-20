@@ -21,7 +21,14 @@
         src = cleanSource ./.;
 
         nativeBuildInputs = with env.pkgs; [];
-        buildInputs = with env.pkgsForTarget target; [];
+        buildInputs = with env.pkgsForTarget target; [
+          alsa-lib
+          alsa-plugins
+          glfw
+          xorg.libX11
+          xorg.libXi
+          xorg.libXcursor
+        ];
 
         # Smaller binaries and avoids shipping glibc.
         zigPreferMusl = true;
