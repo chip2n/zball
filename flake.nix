@@ -20,8 +20,7 @@
       packages.target = genAttrs allTargetTriples (target: env.packageForTarget target ({
         src = cleanSource ./.;
 
-        nativeBuildInputs = with env.pkgs; [];
-        buildInputs = with env.pkgsForTarget target; [
+        nativeBuildInputs = with env.pkgs; [
           alsa-lib
           alsa-plugins
           glfw
@@ -29,6 +28,7 @@
           xorg.libXi
           xorg.libXcursor
         ];
+        buildInputs = with env.pkgsForTarget target; [];
 
         # Smaller binaries and avoids shipping glibc.
         zigPreferMusl = true;
