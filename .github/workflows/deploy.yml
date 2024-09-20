@@ -11,11 +11,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v27
+      - uses: mlugg/setup-zig@v1
+      - run: zig build
+      # - name: Install Nix
+      #   uses: cachix/install-nix-action@v27
 
-      - name: Build Desktop
-        run: nix run .#build
+      # - name: Build Desktop
+      #   run: nix run .#build
 
       # - name: Deploy to Pages
       #   uses: actions/upload-pages-artifact@v3
