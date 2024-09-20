@@ -7,8 +7,8 @@
             .hash = "1220144256113210beb90ac4b0d6f469a6da267869d9fcb6c3f49a909d63cd2cd9f6",
         },
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#7b7d4bafe6176baca152b8fce935f4cac5a90ba0",
-            .hash = "1220ce851df99fd0ddeb6f20e75cdd35dd4e24404f7de7a2aa4cc4f37de58f039cab",
+            .url = "git+https://github.com/floooh/sokol-zig.git#0fe24fa6a57b574161746ed79ecf9c8f959b77fd",
+            .hash = "1220024c9d6f15115fea7aa98ff21ce6e07ebd11dcd51975cd4f0ce1081bdd7645fd",
         },
         .sokol_tools = .{
             .url = "git+https://github.com/floooh/sokol-tools-bin.git#da7dd818362cfb0af35ed4189974c30ccebca9cf",
