@@ -11,6 +11,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: Install dependencies
+        run: |
+          apt-get libxi-dev \
+                  libxcursor-dev
+
       - uses: mlugg/setup-zig@v1
       - run: zig build
       # - name: Install Nix
