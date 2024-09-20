@@ -20,14 +20,7 @@
       packages.target = genAttrs allTargetTriples (target: env.packageForTarget target ({
         src = cleanSource ./.;
 
-        nativeBuildInputs = with env.pkgs; [
-          alsa-lib
-          alsa-plugins
-          glfw
-          xorg.libX11
-          xorg.libXi
-          xorg.libXcursor
-        ];
+        nativeBuildInputs = with env.pkgs; [];
         buildInputs = with env.pkgsForTarget target; [];
 
         # Smaller binaries and avoids shipping glibc.
@@ -64,7 +57,14 @@
       apps.default = env.app [] "zig build run -- \"$@\"";
 
       # nix run .#build
-      apps.build = env.app [] "zig build \"$@\"";
+      apps.build = env.app [
+        alsa-lib
+        alsa-plugins
+        glfw
+        xorg.libX11
+        xorg.libXi
+        xorg.libXcursor
+      ] "zig build \"$@\"";
 
       # nix run .#test
       apps.test = env.app [] "zig build test -- \"$@\"";
