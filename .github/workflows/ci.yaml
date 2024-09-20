@@ -1,7 +1,7 @@
 name: Build linux binary
 on: push
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -14,10 +14,27 @@ jobs:
           packages: libxi-dev libxcursor-dev libglfw3-dev libasound2-dev
           version: 1.0
       - uses: mlugg/setup-zig@v1
-      - run: zig build
+      - run: zig build -Doptimize=ReleaseSafe
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             zig-out/bin/game
+
+  build-web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - uses: mlugg/setup-zig@v1
+      - run: zig build -Dtarget=wasm32-emscripten run -Doptimize=ReleaseSafe
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            zig-out/web/game.js
+            zig-out/web/game.wasm
