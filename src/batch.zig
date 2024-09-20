@@ -9,7 +9,7 @@ const IRect = m.IRect;
 const max_quads = root.max_quads;
 const max_verts = root.max_verts;
 const max_cmds = max_quads;
-const max_tex = 4;
+const max_tex = 8;
 
 const TextureId = usize;
 
