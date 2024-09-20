@@ -1862,7 +1862,7 @@ export fn sokolFrame() void {
         std.process.exit(1);
     };
 
-    renderGui();
+    // renderGui();
 
     const fsq_params = computeFSQParams();
     sg.beginPass(.{ .action = state.fsq.pass_action, .swapchain = sglue.swapchain() });
