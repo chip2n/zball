@@ -13,8 +13,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          apt-get libxi-dev \
-                  libxcursor-dev
+          apt-get install -y \
+            libxi-dev \
+            libxcursor-dev
 
       - uses: mlugg/setup-zig@v1
       - run: zig build
