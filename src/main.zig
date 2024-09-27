@@ -9,13 +9,11 @@ const stm = sokol.time;
 const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
-const simgui = sokol.imgui;
 
 const shd = @import("shader");
 const font = @import("font");
 const sprite = @import("sprite");
 const fwatch = @import("fwatch");
-const ig = @import("cimgui");
 const m = @import("math");
 
 const ui = @import("ui.zig");
@@ -135,9 +133,6 @@ const state = struct {
     };
 
     var bg: Pipeline = undefined;
-    const ui = struct {
-        var pass_action: sg.PassAction = .{};
-    };
 
     var time: f64 = 0;
     var dt: f32 = 0;
@@ -459,8 +454,12 @@ const TitleScene = struct {
             if (ui.selectionItem("Settings", .{})) {
                 scene.settings = true;
             }
-            if (ui.selectionItem("Editor", .{})) {
-                state.next_scene = .editor;
+            if (!is_web) {
+                // We only support the editor on desktop builds (don't want to
+                // deal with the browser intgration with the file system)
+                if (ui.selectionItem("Editor", .{})) {
+                    state.next_scene = .editor;
+                }
             }
             if (ui.selectionItem("Quit", .{})) {
                 sapp.quit();
@@ -1579,63 +1578,6 @@ fn renderSettingsMenu() !bool {
     return false;
 }
 
-// TODO move this
-fn renderGui() void {
-    ig.igSetNextWindowPos(.{ .x = 100, .y = 100 }, ig.ImGuiCond_Once, .{ .x = 0, .y = 0 });
-    ig.igSetNextWindowSize(.{ .x = 400, .y = 200 }, ig.ImGuiCond_Once);
-    _ = ig.igBegin("Debug", 0, ig.ImGuiWindowFlags_None);
-    _ = ig.igText("Delta: %.4g", state.dt);
-    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Window: %d %d", state.window_size[0], state.window_size[1]);
-    _ = ig.igText("Mouse (screen): %.4g %.4g", state.mouse_pos[0], state.mouse_pos[1]);
-    _ = ig.igText("Mouse (world): %.4g %.4g", mouse()[0], mouse()[1]);
-    _ = ig.igText("Memory usage: %d", state.arena.queryCapacity());
-    _ = ig.igText("Verts rendered: %d", debug.verts_rendered);
-
-    switch (state.scene) {
-        .game => |*s| {
-            _ = ig.igText("Death timer: %.4g", s.death_timer);
-            _ = ig.igText("Flame timer: %.4g", s.flame_timer);
-            _ = ig.igText("Laser timer: %.4g", s.laser_timer);
-            if (ig.igButton("Enable flame", .{})) {
-                acquirePowerup(s, .flame);
-            }
-            if (ig.igButton("Enable fork", .{})) {
-                acquirePowerup(s, .fork);
-            }
-        },
-        else => {},
-    }
-
-    if (ig.igDragFloat2("Camera", &state.camera.pos, 1, -1000, 1000, "%.4g", ig.ImGuiSliderFlags_None)) {
-        state.camera.invalidate();
-    }
-
-    if (ig.igButton("Play sound", .{})) {
-        audio.play(.{ .clip = .bounce });
-    }
-    if (ig.igButton("Play sound twice", .{})) {
-        audio.play(.{ .clip = .bounce });
-        audio.play(.{ .clip = .bounce });
-    }
-    if (ig.igButton("Play sound thrice", .{})) {
-        audio.play(.{ .clip = .bounce });
-        audio.play(.{ .clip = .bounce });
-        audio.play(.{ .clip = .bounce });
-    }
-    if (ig.igButton("Play music", .{})) {
-        audio.play(.{ .clip = .music, .loop = true, .vol = 0.5, .category = .bg });
-    }
-
-    if (config.shader_reload) {
-        if (ig.igButton("Load shader", .{})) {
-            debug.reload = true;
-        }
-    }
-
-    ig.igEnd();
-}
-
 fn brickIdToSprite(id: u8) !sprite.Sprite {
     return switch (id) {
         1 => .brick1,
@@ -1679,14 +1621,8 @@ fn initializeGame() !void {
 
     stm.setup();
 
-    simgui.setup(.{
-        .logger = .{ .func = slog.func },
-    });
     ui.init(state.allocator);
     errdefer ui.deinit();
-
-    // setup pass action for imgui
-    state.ui.pass_action.colors[0] = .{ .load_action = .LOAD };
 
     state.camera = Camera.init(.{
         .pos = .{ viewport_size[0] / 2, viewport_size[1] / 2 },
@@ -1883,13 +1819,6 @@ export fn sokolFrame() void {
         debug.reload = false;
     }
 
-    simgui.newFrame(.{
-        .width = sapp.width(),
-        .height = sapp.height(),
-        .delta_time = sapp.frameDuration(),
-        .dpi_scale = sapp.dpiScale(),
-    });
-
     scene.render() catch |err| {
         std.log.err("Unable to render scene: {}", .{err});
         std.process.exit(1);
@@ -1903,10 +1832,6 @@ export fn sokolFrame() void {
     sg.applyBindings(state.fsq.bind);
     sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
     sg.draw(0, 4, 1);
-    sg.endPass();
-
-    sg.beginPass(.{ .action = state.ui.pass_action, .swapchain = sglue.swapchain() });
-    simgui.render();
     sg.endPass();
 
     sg.commit();
@@ -1927,7 +1852,6 @@ export fn sokolFrame() void {
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    _ = simgui.handleEvent(ev.*);
     ui.handleEvent(ev.*);
 
     switch (ev.*.type) {

@@ -7,7 +7,6 @@ const sokol = @import("sokol");
 
 const CoreDependencies = struct {
     sokol: *Build.Dependency,
-    cimgui: *Build.Dependency,
     stb: *Build.Dependency,
     zmath: *Build.Dependency,
     zpool: *Build.Dependency,
@@ -35,13 +34,8 @@ pub fn build(b: *Build) !void {
     const dep_sokol = b.dependency("sokol", .{
         .target = target,
         .optimize = optimize,
-        .with_sokol_imgui = true,
     });
     const dep_sokol_tools = b.dependency("sokol_tools", .{ .target = target, .optimize = optimize });
-    const dep_cimgui = b.dependency("cimgui", .{ .target = target, .optimize = optimize });
-    // inject the cimgui header search path into the sokol C library compile step
-    const cimgui_root = dep_cimgui.namedWriteFiles("cimgui").getDirectory();
-    dep_sokol.artifact("sokol_clib").addIncludePath(cimgui_root);
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zpool = b.dependency("zpool", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
@@ -101,7 +95,6 @@ pub fn build(b: *Build) !void {
 
     const deps = CoreDependencies{
         .sokol = dep_sokol,
-        .cimgui = dep_cimgui,
         .stb = dep_stb,
         .zmath = dep_zmath,
         .zpool = dep_zpool,
@@ -152,10 +145,6 @@ fn addDeps(
     // sokol
     const mod_sokol = deps.sokol.module("sokol");
     step.root_module.addImport("sokol", mod_sokol);
-
-    // imgui
-    const mod_cimgui = deps.cimgui.module("cimgui");
-    step.root_module.addImport("cimgui", mod_cimgui);
 
     // stb
     step.addIncludePath(deps.stb.path("."));
@@ -297,11 +286,6 @@ fn buildWeb(
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
-
-    // need to inject the Emscripten system header include path into
-    // the cimgui C library otherwise the C/C++ code won't find
-    // C stdlib headers
-    deps.cimgui.artifact("cimgui_clib").addSystemIncludePath(emsdk_sysroot);
 
     const emsdk = deps.sokol.builder.dependency("emsdk", .{});
     const link_step = try sokol.emLinkStep(b, .{
