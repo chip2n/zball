@@ -64,7 +64,8 @@ const laser_duration = 5;
 const laser_speed = 200;
 const laser_cooldown = 0.2;
 
-const use_gpa = builtin.os.tag != .emscripten;
+const is_web = builtin.os.tag == .emscripten;
+const use_gpa = !is_web;
 
 const initial_screen_size = .{ 640, 480 };
 pub const viewport_size: [2]u32 = .{ 320, 240 };
@@ -155,7 +156,7 @@ const state = struct {
     var levels: std.ArrayList(Level) = undefined;
     var level_idx: usize = 0;
 
-    var scene: Scene = .{ .title = .{} };
+    var scene: Scene = undefined;
     var next_scene: ?SceneType = null;
 
     var batch = BatchRenderer.init();
@@ -422,6 +423,12 @@ const EditorScene = struct {
 const TitleScene = struct {
     idx: usize = 0,
     settings: bool = false,
+
+    fn init() TitleScene {
+        showMouse(false);
+        lockMouse(true);
+        return .{};
+    }
 
     fn update(scene: *TitleScene, dt: f32) !void {
         _ = dt;
@@ -816,9 +823,19 @@ const GameScene = struct {
         // timers"). Scaled by `time_scale` to support slowdown effects.
         const game_dt = scene.time_scale * dt;
 
+        if (is_web) {
+            // On the web, the Esc key unlocks the cursor (if it's locked), and
+            // swallow the key event. But we want to open the menu! Therefore,
+            // we just check if the mouse is unlocked at any point, and use that
+            // to open the menu.
+            if (!sapp.mouseLocked()) {
+                scene.menu = .pause;
+                showMouse(true);
+                lockMouse(true);
+            }
+        }
+
         if (scene.paused()) {
-            showMouse(true);
-            lockMouse(false);
             return;
         }
         showMouse(false);
@@ -1771,6 +1788,8 @@ fn initializeGame() !void {
         errdefer lvl.deinit(allocator);
         try state.levels.append(lvl);
     }
+
+    state.scene = Scene{ .title = TitleScene.init() };
 }
 
 const QuadOptions = struct {
@@ -1885,7 +1904,7 @@ export fn sokolFrame() void {
     if (state.next_scene) |next| {
         scene.deinit();
         state.scene = switch (next) {
-            .title => Scene{ .title = .{} },
+            .title => Scene{ .title = TitleScene.init() },
             .game => Scene{ .game = GameScene.init(state.allocator, state.levels.items[state.level_idx]) catch unreachable }, // TODO
             .editor => Scene{ .editor = EditorScene.init(state.allocator) catch unreachable }, // TODO
         };
