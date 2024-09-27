@@ -172,33 +172,25 @@ const Scene = union(enum) {
 
     fn deinit(scene: *Scene) void {
         switch (scene.*) {
-            .title => scene.title.deinit(),
-            .game => scene.game.deinit(),
-            .editor => scene.editor.deinit(),
+            inline else => |*impl| impl.deinit(),
         }
     }
 
     fn update(scene: *Scene, dt: f32) !void {
         switch (scene.*) {
-            .title => try scene.title.update(dt),
-            .game => try scene.game.update(dt),
-            .editor => try scene.editor.update(dt),
+            inline else => |*impl| try impl.update(dt),
         }
     }
 
     fn render(scene: *Scene) !void {
         switch (scene.*) {
-            .title => try scene.title.render(),
-            .game => try scene.game.render(),
-            .editor => try scene.editor.render(),
+            inline else => |*impl| try impl.render(),
         }
     }
 
     fn input(scene: *Scene, ev: [*c]const sapp.Event) !void {
         switch (scene.*) {
-            .title => try scene.title.input(ev),
-            .game => try scene.game.input(ev),
-            .editor => try scene.editor.input(ev),
+            inline else => |*impl| try impl.input(ev),
         }
     }
 };
