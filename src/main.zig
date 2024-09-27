@@ -454,15 +454,20 @@ const TitleScene = struct {
             if (ui.selectionItem("Settings", .{})) {
                 scene.settings = true;
             }
+
+            // We only support the editor on desktop builds (don't want to
+            // deal with the browser intgration with the file system)
             if (!is_web) {
-                // We only support the editor on desktop builds (don't want to
-                // deal with the browser intgration with the file system)
                 if (ui.selectionItem("Editor", .{})) {
                     state.next_scene = .editor;
                 }
             }
-            if (ui.selectionItem("Quit", .{})) {
-                sapp.quit();
+
+            // Web builds cannot quit the game, only go to another page
+            if (!is_web) {
+                if (ui.selectionItem("Quit", .{})) {
+                    sapp.quit();
+                }
             }
         }
 
@@ -1411,13 +1416,13 @@ const GameScene = struct {
                 .none => {},
                 .pause => {
                     if (try renderPauseMenu(&scene.menu)) {
-                        sapp.quit();
+                        state.next_scene = .title;
                     }
                 },
                 .settings => {
                     // We still "render" the pause menu, but flagging it as hidden to preserve its state
                     if (try renderPauseMenu(&scene.menu)) {
-                        sapp.quit();
+                        state.next_scene = .title;
                     }
                     if (try renderSettingsMenu()) {
                         scene.menu = .pause;
