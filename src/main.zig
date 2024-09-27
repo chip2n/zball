@@ -1300,11 +1300,12 @@ const GameScene = struct {
             }
 
             // Score
-            state.batch.setTexture(state.font_texture); // TODO have to always remember this when rendering text...
+            // TODO have to always remember this when rendering text...
+            state.batch.setTexture(state.font_texture);
             var text_renderer = TextRenderer{};
             var buf: [32]u8 = undefined;
             const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
-            text_renderer.render(&state.batch, label, 32, 0, 10);
+            text_renderer.render(&state.batch, label, 32, 0, 5);
         }
 
         state.batch.setTexture(state.spritesheet_texture);
