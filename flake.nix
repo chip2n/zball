@@ -1,104 +1,31 @@
 {
-  description = "Breakout clone written in Zig";
-
   inputs = {
-    zig2nix.url = "github:Cloudef/zig2nix";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-23.11";
+    zig_overlay.url = "github:mitchellh/zig-overlay";
   };
 
-  outputs = { nixpkgs, zig2nix, ... }: let
-    flake-utils = zig2nix.inputs.flake-utils;
-  in (flake-utils.lib.eachDefaultSystem (system: let
-      # Zig flake helper
-      # Check the flake.nix in zig2nix project for more options:
-      # <https://github.com/Cloudef/zig2nix/blob/master/flake.nix>
-      env = zig2nix.outputs.zig-env.${system} {};
-      system-triple = env.lib.zigTripleFromString system;
-      pkgs2 = import nixpkgs { inherit system; };
-    in with builtins; with env.lib; with env.pkgs.lib; rec {
-      # nix build .#target.{zig-target}
-      # e.g. nix build .#target.x86_64-linux-gnu
-      packages.target = genAttrs allTargetTriples (target: env.packageForTarget target ({
-        src = cleanSource ./.;
-
-        nativeBuildInputs = with env.pkgs; [];
-        buildInputs = with env.pkgsForTarget target; [];
-
-        # Smaller binaries and avoids shipping glibc.
-        zigPreferMusl = true;
-
-        # This disables LD_LIBRARY_PATH mangling, binary patching etc...
-        # The package won't be usable inside nix.
-        zigDisableWrap = true;
-      } // optionalAttrs (!pathExists ./build.zig.zon) {
-        pname = "my-zig-project";
-        version = "0.0.0";
-      }));
-
-      # nix build .
-      packages.default = packages.target.${system-triple}.override {
-        # Prefer nix friendly settings.
-        zigPreferMusl = false;
-        zigDisableWrap = false;
+  outputs = { self, nixpkgs, zig_overlay, ... }: let
+    system = "x86_64-linux";
+    zig = zig_overlay.packages.${system}.master-2024-08-03;
+  in {
+    devShells.${system}.default = let
+      pkgs = import nixpkgs {
+        inherit system;
       };
-
-      # For bundling with nix bundle for running outside of nix
-      # example: https://github.com/ralismark/nix-appimage
-      apps.bundle.target = genAttrs allTargetTriples (target: let
-        pkg = packages.target.${target};
-      in {
-        type = "app";
-        program = "${pkg}/bin/default";
-      });
-
-      # default bundle
-      apps.bundle.default = apps.bundle.target.${system-triple};
-
-      # nix run .
-      apps.default = env.app [] "zig build run -- \"$@\"";
-
-      # nix run .#build
-      apps.build = env.app [
-        pkgs2.alsa-lib
-        pkgs2.alsa-plugins
-        pkgs2.glfw
-        pkgs2.xorg.libX11
-        pkgs2.xorg.libXi
-        pkgs2.xorg.libXcursor
-      ] "zig build \"$@\"";
-
-      # nix run .#test
-      apps.test = env.app [] "zig build test -- \"$@\"";
-
-      # nix run .#docs
-      apps.docs = env.app [] "zig build docs -- \"$@\"";
-
-      # nix run .#deps
-      apps.deps = env.showExternalDeps;
-
-      # nix run .#zon2json
-      apps.zon2json = env.app [env.zon2json] "zon2json \"$@\"";
-
-      # nix run .#zon2json-lock
-      apps.zon2json-lock = env.app [env.zon2json-lock] "zon2json-lock \"$@\"";
-
-      # nix run .#zon2nix
-      apps.zon2nix = env.app [env.zon2nix] "zon2nix \"$@\"";
-
-      # nix develop
-      devShells.default = env.mkShell {
-        packages = [
-          # zig
-          pkgs2.alsa-lib
-          pkgs2.alsa-plugins
-          pkgs2.glfw
-          pkgs2.xorg.libX11
-          pkgs2.xorg.libXi
-          pkgs2.xorg.libXcursor
-        ];
-        # shellHook = ''
-        #   export ALSA_PLUGIN_DIR=${pkgs2.alsa-plugins}/lib/alsa-lib
-        #   echo "zig $(zig version)"
-        # '';
-      };
-    }));
+    in pkgs.mkShell {
+      packages = [
+        zig
+        pkgs.alsa-lib
+        pkgs.alsa-plugins
+        pkgs.glfw
+        pkgs.xorg.libX11
+        pkgs.xorg.libXi
+        pkgs.xorg.libXcursor
+      ];
+      shellHook = ''
+        export ALSA_PLUGIN_DIR=${pkgs.alsa-plugins}/lib/alsa-lib
+        echo "zig $(zig version)"
+      '';
+    };
+  };
 }
