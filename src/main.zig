@@ -53,7 +53,7 @@ pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 
-pub const max_quads = 2048;
+pub const max_quads = 4096;
 pub const max_verts = max_quads * 6; // TODO use index buffers
 const max_balls = 32;
 const max_entities = 128;
@@ -63,6 +63,7 @@ const flame_duration = 5;
 const laser_duration = 5;
 const laser_speed = 200;
 const laser_cooldown = 0.2;
+const max_brick_emitters = 20;
 
 const is_web = builtin.os.tag == .emscripten;
 const use_gpa = !is_web;
@@ -1061,7 +1062,6 @@ const GameScene = struct {
                     // that it isn't. If we don't do this, the ball may be stuck
                     // for a very long time.
                     if (@abs(ball.dir[1]) < 0.10) {
-                        std.log.debug("Ball direction is almost horizontal - making it less horizontal.", .{});
                         ball.dir[1] = std.math.sign(ball.dir[1]) * 0.10;
                         m.normalize(&ball.dir);
                     }
@@ -1173,12 +1173,20 @@ const GameScene = struct {
                     coll_dist = brick_dist;
                 }
                 brick.destroyed = true;
-                brick.emitter = ExplosionEmitter.init(.{
-                    .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                    .sprites = particleExplosionSprites(brick.sprite),
-                });
-                brick.emitter.pos = brick_pos;
-                brick.emitter.emitting = true;
+                // If we haven't reached the max emitter count for bricks, start a new one
+                var emitter_count: usize = 0;
+                for (scene.bricks) |b2| {
+                    if (!b2.emitter.emitting) continue;
+                    emitter_count += 1;
+                }
+                if (emitter_count < max_brick_emitters) {
+                    brick.emitter = ExplosionEmitter.init(.{
+                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                        .sprites = particleExplosionSprites(brick.sprite),
+                    });
+                    brick.emitter.pos = brick_pos;
+                    brick.emitter.emitting = true;
+                }
                 audio.play(.{ .clip = .explode });
                 scene.score += 100;
 
@@ -1376,13 +1384,19 @@ const GameScene = struct {
             });
         }
 
-        // Render particles
-        for (scene.entities) |e| {
-            e.flame.render(&state.batch);
-            e.explosion.render(&state.batch);
-        }
+        // Render brick explosions
         for (scene.bricks) |brick| {
             brick.emitter.render(&state.batch);
+        }
+
+        // Render entity explosion particles
+        for (scene.entities) |e| {
+            e.explosion.render(&state.batch);
+        }
+
+        // Render entity flame particles
+        for (scene.entities) |e| {
+            e.flame.render(&state.batch);
         }
 
         { // Render game menus

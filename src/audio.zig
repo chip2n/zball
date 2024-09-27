@@ -122,7 +122,6 @@ pub const AudioState = struct {
             p.category = v.category;
             break;
         } else {
-            std.log.debug("Cannot play clip - too many audio clips is playing at the same time.", .{});
             return;
         }
     }
