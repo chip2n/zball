@@ -426,6 +426,20 @@ pub fn sprite(v: SpriteDesc) bool {
     return pressed;
 }
 
+const TextDesc = struct {};
+
+pub fn text(s: []const u8, v: TextDesc) void {
+    _ = v;
+    const sz = TextRenderer.measure(s);
+    win_width = @max(win_width, sz[0]);
+
+    var win_data = window_data.getPtr(win_id).?;
+    win_data.addDrawListEntry(.{ .text = .{ .s = s, .x = cursor[0], .y = cursor[1] } });
+
+    cursor[1] += font.ascent + 4;
+    win_height = cursor[1] - origin[1] - 4;
+}
+
 pub fn sameLine() void {
     var win_data = window_data.getPtr(win_id).?;
     win_data.same_line = true;

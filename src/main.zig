@@ -437,6 +437,19 @@ const TitleScene = struct {
         });
         defer ui.end();
 
+        { // Footer
+            try ui.beginWindow(.{
+                .id = "footer",
+                .x = 8,
+                .y = viewport_size[1],
+                .z = 10,
+                .pivot = .{ 0, 1 },
+                .style = .transparent,
+            });
+            defer ui.endWindow();
+            ui.text("(C) 2024 - Andreas Arvidsson", .{});
+        }
+
         { // Main menu
             try ui.beginWindow(.{
                 .id = "main",
