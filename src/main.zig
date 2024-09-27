@@ -52,7 +52,7 @@ pub const std_options = .{
 };
 
 pub const max_quads = 4096;
-pub const max_verts = max_quads * 6; // TODO use index buffers
+pub const max_verts = max_quads * 6;
 const max_balls = 32;
 const max_entities = 128;
 const powerup_freq = 0.3;
