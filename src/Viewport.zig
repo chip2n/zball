@@ -14,7 +14,9 @@ const Viewport = @This();
 size: [2]u32,
 camera: *Camera,
 attachments_desc: sg.AttachmentsDesc = .{},
+attachments_desc2: sg.AttachmentsDesc = .{},
 attachments: sg.Attachments = .{},
+attachments2: sg.Attachments = .{},
 
 pub fn init(v: struct { size: [2]u32, camera: *Camera }) Viewport {
     var viewport = Viewport{ .size = v.size, .camera = v.camera };
@@ -35,6 +37,13 @@ fn createOffscreenAttachments(v: *Viewport) void {
     }
     sg.destroyImage(v.attachments_desc.depth_stencil.image);
 
+    // destroy previous resources (can be called with invalid ids)
+    sg.destroyAttachments(v.attachments2);
+    for (v.attachments_desc2.colors) |att| {
+        sg.destroyImage(att.image);
+    }
+    sg.destroyImage(v.attachments_desc2.depth_stencil.image);
+
     // create offscreen render target images
     const color_img_desc: sg.ImageDesc = .{
         .render_target = true,
@@ -48,4 +57,8 @@ fn createOffscreenAttachments(v: *Viewport) void {
     v.attachments_desc.colors[0].image = sg.makeImage(color_img_desc);
     v.attachments_desc.depth_stencil.image = sg.makeImage(depth_img_desc);
     v.attachments = sg.makeAttachments(v.attachments_desc);
+
+    v.attachments_desc2.colors[0].image = sg.makeImage(color_img_desc);
+    v.attachments_desc2.depth_stencil.image = sg.makeImage(depth_img_desc);
+    v.attachments2 = sg.makeAttachments(v.attachments_desc2);
 }

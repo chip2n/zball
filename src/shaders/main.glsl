@@ -47,12 +47,13 @@ uniform vs_fsq_params {
 };
 
 in vec2 pos;
+in vec2 in_uv;
 
 out vec2 uv;
 
 void main() {
     gl_Position = mvp * vec4(pos, 0, 1);
-    uv = vec2(pos.x + 0.5, pos.y + 0.5);
+    uv = in_uv;
 }
 @end
 
@@ -77,6 +78,7 @@ void main() {
 @vs vs_bg
 
 in vec2 pos;
+in vec2 in_uv;
 
 void main() {
     gl_Position = vec4(pos * 2, 0, 1);

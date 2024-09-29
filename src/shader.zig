@@ -27,6 +27,7 @@ pub const StaticPipeline = struct {
             },
         };
         pip_desc.layout.attrs[shd.ATTR_vs_bg_pos].format = .FLOAT2;
+        pip_desc.layout.attrs[shd.ATTR_vs_bg_in_uv].format = .FLOAT2;
         const pip = sg.makePipeline(pip_desc);
         return .{
             .pip = pip,
