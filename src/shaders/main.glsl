@@ -37,6 +37,7 @@ void main() {
 
 @program main vs fs
 
+// TODO name this "scene shader"?
 //* fullscreen quad shader
 
 @vs vs_fsq
@@ -49,10 +50,12 @@ uniform vs_fsq_params {
 in vec2 pos;
 in vec2 in_uv;
 
+out vec2 frag_pos;
 out vec2 uv;
 
 void main() {
     gl_Position = mvp * vec4(pos, 0, 1);
+    frag_pos = pos;
     uv = in_uv;
 }
 @end
@@ -60,14 +63,48 @@ void main() {
 @fs fs_fsq
 uniform texture2D tex;
 uniform sampler smp;
+uniform fs_fsq_params {
+    float value;
+};
 
-in vec2 uv;
+in vec2 frag_pos;
+in vec2 uv; // TODO not really needed I guess
 
 out vec4 frag_color;
 
+float warp(float x) {
+    return 0.5 - sin(asin(1 - 2 * x) / 2);
+}
+
+vec3 darken(float x, vec3 color) {
+    float pos = x;
+    if (x > 0.5) pos = 1.0 - x;
+    float factor = min(warp(pos) * 2 + 0.4, 1.0);
+    return color * factor;
+}
+
 void main() {
-    vec3 c = texture(sampler2D(tex, smp), uv).xyz;
-    frag_color = vec4(c, 1.0);
+    float transition_progress = value;
+    float frag_progress = 0.5 + frag_pos.y;
+
+    // Fragment is outside the transition animation
+    if (frag_progress > transition_progress) discard;
+
+    float roll_fraction = 0.2 * (1 - transition_progress);
+
+    if (frag_progress < transition_progress - roll_fraction) {
+        // Fragment is fully "rolled out" - render normally
+        vec3 c = texture(sampler2D(tex, smp), uv).xyz;
+        frag_color = vec4(c, 1.0);
+    } else {
+        // Fragment is inside the roll - warp the UV y-coord to fake 3D effect
+        float distance_from_bottom = transition_progress - frag_progress;
+        float roll_offset = distance_from_bottom/roll_fraction;
+        vec2 roll_uv = vec2(uv.x, transition_progress + roll_fraction * warp(roll_offset));
+        vec3 c = texture(sampler2D(tex, smp), roll_uv).xyz;
+        c = darken(roll_offset, c);
+        frag_color = vec4(c, 1.0);
+    }
 }
 @end
 

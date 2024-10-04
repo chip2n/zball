@@ -156,7 +156,6 @@ const state = struct {
     var batch = BatchRenderer.init();
 
     var quad_vbuf: sg.Buffer = undefined;
-    var quad_vbuf2: sg.Buffer = undefined;
 };
 
 const BallState = enum {
@@ -1098,7 +1097,7 @@ pub const GameScene = struct {
             }
 
             clear: {
-                const clear_delay = 4;
+                const clear_delay = 2.5;
 
                 // Has player cleared all the bricks?
                 if (scene.clear_timer == 0) {
@@ -1381,7 +1380,7 @@ pub const GameScene = struct {
     }
 
     fn paused(scene: *GameScene) bool {
-        return scene.menu != .none;
+        return scene.menu != .none or state.scene_mgr.next != null;
     }
 
     fn spawnEntity(scene: *GameScene, entity_type: EntityType, pos: [2]f32, dir: [2]f32) !*Entity {
@@ -1665,10 +1664,6 @@ fn initializeGame() !void {
         .usage = .IMMUTABLE,
         .data = sg.asRange(&[_]f32{ -0.5, -0.5, 0, 0, 0.5, -0.5, 1, 0, -0.5, 0.5, 0, 1, 0.5, 0.5, 1, 1 }),
     });
-    state.quad_vbuf2 = sg.makeBuffer(.{
-        .usage = .IMMUTABLE,
-        .data = sg.asRange(&[_]f32{ -0.1, -0.2, 0, 0, 0.3, -0.2, 1, 0, -0.2, 0.3, 0, 1, 0.3, 0.3, 1, 1 }),
-    });
 
     // shader and pipeline object to render a fullscreen quad
     var fsq_pip_desc: sg.PipelineDesc = .{
@@ -1680,7 +1675,7 @@ fn initializeGame() !void {
     state.fsq.pip = sg.makePipeline(fsq_pip_desc);
     // setup pass action for fsq render pass
     state.fsq.pass_action.colors[0] = .{
-        .load_action = .LOAD,
+        .load_action = .CLEAR,
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
     };
 
@@ -1805,30 +1800,37 @@ export fn sokolFrame() void {
     }
 
     const fsq_params = computeFSQParams();
-    { // Current scene
-        state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc.colors[0].image;
+    var fs_fsq_params = shd.FsFsqParams{ .value = 1.0 };
+    {
         sg.beginPass(.{ .action = state.fsq.pass_action, .swapchain = sglue.swapchain() });
-        sg.applyPipeline(state.fsq.pip);
-        state.fsq.bind.vertex_buffers[0] = state.quad_vbuf;
-        sg.applyBindings(state.fsq.bind);
-        sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
-        sg.draw(0, 4, 1);
-        sg.endPass();
+        defer sg.endPass();
+
+        { // Current scene
+            state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc.colors[0].image;
+            sg.applyPipeline(state.fsq.pip);
+            state.fsq.bind.vertex_buffers[0] = state.quad_vbuf;
+            sg.applyBindings(state.fsq.bind);
+            sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
+            sg.applyUniforms(.FS, shd.SLOT_fs_fsq_params, sg.asRange(&fs_fsq_params));
+            sg.draw(0, 4, 1);
+        }
+
+        // Next scene (in case of transition)
+        if (state.scene_mgr.next != null) {
+
+            // Update uniform transition progress (shader uses it to display part of the
+            // screen while a transition is in progress)
+            fs_fsq_params.value = state.scene_mgr.transition_progress;
+
+            state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc2.colors[0].image;
+            sg.applyPipeline(state.fsq.pip);
+
+            sg.applyBindings(state.fsq.bind);
+            sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
+            sg.applyUniforms(.FS, shd.SLOT_fs_fsq_params, sg.asRange(&fs_fsq_params));
+            sg.draw(0, 4, 1);
+        }
     }
-
-    // Next scene (in case of transition)
-    if (state.scene_mgr.next != null) {
-        state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc2.colors[0].image;
-        sg.beginPass(.{ .action = state.fsq.pass_action, .swapchain = sglue.swapchain() });
-        sg.applyPipeline(state.fsq.pip);
-        state.fsq.bind.vertex_buffers[0] = state.quad_vbuf2;
-
-        sg.applyBindings(state.fsq.bind);
-        sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
-        sg.draw(0, 4, 1);
-        sg.endPass();
-    }
-
     sg.commit();
 
     // Reset mouse delta
