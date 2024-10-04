@@ -14,7 +14,7 @@ const EditorScene = main.EditorScene;
 // const GameScene = @import("scene/game.zig");
 // const EditorScene = @import("scene/editor.zig");
 
-const transition_duration = 1;
+const transition_duration = 2;
 
 const SceneType = std.meta.Tag(Scene);
 
@@ -88,7 +88,6 @@ pub const SceneManager = struct {
     pub fn frame(mgr: *SceneManager, dt: f32) !void {
         if (mgr.next) |next| {
             mgr.transition_progress += dt / transition_duration;
-            std.log.warn("transition: {}", .{mgr.transition_progress});
             if (mgr.transition_progress >= 1) {
                 mgr.transition_progress = 0;
                 mgr.current = next;
