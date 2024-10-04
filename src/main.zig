@@ -53,6 +53,27 @@ pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 
+const InputAction = enum {
+    left,
+    right,
+    shoot,
+    confirm,
+    back,
+};
+const keybindings = .{
+    .{ if (is_web) .BACKSPACE else .ESCAPE, .back },
+    .{ .ENTER, .confirm },
+    .{ .LEFT, .left },
+    .{ .RIGHT, .right },
+    .{ .SPACE, .shoot },
+};
+fn identifyInputAction(key: sapp.Keycode) ?InputAction {
+    inline for (keybindings) |binding| {
+        if (key == binding[0]) return binding[1];
+    }
+    return null;
+}
+
 pub const max_quads = 4096;
 pub const max_verts = max_quads * 6;
 const max_balls = 32;
@@ -366,8 +387,9 @@ pub const EditorScene = struct {
                 }
             },
             .KEY_DOWN => {
-                switch (ev.*.key_code) {
-                    .ENTER => {
+                const action = identifyInputAction(ev.*.key_code) orelse return;
+                switch (action) {
+                    .confirm => {
                         std.log.warn("SAVE", .{});
                         // TODO overwrite if already exists
                         const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
@@ -396,13 +418,13 @@ pub const TitleScene = struct {
     settings: bool = false,
 
     pub fn init() TitleScene {
-        showMouse(false);
-        lockMouse(true);
         return .{};
     }
 
     pub fn frame(scene: *TitleScene, dt: f32) !void {
         _ = dt;
+        showMouse(false);
+        lockMouse(true);
 
         // TODO this is in update, but gamescene menu is in render. maybe silly to break update/render up?
         try ui.begin(.{
@@ -491,8 +513,9 @@ pub const TitleScene = struct {
         if (scene.settings) {
             switch (ev.*.type) {
                 .KEY_DOWN => {
-                    switch (ev.*.key_code) {
-                        .ESCAPE => scene.settings = false,
+                    const action = identifyInputAction(ev.*.key_code) orelse return;
+                    switch (action) {
+                        .back => scene.settings = false,
                         else => {},
                     }
                 },
@@ -804,18 +827,6 @@ pub const GameScene = struct {
         // The delta time used by the game itself (minus "global
         // timers"). Scaled by `time_scale` to support slowdown effects.
         const game_dt = scene.time_scale * dt;
-
-        if (is_web) {
-            // On the web, the Esc key unlocks the cursor (if it's locked), and
-            // swallow the key event. But we want to open the menu! Therefore,
-            // we just check if the mouse is unlocked at any point, and use that
-            // to open the menu.
-            if (!sapp.mouseLocked()) {
-                scene.menu = .pause;
-                showMouse(true);
-                lockMouse(true);
-            }
-        }
 
         if (!scene.paused()) {
             showMouse(false);
@@ -1437,32 +1448,33 @@ pub const GameScene = struct {
             .none => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        // TODO refactor input handling
-                        switch (ev.*.key_code) {
-                            .LEFT => {
+                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        switch (action) {
+                            .left => {
                                 scene.inputs.left_down = true;
                             },
-                            .RIGHT => {
+                            .right => {
                                 scene.inputs.right_down = true;
                             },
-                            .SPACE => {
+                            .shoot => {
                                 scene.inputs.shoot_down = true;
                             },
-                            .ESCAPE => {
+                            .back => {
                                 scene.menu = .pause;
                             },
                             else => {},
                         }
                     },
                     .KEY_UP => {
-                        switch (ev.*.key_code) {
-                            .LEFT => {
+                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        switch (action) {
+                            .left => {
                                 scene.inputs.left_down = false;
                             },
-                            .RIGHT => {
+                            .right => {
                                 scene.inputs.right_down = false;
                             },
-                            .SPACE => {
+                            .shoot => {
                                 scene.inputs.shoot_down = false;
                             },
                             else => {},
@@ -1480,8 +1492,9 @@ pub const GameScene = struct {
             .pause => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        switch (ev.*.key_code) {
-                            .ESCAPE => scene.menu = .none,
+                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        switch (action) {
+                            .back => scene.menu = .none,
                             else => {},
                         }
                     },
@@ -1491,8 +1504,9 @@ pub const GameScene = struct {
             .settings => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        switch (ev.*.key_code) {
-                            .ESCAPE => scene.menu = .pause,
+                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        switch (action) {
+                            .back => scene.menu = .pause,
                             else => {},
                         }
                     },
