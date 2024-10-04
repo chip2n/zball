@@ -713,7 +713,7 @@ pub const GameScene = struct {
     time: f32 = 0,
     time_scale: f32 = 1,
 
-    lives: u8 = 3,
+    lives: u8 = 1,
     score: u32 = 0,
 
     paddle_type: PaddleType = .normal,
@@ -1087,10 +1087,10 @@ pub const GameScene = struct {
             death: {
                 if (!scene.tickDownTimer("death_timer", dt)) break :death;
 
+                scene.lives -= 1;
                 if (scene.lives == 0) {
                     state.scene_mgr.switchTo(.title);
                 } else {
-                    scene.lives -= 1;
                     _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), initial_ball_dir);
                     scene.ball_state = .idle;
                 }
