@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 const font = @import("font");
+const constants = @import("constants.zig");
 const m = @import("math");
 const sprites = @import("sprite");
 const Sprite = sprites.Sprite;
@@ -212,7 +213,7 @@ pub fn endWindow() void {
             // Semi-transparent background overlay
             batch.render(.{
                 .src = sprites.get(.overlay).bounds,
-                .dst = .{ .x = 0, .y = 0, .w = root.viewport_size[0], .h = root.viewport_size[1] },
+                .dst = .{ .x = 0, .y = 0, .w = constants.viewport_size[0], .h = constants.viewport_size[1] },
                 .z = win_z - 0.1,
             });
 

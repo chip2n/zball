@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const config = @import("config");
+const constants = @import("constants.zig");
 const assert = std.debug.assert;
 
 const sokol = @import("sokol");
@@ -16,6 +17,8 @@ const sprite = @import("sprite");
 const fwatch = @import("fwatch");
 const m = @import("math");
 
+const input = @import("input.zig");
+
 const ui = @import("ui.zig");
 const level = @import("level.zig");
 const Level = level.Level;
@@ -24,6 +27,7 @@ const audio = @import("audio.zig");
 const texture = @import("texture.zig");
 const particle = @import("particle.zig");
 const utils = @import("utils.zig");
+const settings = @import("settings.zig");
 
 const Viewport = @import("Viewport.zig");
 const Camera = @import("Camera.zig");
@@ -53,26 +57,7 @@ pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 
-const InputAction = enum {
-    left,
-    right,
-    shoot,
-    confirm,
-    back,
-};
-const keybindings = .{
-    .{ if (is_web) .BACKSPACE else .ESCAPE, .back },
-    .{ .ENTER, .confirm },
-    .{ .LEFT, .left },
-    .{ .RIGHT, .right },
-    .{ .SPACE, .shoot },
-};
-fn identifyInputAction(key: sapp.Keycode) ?InputAction {
-    inline for (keybindings) |binding| {
-        if (key == binding[0]) return binding[1];
-    }
-    return null;
-}
+const state = @import("state.zig");
 
 pub const max_quads = 4096;
 pub const max_verts = max_quads * 6;
@@ -86,18 +71,15 @@ const laser_speed = 200;
 const laser_cooldown = 0.2;
 const max_brick_emitters = 20;
 
-const is_web = builtin.os.tag == .emscripten;
-const use_gpa = !is_web;
+const use_gpa = !utils.is_web;
 
-const initial_screen_size = .{ 640, 480 };
-pub const viewport_size: [2]u32 = .{ 320, 240 };
 const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
 const ball_h: f32 = sprite.sprites.ball.bounds.h;
 const ball_speed: f32 = 200;
 const initial_paddle_pos: [2]f32 = .{
-    viewport_size[0] / 2,
-    viewport_size[1] - 4,
+    constants.viewport_size[0] / 2,
+    constants.viewport_size[1] - 4,
 };
 
 const initial_ball_dir: [2]f32 = blk: {
@@ -135,79 +117,9 @@ const debug = if (builtin.os.tag == .linux) struct {
     var reload: bool = false;
 } else struct {};
 
-// TODO refactor this a bit
-const state = struct {
-    var viewport: Viewport = undefined;
-    var camera: Camera = undefined;
-
-    const offscreen = struct {
-        var pip: sg.Pipeline = .{};
-        var bind: sg.Bindings = .{};
-        var bind2: sg.Bindings = .{};
-        var pass_action: sg.PassAction = .{};
-    };
-
-    const fsq = struct {
-        var pip: sg.Pipeline = .{};
-        var bind: sg.Bindings = .{};
-        var pass_action: sg.PassAction = .{};
-    };
-
-    var bg: Pipeline = undefined;
-
-    var time: f64 = 0;
-    var dt: f32 = 0;
-
-    var spritesheet_texture: Texture = undefined;
-    var font_texture: Texture = undefined;
-
-    var window_size: [2]i32 = initial_screen_size;
-
-    /// Mouse position in unscaled pixels
-    var mouse_pos: [2]f32 = .{ 0, 0 };
-    var mouse_delta: [2]f32 = .{ 0, 0 };
-
-    var allocator: std.mem.Allocator = undefined;
-    var arena: std.heap.ArenaAllocator = undefined;
-
-    var levels: std.ArrayList(Level) = undefined;
-
-    var scene_mgr: SceneManager = undefined;
-
-    var batch = BatchRenderer.init();
-
-    var quad_vbuf: sg.Buffer = undefined;
-};
-
 const BallState = enum {
     alive, // ball is flying around wreaking all sorts of havoc
     idle, // ball is on paddle and waiting to be shot
-};
-
-const SceneType = std.meta.Tag(Scene);
-
-const Scene = union(enum) {
-    title: TitleScene,
-    game: GameScene,
-    editor: EditorScene,
-
-    fn deinit(scene: *Scene) void {
-        switch (scene.*) {
-            inline else => |*impl| impl.deinit(),
-        }
-    }
-
-    fn frame(scene: *Scene, dt: f32) !void {
-        switch (scene.*) {
-            inline else => |*impl| try impl.frame(dt),
-        }
-    }
-
-    fn input(scene: *Scene, ev: [*c]const sapp.Event) !void {
-        switch (scene.*) {
-            inline else => |*impl| try impl.input(ev),
-        }
-    }
 };
 
 pub const EditorScene = struct {
@@ -245,8 +157,8 @@ pub const EditorScene = struct {
         }
 
         // TODO handle allocated memory properly
-        const width = viewport_size[0];
-        const height = viewport_size[1];
+        const width = constants.viewport_size[0];
+        const height = constants.viewport_size[1];
         const editor_texture_data = try allocator.alloc(u32, width * height);
         for (editor_texture_data) |*d| {
             d.* = 0x000000;
@@ -285,7 +197,7 @@ pub const EditorScene = struct {
     pub fn frame(scene: *EditorScene, dt: f32) !void {
         _ = dt; // autofix
         input: {
-            const mouse_pos = mouse();
+            const mouse_pos = input.mouse();
             if (mouse_pos[0] < 0) break :input;
             if (mouse_pos[1] < 0) break :input;
 
@@ -345,7 +257,7 @@ pub const EditorScene = struct {
             try ui.beginWindow(.{
                 .id = "palette",
                 .x = 0,
-                .y = viewport_size[1] - 8,
+                .y = constants.viewport_size[1] - 8,
                 .style = .transparent,
             });
             defer ui.endWindow();
@@ -360,17 +272,14 @@ pub const EditorScene = struct {
         }
 
         const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-        sg.beginPass(.{
-            .action = state.offscreen.pass_action,
-            .attachments = currentAttachments(),
-        });
+        state.beginOffscreenPass();
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        try renderBatch();
+        try state.renderBatch();
         sg.endPass();
     }
 
-    pub fn input(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
+    pub fn handleInput(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
         switch (ev.*.type) {
             .MOUSE_DOWN => {
                 switch (ev.*.mouse_button) {
@@ -387,7 +296,7 @@ pub const EditorScene = struct {
                 }
             },
             .KEY_DOWN => {
-                const action = identifyInputAction(ev.*.key_code) orelse return;
+                const action = input.identifyAction(ev.*.key_code) orelse return;
                 switch (action) {
                     .confirm => {
                         std.log.warn("SAVE", .{});
@@ -410,122 +319,6 @@ pub const EditorScene = struct {
             },
             else => {},
         }
-    }
-};
-
-pub const TitleScene = struct {
-    idx: usize = 0,
-    settings: bool = false,
-
-    pub fn init() TitleScene {
-        return .{};
-    }
-
-    pub fn frame(scene: *TitleScene, dt: f32) !void {
-        _ = dt;
-        showMouse(false);
-        lockMouse(true);
-
-        // TODO this is in update, but gamescene menu is in render. maybe silly to break update/render up?
-        try ui.begin(.{
-            .batch = &state.batch,
-            .tex_spritesheet = state.spritesheet_texture,
-            .tex_font = state.font_texture,
-        });
-        defer ui.end();
-
-        { // Footer
-            try ui.beginWindow(.{
-                .id = "footer",
-                .x = 8,
-                .y = viewport_size[1],
-                .z = 10,
-                .pivot = .{ 0, 1 },
-                .style = .transparent,
-            });
-            defer ui.endWindow();
-            ui.text("(C) 2024 - Andreas Arvidsson", .{});
-        }
-
-        { // Main menu
-            try ui.beginWindow(.{
-                .id = "main",
-                .x = viewport_size[0] / 2,
-                .y = viewport_size[1] / 2 + 24,
-                .z = 10,
-                .pivot = .{ 0.5, 0.5 },
-                .style = .transparent,
-            });
-            defer ui.endWindow();
-
-            if (ui.selectionItem("Start", .{})) {
-                state.scene_mgr.switchTo(.game);
-            }
-            if (ui.selectionItem("Settings", .{})) {
-                scene.settings = true;
-            }
-
-            // We only support the editor on desktop builds (don't want to
-            // deal with the browser intgration with the file system)
-            if (!is_web) {
-                if (ui.selectionItem("Editor", .{})) {
-                    state.scene_mgr.switchTo(.editor);
-                }
-            }
-
-            // Web builds cannot quit the game, only go to another page
-            if (!is_web) {
-                if (ui.selectionItem("Quit", .{})) {
-                    sapp.quit();
-                }
-            }
-        }
-
-        if (scene.settings and try renderSettingsMenu()) {
-            scene.settings = false;
-        }
-
-        state.batch.setTexture(state.spritesheet_texture);
-
-        state.batch.render(.{
-            .src = sprite.sprites.title.bounds,
-            .dst = .{
-                .x = 0,
-                .y = 0,
-                .w = viewport_size[0],
-                .h = viewport_size[1],
-            },
-        });
-
-        const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-
-        sg.beginPass(.{
-            .action = state.offscreen.pass_action,
-            .attachments = currentAttachments(),
-        });
-        sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        try renderBatch();
-        sg.endPass();
-    }
-
-    pub fn input(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
-        if (scene.settings) {
-            switch (ev.*.type) {
-                .KEY_DOWN => {
-                    const action = identifyInputAction(ev.*.key_code) orelse return;
-                    switch (action) {
-                        .back => scene.settings = false,
-                        else => {},
-                    }
-                },
-                else => {},
-            }
-        }
-    }
-
-    pub fn deinit(scene: *TitleScene) void {
-        _ = scene;
     }
 };
 
@@ -712,19 +505,6 @@ fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     };
 }
 
-/// Get mouse coordinates, scaled to viewport size
-fn mouse() [2]f32 {
-    return state.camera.screenToWorld(state.mouse_pos);
-}
-
-/// Get mouse delta, scaled based on zoom
-fn mouseDelta() [2]f32 {
-    return m.vmul(state.mouse_delta, 1 / state.camera.zoom());
-}
-
-const showMouse = sapp.showMouse;
-const lockMouse = sapp.lockMouse;
-
 pub const GameScene = struct {
     allocator: std.mem.Allocator,
 
@@ -829,10 +609,10 @@ pub const GameScene = struct {
         const game_dt = scene.time_scale * dt;
 
         if (!scene.paused()) {
-            showMouse(false);
-            lockMouse(true);
+            input.showMouse(false);
+            input.lockMouse(true);
 
-            const mouse_delta = mouseDelta();
+            const mouse_delta = input.mouseDelta();
 
             scene.time += game_dt;
 
@@ -854,7 +634,7 @@ pub const GameScene = struct {
                 };
 
                 const bounds = scene.paddleBounds();
-                scene.paddle_pos[0] = std.math.clamp(new_pos, bounds.w / 2, viewport_size[0] - bounds.w / 2);
+                scene.paddle_pos[0] = std.math.clamp(new_pos, bounds.w / 2, constants.viewport_size[0] - bounds.w / 2);
             }
 
             // Handle shoot input
@@ -873,7 +653,7 @@ pub const GameScene = struct {
             for (&scene.powerups) |*p| {
                 if (!p.active) continue;
                 p.pos[1] += game_dt * powerup_fall_speed;
-                if (p.pos[1] > viewport_size[1]) {
+                if (p.pos[1] > constants.viewport_size[1]) {
                     p.active = false;
                 }
             }
@@ -925,8 +705,8 @@ pub const GameScene = struct {
                         var out: [2]f32 = undefined;
                         var normal: [2]f32 = undefined;
 
-                        const vw: f32 = @floatFromInt(viewport_size[0]);
-                        const vh: f32 = @floatFromInt(viewport_size[1]);
+                        const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+                        const vh: f32 = @floatFromInt(constants.viewport_size[1]);
 
                         // Has the ball hit the paddle?
                         paddle_check: {
@@ -1150,7 +930,7 @@ pub const GameScene = struct {
                 .dst = .{
                     .x = 0,
                     .y = 0,
-                    .w = viewport_size[0],
+                    .w = constants.viewport_size[0],
                     .h = 8,
                 },
             });
@@ -1282,7 +1062,7 @@ pub const GameScene = struct {
                     if (try renderPauseMenu(&scene.menu)) {
                         state.scene_mgr.switchTo(.title);
                     }
-                    if (try renderSettingsMenu()) {
+                    if (try settings.renderMenu()) {
                         scene.menu = .pause;
                     }
                 },
@@ -1292,10 +1072,7 @@ pub const GameScene = struct {
         const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
 
         { // Main scene
-            sg.beginPass(.{
-                .action = state.offscreen.pass_action,
-                .attachments = currentAttachments(),
-            });
+            state.beginOffscreenPass();
 
             // render background
             sg.applyPipeline(state.bg.pip);
@@ -1309,7 +1086,7 @@ pub const GameScene = struct {
             // render game scene
             sg.applyPipeline(state.offscreen.pip);
             sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-            try renderBatch();
+            try state.renderBatch();
             sg.endPass();
         }
     }
@@ -1443,12 +1220,12 @@ pub const GameScene = struct {
         };
     }
 
-    pub fn input(scene: *GameScene, ev: [*c]const sapp.Event) !void {
+    pub fn handleInput(scene: *GameScene, ev: [*c]const sapp.Event) !void {
         switch (scene.menu) {
             .none => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        const action = input.identifyAction(ev.*.key_code) orelse return;
                         switch (action) {
                             .left => {
                                 scene.inputs.left_down = true;
@@ -1466,7 +1243,7 @@ pub const GameScene = struct {
                         }
                     },
                     .KEY_UP => {
-                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        const action = input.identifyAction(ev.*.key_code) orelse return;
                         switch (action) {
                             .left => {
                                 scene.inputs.left_down = false;
@@ -1492,7 +1269,7 @@ pub const GameScene = struct {
             .pause => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        const action = input.identifyAction(ev.*.key_code) orelse return;
                         switch (action) {
                             .back => scene.menu = .none,
                             else => {},
@@ -1504,7 +1281,7 @@ pub const GameScene = struct {
             .settings => {
                 switch (ev.*.type) {
                     .KEY_DOWN => {
-                        const action = identifyInputAction(ev.*.key_code) orelse return;
+                        const action = input.identifyAction(ev.*.key_code) orelse return;
                         switch (action) {
                             .back => scene.menu = .pause,
                             else => {},
@@ -1520,8 +1297,8 @@ pub const GameScene = struct {
 fn renderPauseMenu(menu: *GameMenu) !bool {
     try ui.beginWindow(.{
         .id = "pause",
-        .x = viewport_size[0] / 2,
-        .y = viewport_size[1] / 2,
+        .x = constants.viewport_size[0] / 2,
+        .y = constants.viewport_size[1] / 2,
         .pivot = .{ 0.5, 0.5 },
         .style = if (menu.* == .settings) .hidden else .dialog,
     });
@@ -1534,31 +1311,6 @@ fn renderPauseMenu(menu: *GameMenu) !bool {
         menu.* = .settings;
     }
     if (ui.selectionItem("Quit", .{})) {
-        return true;
-    }
-
-    return false;
-}
-
-fn renderSettingsMenu() !bool {
-    try ui.beginWindow(.{
-        .id = "settings",
-        .x = viewport_size[0] / 2,
-        .y = viewport_size[1] / 2,
-        .z = 20,
-        .pivot = .{ 0.5, 0.5 },
-    });
-    defer ui.endWindow();
-
-    var sfx_focused = false;
-    _ = ui.selectionItem("Volume (sfx)", .{ .focused = &sfx_focused });
-    ui.slider(.{ .value = &audio.vol_sfx, .focused = sfx_focused });
-
-    var bg_focused = false;
-    _ = ui.selectionItem("Volume (bg)", .{ .focused = &bg_focused });
-    ui.slider(.{ .value = &audio.vol_bg, .focused = bg_focused });
-
-    if (ui.selectionItem("Back", .{})) {
         return true;
     }
 
@@ -1612,15 +1364,15 @@ fn initializeGame() !void {
     errdefer ui.deinit();
 
     state.camera = Camera.init(.{
-        .pos = .{ viewport_size[0] / 2, viewport_size[1] / 2 },
-        .viewport_size = viewport_size,
+        .pos = .{ constants.viewport_size[0] / 2, constants.viewport_size[1] / 2 },
+        .viewport_size = constants.viewport_size,
         .window_size = .{
             @intCast(state.window_size[0]),
             @intCast(state.window_size[1]),
         },
     });
     state.viewport = Viewport.init(.{
-        .size = viewport_size,
+        .size = constants.viewport_size,
         .camera = &state.camera,
     });
 
@@ -1774,8 +1526,8 @@ fn computeFSQParams() shd.VsFsqParams {
     const height: f32 = @floatFromInt(state.window_size[1]);
     const aspect = width / height;
 
-    const vw: f32 = @floatFromInt(viewport_size[0]);
-    const vh: f32 = @floatFromInt(viewport_size[1]);
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
     const viewport_aspect = vw / vh;
 
     var model = m.scaling(2, (2 / viewport_aspect) * aspect, 1);
@@ -1865,11 +1617,11 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             state.mouse_pos = .{ ev.*.mouse_x, ev.*.mouse_y };
             state.mouse_delta = m.vadd(state.mouse_delta, .{ ev.*.mouse_dx, ev.*.mouse_dy });
 
-            const world_mouse_pos = mouse();
+            const world_mouse_pos = input.mouse();
             ui.handleMouseMove(world_mouse_pos[0], world_mouse_pos[1]);
         },
         else => {
-            state.scene_mgr.input(ev) catch |err| {
+            state.scene_mgr.handleInput(ev) catch |err| {
                 std.log.err("Error while processing input: {}", .{err});
             };
         },
@@ -1898,47 +1650,10 @@ pub fn main() !void {
         .frame_cb = sokolFrame,
         .cleanup_cb = sokolCleanup,
         .event_cb = sokolEvent,
-        .width = initial_screen_size[0],
-        .height = initial_screen_size[1],
+        .width = state.window_size[0],
+        .height = state.window_size[1],
         .icon = .{ .sokol_default = true },
         .window_title = "Game",
         .logger = .{ .func = slog.func },
     });
-}
-
-fn vertex_buffer() sg.Buffer {
-    // TODO currentBind()
-    if (state.scene_mgr.rendering_next) {
-        return state.offscreen.bind2.vertex_buffers[0];
-    } else {
-        return state.offscreen.bind.vertex_buffers[0];
-    }
-}
-
-fn currentAttachments() sg.Attachments {
-    if (state.scene_mgr.rendering_next) {
-        return state.viewport.attachments2;
-    } else {
-        return state.viewport.attachments;
-    }
-}
-
-fn currentBind() sg.Bindings {
-    if (state.scene_mgr.rendering_next) {
-        return state.offscreen.bind2;
-    } else {
-        return state.offscreen.bind;
-    }
-}
-
-fn renderBatch() !void {
-    const result = state.batch.commit();
-    sg.updateBuffer(vertex_buffer(), sg.asRange(result.verts));
-    var bind = currentBind();
-    for (result.batches) |b| {
-        const tex = try texture.get(b.tex);
-        bind.fs.images[shd.SLOT_tex] = tex.img;
-        sg.applyBindings(bind);
-        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
-    }
 }

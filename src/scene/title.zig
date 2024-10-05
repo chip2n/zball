@@ -1,20 +1,28 @@
-const ui = @import("ui.zig");
+const ui = @import("../ui.zig");
+const input = @import("../input.zig");
+const state = @import("../state.zig");
+const constants = @import("../constants.zig");
+const utils = @import("../utils.zig");
+const settings = @import("../settings.zig");
+const sprite = @import("sprite");
+const shd = @import("shader");
 
 const sokol = @import("sokol");
 const sapp = sokol.app;
+const sg = sokol.gfx;
 
-const TitleScene = struct {
+pub const TitleScene = struct {
     idx: usize = 0,
     settings: bool = false,
 
-    fn init() TitleScene {
-        showMouse(false);
-        lockMouse(true);
+    pub fn init() TitleScene {
         return .{};
     }
 
-    fn update(scene: *TitleScene, dt: f32) !void {
+    pub fn frame(scene: *TitleScene, dt: f32) !void {
         _ = dt;
+        input.showMouse(false);
+        input.lockMouse(true);
 
         // TODO this is in update, but gamescene menu is in render. maybe silly to break update/render up?
         try ui.begin(.{
@@ -28,7 +36,7 @@ const TitleScene = struct {
             try ui.beginWindow(.{
                 .id = "footer",
                 .x = 8,
-                .y = viewport_size[1],
+                .y = constants.viewport_size[1],
                 .z = 10,
                 .pivot = .{ 0, 1 },
                 .style = .transparent,
@@ -40,8 +48,8 @@ const TitleScene = struct {
         { // Main menu
             try ui.beginWindow(.{
                 .id = "main",
-                .x = viewport_size[0] / 2,
-                .y = viewport_size[1] / 2 + 24,
+                .x = constants.viewport_size[0] / 2,
+                .y = constants.viewport_size[1] / 2 + 24,
                 .z = 10,
                 .pivot = .{ 0.5, 0.5 },
                 .style = .transparent,
@@ -49,7 +57,7 @@ const TitleScene = struct {
             defer ui.endWindow();
 
             if (ui.selectionItem("Start", .{})) {
-                state.next_scene = .game;
+                state.scene_mgr.switchTo(.game);
             }
             if (ui.selectionItem("Settings", .{})) {
                 scene.settings = true;
@@ -57,27 +65,24 @@ const TitleScene = struct {
 
             // We only support the editor on desktop builds (don't want to
             // deal with the browser intgration with the file system)
-            if (!is_web) {
+            if (!utils.is_web) {
                 if (ui.selectionItem("Editor", .{})) {
-                    state.next_scene = .editor;
+                    state.scene_mgr.switchTo(.editor);
                 }
             }
 
             // Web builds cannot quit the game, only go to another page
-            if (!is_web) {
+            if (!utils.is_web) {
                 if (ui.selectionItem("Quit", .{})) {
                     sapp.quit();
                 }
             }
         }
 
-        if (scene.settings and try renderSettingsMenu()) {
+        if (scene.settings and try settings.renderMenu()) {
             scene.settings = false;
         }
-    }
 
-    fn render(scene: *TitleScene) !void {
-        _ = scene;
         state.batch.setTexture(state.spritesheet_texture);
 
         state.batch.render(.{
@@ -85,37 +90,27 @@ const TitleScene = struct {
             .dst = .{
                 .x = 0,
                 .y = 0,
-                .w = viewport_size[0],
-                .h = viewport_size[1],
+                .w = constants.viewport_size[0],
+                .h = constants.viewport_size[1],
             },
         });
 
-        const result = state.batch.commit();
-        sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
-
         const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
 
-        sg.beginPass(.{
-            .action = state.offscreen.pass_action,
-            .attachments = state.viewport.attachments,
-        });
+        state.beginOffscreenPass();
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        for (result.batches) |b| {
-            const tex = try texture.get(b.tex);
-            state.offscreen.bind.fs.images[shd.SLOT_tex] = tex.img;
-            sg.applyBindings(state.offscreen.bind);
-            sg.draw(@intCast(b.offset), @intCast(b.len), 1);
-        }
+        try state.renderBatch();
         sg.endPass();
     }
 
-    fn input(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
+    pub fn handleInput(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
         if (scene.settings) {
             switch (ev.*.type) {
                 .KEY_DOWN => {
-                    switch (ev.*.key_code) {
-                        .ESCAPE => scene.settings = false,
+                    const action = input.identifyAction(ev.*.key_code) orelse return;
+                    switch (action) {
+                        .back => scene.settings = false,
                         else => {},
                     }
                 },
@@ -124,7 +119,7 @@ const TitleScene = struct {
         }
     }
 
-    fn deinit(scene: *TitleScene) void {
+    pub fn deinit(scene: *TitleScene) void {
         _ = scene;
     }
 };

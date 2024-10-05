@@ -7,7 +7,7 @@ const Level = level.Level;
 
 // TODO
 const main = @import("main.zig");
-const TitleScene = main.TitleScene;
+const TitleScene = @import("scene/title.zig").TitleScene;
 const GameScene = main.GameScene;
 const EditorScene = main.EditorScene;
 // const TitleScene = @import("scene/title.zig");
@@ -42,9 +42,9 @@ const Scene = union(enum) {
     }
 
     // TODO: Could be handled separately and fetched in frame()
-    fn input(scene: *Scene, ev: [*c]const sapp.Event) !void {
+    fn handleInput(scene: *Scene, ev: [*c]const sapp.Event) !void {
         switch (scene.*) {
-            inline else => |*impl| try impl.input(ev),
+            inline else => |*impl| try impl.handleInput(ev),
         }
     }
 };
@@ -106,8 +106,8 @@ pub const SceneManager = struct {
         }
     }
 
-    pub fn input(mgr: *SceneManager, ev: [*c]const sapp.Event) !void {
-        try mgr.current.input(ev);
+    pub fn handleInput(mgr: *SceneManager, ev: [*c]const sapp.Event) !void {
+        try mgr.current.handleInput(ev);
     }
 
     fn createScene(mgr: SceneManager, scene_type: SceneType) Scene {
