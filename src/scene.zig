@@ -81,7 +81,6 @@ pub const SceneManager = struct {
     }
 
     pub fn switchTo(mgr: *SceneManager, scene_type: SceneType) void {
-        std.log.warn("switch to {}", .{scene_type});
         mgr.next = mgr.createScene(scene_type);
     }
 
