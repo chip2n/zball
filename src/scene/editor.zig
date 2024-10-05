@@ -1,6 +1,26 @@
 const std = @import("std");
+const sprite = @import("sprite");
+const texture = @import("../texture.zig");
+const Texture = texture.Texture;
+const constants = @import("../constants.zig");
+const input = @import("../input.zig");
+const state = @import("../state.zig");
+const ui = @import("../ui.zig");
+const shd = @import("shader");
+const level = @import("../level.zig");
 
-const EditorScene = struct {
+const sokol = @import("sokol");
+const sg = sokol.gfx;
+const sapp = sokol.app;
+
+const game = @import("../game.zig");
+const Brick = game.Brick;
+const ExplosionEmitter = game.ExplosionEmitter; // TODO should not be needed here
+
+const brick_w = constants.brick_w;
+const brick_h = constants.brick_h;
+
+pub const EditorScene = struct {
     allocator: std.mem.Allocator,
 
     bricks: []Brick,
@@ -12,7 +32,7 @@ const EditorScene = struct {
         mouse_right_down: bool = false,
     } = .{},
 
-    fn init(allocator: std.mem.Allocator) !EditorScene {
+    pub fn init(allocator: std.mem.Allocator) !EditorScene {
         const bricks = try allocator.alloc(Brick, 20 * 20);
         errdefer allocator.free(bricks);
 
@@ -22,12 +42,13 @@ const EditorScene = struct {
                 const i = y * 20 + x;
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
+                // TODO make intializer for bricks
                 bricks[i] = .{
                     .pos = .{ fx * brick_w, fy * brick_h },
                     .sprite = .brick1,
                     .emitter = ExplosionEmitter.init(.{
                         .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = particleExplosionSprites(.brick1),
+                        .sprites = game.particleExplosionSprites(.brick1),
                     }),
                     .destroyed = true,
                 };
@@ -35,8 +56,8 @@ const EditorScene = struct {
         }
 
         // TODO handle allocated memory properly
-        const width = viewport_size[0];
-        const height = viewport_size[1];
+        const width = constants.viewport_size[0];
+        const height = constants.viewport_size[1];
         const editor_texture_data = try allocator.alloc(u32, width * height);
         for (editor_texture_data) |*d| {
             d.* = 0x000000;
@@ -68,42 +89,40 @@ const EditorScene = struct {
         };
     }
 
-    fn deinit(scene: *EditorScene) void {
+    pub fn deinit(scene: *EditorScene) void {
         scene.allocator.free(scene.bricks);
     }
 
-    fn update(scene: *EditorScene, dt: f32) !void {
+    pub fn frame(scene: *EditorScene, dt: f32) !void {
         _ = dt; // autofix
+        input: {
+            const mouse_pos = input.mouse();
+            if (mouse_pos[0] < 0) break :input;
+            if (mouse_pos[1] < 0) break :input;
 
-        const mouse_pos = mouse();
-        if (mouse_pos[0] < 0) return;
-        if (mouse_pos[1] < 0) return;
+            const x: usize = @intFromFloat(mouse_pos[0]);
+            const y: usize = @intFromFloat(mouse_pos[1]);
 
-        const x: usize = @intFromFloat(mouse_pos[0]);
-        const y: usize = @intFromFloat(mouse_pos[1]);
+            const brick_x = x / 16;
+            const brick_y = y / 8;
+            if (brick_x >= 20) break :input;
+            if (brick_y >= 20) break :input;
 
-        const brick_x = x / 16;
-        const brick_y = y / 8;
-        if (brick_x >= 20) return;
-        if (brick_y >= 20) return;
-
-        var brick = &scene.bricks[brick_y * 20 + brick_x];
-
-        if (scene.inputs.mouse_left_down) {
-            brick.sprite = scene.brush;
-            brick.destroyed = false;
-        }
-        if (scene.inputs.mouse_right_down) {
-            brick.destroyed = true;
+            var brick = &scene.bricks[brick_y * 20 + brick_x];
+            if (scene.inputs.mouse_left_down) {
+                brick.sprite = scene.brush;
+                brick.destroyed = false;
+            }
+            if (scene.inputs.mouse_right_down) {
+                brick.destroyed = true;
+            }
         }
 
         // const editor_texture = try texture.get(scene.tex);
         // if (x >= editor_texture.width) return;
         // if (y >= editor_texture.height) return;
         // try texture.draw(scene.tex, x, y);
-    }
 
-    fn render(scene: *EditorScene) !void {
         // Render all bricks
         // TODO refactor?
         state.batch.setTexture(state.spritesheet_texture);
@@ -137,7 +156,7 @@ const EditorScene = struct {
             try ui.beginWindow(.{
                 .id = "palette",
                 .x = 0,
-                .y = viewport_size[1] - 8,
+                .y = constants.viewport_size[1] - 8,
                 .style = .transparent,
             });
             defer ui.endWindow();
@@ -151,27 +170,15 @@ const EditorScene = struct {
             }
         }
 
-        const result = state.batch.commit();
-        sg.updateBuffer(state.offscreen.bind.vertex_buffers[0], sg.asRange(result.verts));
-
         const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-        sg.beginPass(.{
-            .action = state.offscreen.pass_action,
-            .attachments = state.viewport.attachments,
-        });
+        state.beginOffscreenPass();
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-
-        for (result.batches) |b| {
-            const tex = try texture.get(b.tex);
-            state.offscreen.bind.fs.images[shd.SLOT_tex] = tex.img;
-            sg.applyBindings(state.offscreen.bind);
-            sg.draw(@intCast(b.offset), @intCast(b.len), 1);
-        }
+        try state.renderBatch();
         sg.endPass();
     }
 
-    fn input(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
+    pub fn handleInput(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
         switch (ev.*.type) {
             .MOUSE_DOWN => {
                 switch (ev.*.mouse_button) {
@@ -188,8 +195,9 @@ const EditorScene = struct {
                 }
             },
             .KEY_DOWN => {
-                switch (ev.*.key_code) {
-                    .ENTER => {
+                const action = input.identifyAction(ev.*.key_code) orelse return;
+                switch (action) {
+                    .confirm => {
                         std.log.warn("SAVE", .{});
                         // TODO overwrite if already exists
                         const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
@@ -199,7 +207,7 @@ const EditorScene = struct {
                         for (scene.bricks, 0..) |b, i| {
                             var id: u8 = 0;
                             if (!b.destroyed) {
-                                id = try spriteToBrickId(b.sprite);
+                                id = try game.spriteToBrickId(b.sprite);
                             }
                             data[i] = .{ .id = id };
                         }
@@ -211,4 +219,4 @@ const EditorScene = struct {
             else => {},
         }
     }
-};<
+};

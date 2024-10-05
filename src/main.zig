@@ -82,25 +82,7 @@ const initial_paddle_pos: [2]f32 = .{
     constants.viewport_size[1] - 4,
 };
 
-const initial_ball_dir: [2]f32 = blk: {
-    var dir: [2]f32 = .{ 0.3, -1 };
-    m.normalize(&dir);
-    break :blk dir;
-};
-
-// TODO read these from sprites
-pub const brick_w = 16;
-pub const brick_h = 8;
-const brick_start_y = 8;
-
 const Rect = m.Rect;
-
-const Brick = struct {
-    pos: [2]f32 = .{ 0, 0 },
-    sprite: sprite.Sprite = .brick1,
-    emitter: ExplosionEmitter = undefined,
-    destroyed: bool = true,
-};
 
 // TODO move?
 pub const Vertex = extern struct {
@@ -120,206 +102,6 @@ const debug = if (builtin.os.tag == .linux) struct {
 const BallState = enum {
     alive, // ball is flying around wreaking all sorts of havoc
     idle, // ball is on paddle and waiting to be shot
-};
-
-pub const EditorScene = struct {
-    allocator: std.mem.Allocator,
-
-    bricks: []Brick,
-    tex: Texture,
-    brush: sprite.Sprite = .brick1,
-
-    inputs: struct {
-        mouse_left_down: bool = false,
-        mouse_right_down: bool = false,
-    } = .{},
-
-    pub fn init(allocator: std.mem.Allocator) !EditorScene {
-        const bricks = try allocator.alloc(Brick, 20 * 20);
-        errdefer allocator.free(bricks);
-
-        // TODO reuse
-        for (0..20) |y| {
-            for (0..20) |x| {
-                const i = y * 20 + x;
-                const fx: f32 = @floatFromInt(x);
-                const fy: f32 = @floatFromInt(y);
-                bricks[i] = .{
-                    .pos = .{ fx * brick_w, fy * brick_h },
-                    .sprite = .brick1,
-                    .emitter = ExplosionEmitter.init(.{
-                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = particleExplosionSprites(.brick1),
-                    }),
-                    .destroyed = true,
-                };
-            }
-        }
-
-        // TODO handle allocated memory properly
-        const width = constants.viewport_size[0];
-        const height = constants.viewport_size[1];
-        const editor_texture_data = try allocator.alloc(u32, width * height);
-        for (editor_texture_data) |*d| {
-            d.* = 0x000000;
-        }
-        // Horizontal lines
-        for (1..21) |y| {
-            for (0..width) |x| {
-                editor_texture_data[y * width * 8 + x] = 0x10FFFFFF;
-            }
-        }
-
-        // Vertical lines
-        for (1..20) |x| {
-            for (0..height - 80) |y| {
-                editor_texture_data[x * 16 + y * width] = 0x10FFFFFF;
-            }
-        }
-        const tex = try texture.loadRGB8(.{
-            .data = std.mem.sliceAsBytes(editor_texture_data),
-            .width = width,
-            .height = height,
-            .usage = .mutable,
-        });
-
-        return EditorScene{
-            .allocator = allocator,
-            .bricks = bricks,
-            .tex = tex,
-        };
-    }
-
-    pub fn deinit(scene: *EditorScene) void {
-        scene.allocator.free(scene.bricks);
-    }
-
-    pub fn frame(scene: *EditorScene, dt: f32) !void {
-        _ = dt; // autofix
-        input: {
-            const mouse_pos = input.mouse();
-            if (mouse_pos[0] < 0) break :input;
-            if (mouse_pos[1] < 0) break :input;
-
-            const x: usize = @intFromFloat(mouse_pos[0]);
-            const y: usize = @intFromFloat(mouse_pos[1]);
-
-            const brick_x = x / 16;
-            const brick_y = y / 8;
-            if (brick_x >= 20) break :input;
-            if (brick_y >= 20) break :input;
-
-            var brick = &scene.bricks[brick_y * 20 + brick_x];
-            if (scene.inputs.mouse_left_down) {
-                brick.sprite = scene.brush;
-                brick.destroyed = false;
-            }
-            if (scene.inputs.mouse_right_down) {
-                brick.destroyed = true;
-            }
-        }
-
-        // const editor_texture = try texture.get(scene.tex);
-        // if (x >= editor_texture.width) return;
-        // if (y >= editor_texture.height) return;
-        // try texture.draw(scene.tex, x, y);
-
-        // Render all bricks
-        // TODO refactor?
-        state.batch.setTexture(state.spritesheet_texture);
-        for (scene.bricks) |brick| {
-            if (brick.destroyed) continue;
-            const x = brick.pos[0];
-            const y = brick.pos[1];
-            const slice = sprite.get(brick.sprite);
-            state.batch.render(.{
-                .src = slice.bounds,
-                .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
-            });
-        }
-
-        { // Render grid
-            state.batch.setTexture(scene.tex);
-            const tex = try texture.get(scene.tex);
-            state.batch.render(.{
-                .dst = .{ .x = 0, .y = 0, .w = @floatFromInt(tex.width), .h = @floatFromInt(tex.height) },
-            });
-        }
-
-        { // Palette
-            try ui.begin(.{
-                .batch = &state.batch,
-                .tex_spritesheet = state.spritesheet_texture,
-                .tex_font = state.font_texture,
-            });
-            defer ui.end();
-
-            try ui.beginWindow(.{
-                .id = "palette",
-                .x = 0,
-                .y = constants.viewport_size[1] - 8,
-                .style = .transparent,
-            });
-            defer ui.endWindow();
-
-            const palette = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
-            for (palette) |s| {
-                if (ui.sprite(.{ .sprite = s })) {
-                    scene.brush = s;
-                }
-                ui.sameLine();
-            }
-        }
-
-        const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-        state.beginOffscreenPass();
-        sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        try state.renderBatch();
-        sg.endPass();
-    }
-
-    pub fn handleInput(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
-        switch (ev.*.type) {
-            .MOUSE_DOWN => {
-                switch (ev.*.mouse_button) {
-                    .LEFT => scene.inputs.mouse_left_down = true,
-                    .RIGHT => scene.inputs.mouse_right_down = true,
-                    else => {},
-                }
-            },
-            .MOUSE_UP => {
-                switch (ev.*.mouse_button) {
-                    .LEFT => scene.inputs.mouse_left_down = false,
-                    .RIGHT => scene.inputs.mouse_right_down = false,
-                    else => {},
-                }
-            },
-            .KEY_DOWN => {
-                const action = input.identifyAction(ev.*.key_code) orelse return;
-                switch (action) {
-                    .confirm => {
-                        std.log.warn("SAVE", .{});
-                        // TODO overwrite if already exists
-                        const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
-                        defer file.close();
-                        // TODO stop with this 20 nonsense
-                        var data: [20 * 20]level.Brick = undefined;
-                        for (scene.bricks, 0..) |b, i| {
-                            var id: u8 = 0;
-                            if (!b.destroyed) {
-                                id = try spriteToBrickId(b.sprite);
-                            }
-                            data[i] = .{ .id = id };
-                        }
-                        try level.writeLevel(&data, file.writer());
-                    },
-                    else => {},
-                }
-            },
-            else => {},
-        }
-    }
 };
 
 const GameMenu = enum { none, pause, settings };
@@ -430,81 +212,17 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
     }
 }
 
-const EntityType = enum {
-    ball,
-    laser,
-};
-
-const Entity = struct {
-    type: EntityType = .ball, // TODO introduce null-entity and use that instead of active field?
-    active: bool = false,
-    pos: [2]f32 = .{ 0, 0 },
-    dir: [2]f32 = initial_ball_dir,
-    flame: FlameEmitter = undefined,
-    explosion: ExplosionEmitter = undefined,
-};
-
-const FlameEmitter = particle.Emitter(.{
-    .loop = true,
-    .count = 30,
-    .velocity = .{ 0, 0 },
-    .velocity_randomness = 0,
-    .velocity_sweep = 0,
-    .lifetime = 1,
-    .lifetime_randomness = 0.5,
-    .gravity = -30,
-    .spawn_radius = 2,
-    .explosiveness = 0,
-});
-
-const particleFlameSprites = &.{
-    .{ .sprite = .particle_flame_6, .weight = 0.2 },
-    .{ .sprite = .particle_flame_5, .weight = 0.2 },
-    .{ .sprite = .particle_flame_4, .weight = 0.4 },
-    .{ .sprite = .particle_flame_3, .weight = 0.5 },
-    .{ .sprite = .particle_flame_2, .weight = 0.5 },
-};
+const game = @import("game.zig");
+const Brick = game.Brick;
+const Entity = game.Entity;
+const EntityType = game.EntityType;
+const ExplosionEmitter = game.ExplosionEmitter;
+const FlameEmitter = game.FlameEmitter;
+const brick_w = constants.brick_w;
+const brick_h = constants.brick_h;
+const brick_start_y = constants.brick_start_y;
 
 // TODO add random rotations?
-const ExplosionEmitter = particle.Emitter(.{
-    .loop = false,
-    .count = 20,
-    .velocity = .{ 100, 0 },
-    .velocity_randomness = 1,
-    .velocity_sweep = std.math.tau,
-    .lifetime = 1,
-    .lifetime_randomness = 0.1,
-    .gravity = 200,
-    .spawn_radius = 2,
-    .explosiveness = 1,
-});
-
-const brick_explosion_regions = .{
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
-};
-const ball_explosion_regions = .{
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
-};
-
-const brick_sprites1 = .{.{ .sprite = .brick1, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites2 = .{.{ .sprite = .brick2, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites3 = .{.{ .sprite = .brick3, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites4 = .{.{ .sprite = .brick4, .weight = 1, .regions = &brick_explosion_regions }};
-const ball_sprites = .{.{ .sprite = .ball, .weight = 1, .regions = &ball_explosion_regions }};
-
-fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
-    return switch (s) {
-        .brick1 => &brick_sprites1,
-        .brick2 => &brick_sprites2,
-        .brick3 => &brick_sprites3,
-        .brick4 => &brick_sprites4,
-        .ball => &ball_sprites,
-        else => unreachable,
-    };
-}
-
 pub const GameScene = struct {
     allocator: std.mem.Allocator,
 
@@ -572,13 +290,13 @@ pub const GameScene = struct {
                 }
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
-                const s: sprite.Sprite = try brickIdToSprite(brick.id);
+                const s: sprite.Sprite = try game.brickIdToSprite(brick.id);
                 scene.bricks[i] = .{
                     .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
                     .sprite = s,
                     .emitter = ExplosionEmitter.init(.{
                         .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = particleExplosionSprites(s),
+                        .sprites = game.particleExplosionSprites(s),
                     }),
                     .destroyed = false,
                 };
@@ -587,7 +305,7 @@ pub const GameScene = struct {
 
         // spawn one ball to start
         const initial_ball_pos = scene.ballOnPaddlePos();
-        _ = scene.spawnEntity(.ball, initial_ball_pos, initial_ball_dir) catch unreachable;
+        _ = scene.spawnEntity(.ball, initial_ball_pos, constants.initial_ball_dir) catch unreachable;
 
         return scene;
     }
@@ -811,7 +529,7 @@ pub const GameScene = struct {
                                 // TODO avoid recreation
                                 ball.explosion = ExplosionEmitter.init(.{
                                     .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                                    .sprites = particleExplosionSprites(.ball),
+                                    .sprites = game.particleExplosionSprites(.ball),
                                 });
                                 ball.explosion.emitting = true;
                                 ball.active = false;
@@ -882,7 +600,7 @@ pub const GameScene = struct {
                 if (scene.lives == 0) {
                     state.scene_mgr.switchTo(.title);
                 } else {
-                    _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), initial_ball_dir);
+                    _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir);
                     scene.ball_state = .idle;
                 }
             }
@@ -1128,7 +846,7 @@ pub const GameScene = struct {
                 if (emitter_count < max_brick_emitters) {
                     brick.emitter = ExplosionEmitter.init(.{
                         .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = particleExplosionSprites(brick.sprite),
+                        .sprites = game.particleExplosionSprites(brick.sprite),
                     });
                     brick.emitter.pos = brick_pos;
                     brick.emitter.emitting = true;
@@ -1181,11 +899,11 @@ pub const GameScene = struct {
                 // TODO some entities don't need emitters...
                 .flame = FlameEmitter.init(.{
                     .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                    .sprites = particleFlameSprites,
+                    .sprites = game.particleFlameSprites,
                 }),
                 .explosion = ExplosionEmitter.init(.{
                     .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                    .sprites = particleExplosionSprites(.ball),
+                    .sprites = game.particleExplosionSprites(.ball),
                 }),
                 .active = true,
             };
@@ -1315,26 +1033,6 @@ fn renderPauseMenu(menu: *GameMenu) !bool {
     }
 
     return false;
-}
-
-fn brickIdToSprite(id: u8) !sprite.Sprite {
-    return switch (id) {
-        1 => .brick1,
-        2 => .brick2,
-        3 => .brick3,
-        4 => .brick4,
-        else => return error.UnknownBrickId,
-    };
-}
-
-fn spriteToBrickId(sp: sprite.Sprite) !u8 {
-    return switch (sp) {
-        .brick1 => 1,
-        .brick2 => 2,
-        .brick3 => 3,
-        .brick4 => 4,
-        else => return error.BrickSpriteMissing,
-    };
 }
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
