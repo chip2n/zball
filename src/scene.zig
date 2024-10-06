@@ -7,7 +7,7 @@ const Level = level.Level;
 
 const main = @import("main.zig");
 const TitleScene = @import("scene/title.zig").TitleScene;
-const GameScene = @import("scene/game.zig").GameScene;
+const GameScene = @import("scene/GameScene.zig");
 const EditorScene = @import("scene/editor.zig").EditorScene;
 
 const transition_duration = 2;
