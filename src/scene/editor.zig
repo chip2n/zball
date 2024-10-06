@@ -94,6 +94,9 @@ pub const EditorScene = struct {
     }
 
     pub fn frame(scene: *EditorScene, dt: f32) !void {
+        input.showMouse(true);
+        input.lockMouse(false);
+
         _ = dt; // autofix
         input: {
             const mouse_pos = input.mouse();
