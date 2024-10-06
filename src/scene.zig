@@ -5,10 +5,9 @@ const sapp = sokol.app;
 const level = @import("level.zig");
 const Level = level.Level;
 
-// TODO
 const main = @import("main.zig");
 const TitleScene = @import("scene/title.zig").TitleScene;
-const GameScene = main.GameScene;
+const GameScene = @import("scene/game.zig").GameScene;
 const EditorScene = @import("scene/editor.zig").EditorScene;
 
 const transition_duration = 2;

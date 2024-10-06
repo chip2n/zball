@@ -89,17 +89,3 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
         else => return error.BrickSpriteMissing,
     };
 }
-
-pub const EntityType = enum {
-    ball,
-    laser,
-};
-
-pub const Entity = struct {
-    type: EntityType = .ball, // TODO introduce null-entity and use that instead of active field?
-    active: bool = false,
-    pos: [2]f32 = .{ 0, 0 },
-    dir: [2]f32 = constants.initial_ball_dir,
-    flame: FlameEmitter = undefined,
-    explosion: ExplosionEmitter = undefined,
-};
