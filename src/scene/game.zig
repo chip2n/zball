@@ -169,15 +169,7 @@ pub const GameScene = struct {
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
                 const s: sprite.Sprite = try game.brickIdToSprite(brick.id);
-                scene.bricks[i] = .{
-                    .pos = .{ fx * brick_w, brick_start_y + fy * brick_h },
-                    .sprite = s,
-                    .emitter = ExplosionEmitter.init(.{
-                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = game.particleExplosionSprites(s),
-                    }),
-                    .destroyed = false,
-                };
+                scene.bricks[i] = Brick.init(fx, fy, s);
             }
         }
 
@@ -722,12 +714,7 @@ pub const GameScene = struct {
                     emitter_count += 1;
                 }
                 if (emitter_count < max_brick_emitters) {
-                    brick.emitter = ExplosionEmitter.init(.{
-                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = game.particleExplosionSprites(brick.sprite),
-                    });
-                    brick.emitter.pos = brick_pos;
-                    brick.emitter.emitting = true;
+                    brick.explode();
                 }
                 audio.play(.{ .clip = .explode });
                 scene.score += 100;

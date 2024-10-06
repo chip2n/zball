@@ -5,11 +5,36 @@ const constants = @import("constants.zig");
 const gfx = @import("gfx.zig");
 const particle = gfx.particle;
 
+const brick_w = constants.brick_w;
+const brick_h = constants.brick_h;
+
 pub const Brick = struct {
     pos: [2]f32 = .{ 0, 0 },
     sprite: sprite.Sprite = .brick1,
     emitter: ExplosionEmitter = undefined,
     destroyed: bool = true,
+
+    pub fn init(x: f32, y: f32, sp: sprite.Sprite) Brick {
+        return .{
+            .pos = .{ x * brick_w, y * brick_h },
+            .sprite = sp,
+            .emitter = ExplosionEmitter.init(.{
+                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                .sprites = particleExplosionSprites(.brick1),
+            }),
+            .destroyed = false,
+        };
+    }
+
+    pub fn explode(brick: *Brick) void {
+        const pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
+        brick.emitter = ExplosionEmitter.init(.{
+            .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+            .sprites = particleExplosionSprites(brick.sprite),
+        });
+        brick.emitter.pos = pos;
+        brick.emitter.emitting = true;
+    }
 };
 
 pub const ExplosionEmitter = particle.Emitter(.{

@@ -43,16 +43,8 @@ pub const EditorScene = struct {
                 const i = y * 20 + x;
                 const fx: f32 = @floatFromInt(x);
                 const fy: f32 = @floatFromInt(y);
-                // TODO make intializer for bricks
-                bricks[i] = .{
-                    .pos = .{ fx * brick_w, fy * brick_h },
-                    .sprite = .brick1,
-                    .emitter = ExplosionEmitter.init(.{
-                        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                        .sprites = game.particleExplosionSprites(.brick1),
-                    }),
-                    .destroyed = true,
-                };
+                bricks[i] = Brick.init(fx, fy, .brick1);
+                bricks[i].destroyed = true;
             }
         }
 
