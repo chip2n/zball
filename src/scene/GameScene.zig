@@ -169,6 +169,7 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
             const fy: f32 = @floatFromInt(y);
             const s: sprite.Sprite = try game.brickIdToSprite(brick.id);
             scene.bricks[i] = Brick.init(fx, fy, s);
+            scene.bricks[i].pos[1] += brick_start_y;
         }
     }
 
