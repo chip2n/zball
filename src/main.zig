@@ -13,7 +13,6 @@ const sglue = sokol.glue;
 
 const shd = @import("shader");
 const font = @import("font");
-const sprite = @import("sprite");
 const fwatch = @import("fwatch");
 const m = @import("math");
 
