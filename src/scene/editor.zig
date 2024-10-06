@@ -1,13 +1,14 @@
 const std = @import("std");
 const sprite = @import("sprite");
-const texture = @import("../texture.zig");
-const Texture = texture.Texture;
 const constants = @import("../constants.zig");
 const input = @import("../input.zig");
 const state = @import("../state.zig");
-const ui = @import("../ui.zig");
 const shd = @import("shader");
 const level = @import("../level.zig");
+
+const gfx = @import("../gfx.zig");
+const ui = gfx.ui;
+const Texture = gfx.texture.Texture;
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
@@ -75,7 +76,7 @@ pub const EditorScene = struct {
                 editor_texture_data[x * 16 + y * width] = 0x10FFFFFF;
             }
         }
-        const tex = try texture.loadRGB8(.{
+        const tex = try gfx.texture.loadRGB8(.{
             .data = std.mem.sliceAsBytes(editor_texture_data),
             .width = width,
             .height = height,
@@ -142,7 +143,7 @@ pub const EditorScene = struct {
 
         { // Render grid
             state.batch.setTexture(scene.tex);
-            const tex = try texture.get(scene.tex);
+            const tex = try gfx.texture.get(scene.tex);
             state.batch.render(.{
                 .dst = .{ .x = 0, .y = 0, .w = @floatFromInt(tex.width), .h = @floatFromInt(tex.height) },
             });

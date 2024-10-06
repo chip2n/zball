@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const config = @import("config");
 const constants = @import("constants.zig");
+const gfx = @import("gfx.zig");
 const assert = std.debug.assert;
 
 const sokol = @import("sokol");
@@ -18,20 +19,11 @@ const m = @import("math");
 
 const input = @import("input.zig");
 
-const ui = @import("ui.zig");
 const level = @import("level.zig");
 const Level = level.Level;
 const SceneManager = @import("scene.zig").SceneManager;
 const audio = @import("audio.zig");
-const texture = @import("texture.zig");
-const particle = @import("particle.zig");
 const utils = @import("utils.zig");
-
-const Viewport = @import("Viewport.zig");
-const Camera = @import("Camera.zig");
-const Pipeline = @import("shader.zig").Pipeline;
-const BatchRenderer = @import("batch.zig").BatchRenderer;
-const BatchResult = @import("batch.zig").BatchResult;
 
 const spritesheet = @embedFile("assets/sprites.png");
 
@@ -40,7 +32,7 @@ const levels = .{
     "assets/level2.lvl",
 };
 
-const Texture = texture.Texture;
+const Texture = gfx.texture.Texture;
 
 pub const offscreen_sample_count = 1;
 
@@ -93,15 +85,15 @@ fn initializeGame() !void {
     audio.init();
     errdefer audio.deinit();
 
-    texture.init(state.allocator);
-    errdefer texture.deinit();
+    gfx.texture.init(state.allocator);
+    errdefer gfx.texture.deinit();
 
     stm.setup();
 
-    ui.init(state.allocator);
-    errdefer ui.deinit();
+    gfx.ui.init(state.allocator);
+    errdefer gfx.ui.deinit();
 
-    state.camera = Camera.init(.{
+    state.camera = gfx.Camera.init(.{
         .pos = .{ constants.viewport_size[0] / 2, constants.viewport_size[1] / 2 },
         .viewport_size = constants.viewport_size,
         .window_size = .{
@@ -109,7 +101,7 @@ fn initializeGame() !void {
             @intCast(state.window_size[1]),
         },
     });
-    state.viewport = Viewport.init(.{
+    state.viewport = gfx.Viewport.init(.{
         .size = constants.viewport_size,
         .camera = &state.camera,
     });
@@ -134,8 +126,8 @@ fn initializeGame() !void {
     // TODO do elsewhere?
     state.fsq.bind.fs.images[shd.SLOT_tex] = state.viewport.attachments_desc.colors[0].image;
 
-    state.spritesheet_texture = try texture.loadPNG(.{ .data = spritesheet });
-    state.font_texture = try texture.loadPNG(.{ .data = font.image });
+    state.spritesheet_texture = try gfx.texture.loadPNG(.{ .data = spritesheet });
+    state.font_texture = try gfx.texture.loadPNG(.{ .data = font.image });
 
     state.offscreen.bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
     state.offscreen.bind2.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
@@ -201,7 +193,7 @@ fn initializeGame() !void {
         const path = try utils.getExecutablePath(allocator);
         const dir = std.fs.path.dirname(path).?;
         const shader_path = try std.fs.path.join(allocator, &.{ dir, "libshd.so" });
-        state.bg = try Pipeline.load(shader_path, "bgShaderDesc");
+        state.bg = try gfx.Pipeline.load(shader_path, "bgShaderDesc");
 
         debug.watcher = try fwatch.FileWatcher(void).init(allocator, onFileEvent);
         errdefer debug.watcher.deinit();
@@ -209,7 +201,7 @@ fn initializeGame() !void {
         try debug.watcher.start();
         try debug.watcher.add(shader_path, {});
     } else {
-        state.bg = try Pipeline.init();
+        state.bg = try gfx.Pipeline.init();
     }
     state.bg.bind.vertex_buffers[0] = state.quad_vbuf;
 
@@ -342,7 +334,7 @@ export fn sokolFrame() void {
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    ui.handleEvent(ev.*);
+    gfx.ui.handleEvent(ev.*);
 
     switch (ev.*.type) {
         .RESIZED => {
@@ -356,7 +348,7 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
             state.mouse_delta = m.vadd(state.mouse_delta, .{ ev.*.mouse_dx, ev.*.mouse_dy });
 
             const world_mouse_pos = input.mouse();
-            ui.handleMouseMove(world_mouse_pos[0], world_mouse_pos[1]);
+            gfx.ui.handleMouseMove(world_mouse_pos[0], world_mouse_pos[1]);
         },
         else => {
             state.scene_mgr.handleInput(ev) catch |err| {
@@ -368,10 +360,10 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 
 export fn sokolCleanup() void {
     state.scene_mgr.deinit();
-    texture.deinit();
+    gfx.texture.deinit();
     audio.deinit();
     sg.shutdown();
-    ui.deinit();
+    gfx.ui.deinit();
     state.arena.deinit();
     if (config.shader_reload) {
         debug.watcher.deinit();

@@ -6,17 +6,16 @@ const shd = @import("shader");
 
 const constants = @import("constants.zig");
 
-const Viewport = @import("Viewport.zig");
-const Camera = @import("Camera.zig");
-const BatchRenderer = @import("batch.zig").BatchRenderer;
+const gfx = @import("gfx.zig");
+const Viewport = gfx.Viewport;
+const Camera = gfx.Camera;
+const BatchRenderer = gfx.BatchRenderer;
 const SceneManager = @import("scene.zig").SceneManager;
+const Pipeline = gfx.Pipeline;
+const Texture = gfx.texture.Texture;
 
 const level = @import("level.zig");
 const Level = level.Level;
-
-const Pipeline = @import("shader.zig").Pipeline;
-const texture = @import("texture.zig");
-const Texture = texture.Texture;
 
 pub var viewport: Viewport = undefined;
 pub var camera: Camera = undefined;
@@ -79,7 +78,7 @@ pub fn renderBatch() !void {
     sg.updateBuffer(vertexBuffer(), sg.asRange(result.verts));
     var bind = currentBind();
     for (result.batches) |b| {
-        const tex = try texture.get(b.tex);
+        const tex = try gfx.texture.get(b.tex);
         bind.fs.images[shd.SLOT_tex] = tex.img;
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);

@@ -1,3 +1,5 @@
+// TODO merge into math file
+
 const m = @import("math");
 
 // TODO separate from math rect

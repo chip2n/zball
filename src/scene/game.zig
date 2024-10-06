@@ -18,9 +18,9 @@ const Brick = game.Brick;
 const ExplosionEmitter = game.ExplosionEmitter;
 const FlameEmitter = game.FlameEmitter;
 
-const TextRenderer = @import("../ttf.zig").TextRenderer;
-
-const ui = @import("../ui.zig");
+const gfx = @import("../gfx.zig");
+const ui = gfx.ui;
+const TextRenderer = gfx.ttf.TextRenderer;
 
 const m = @import("math");
 const Rect = m.Rect;

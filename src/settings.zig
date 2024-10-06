@@ -1,6 +1,8 @@
-const ui = @import("ui.zig");
 const constants = @import("constants.zig");
 const audio = @import("audio.zig");
+
+const gfx = @import("gfx.zig");
+const ui = gfx.ui;
 
 pub fn renderMenu() !bool {
     try ui.beginWindow(.{

@@ -1,4 +1,3 @@
-const ui = @import("../ui.zig");
 const input = @import("../input.zig");
 const state = @import("../state.zig");
 const constants = @import("../constants.zig");
@@ -6,6 +5,9 @@ const utils = @import("../utils.zig");
 const settings = @import("../settings.zig");
 const sprite = @import("sprite");
 const shd = @import("shader");
+
+const gfx = @import("../gfx.zig");
+const ui = gfx.ui;
 
 const sokol = @import("sokol");
 const sapp = sokol.app;

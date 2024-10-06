@@ -1,7 +1,9 @@
 const std = @import("std");
 const sprite = @import("sprite");
-const particle = @import("particle.zig");
 const constants = @import("constants.zig");
+
+const gfx = @import("gfx.zig");
+const particle = gfx.particle;
 
 pub const Brick = struct {
     pos: [2]f32 = .{ 0, 0 },
