@@ -77,16 +77,20 @@ pub const SceneManager = struct {
     }
 
     pub fn switchTo(mgr: *SceneManager, scene_type: SceneType) void {
+        if (mgr.next) |*next| {
+            next.deinit();
+        }
         mgr.next = mgr.createScene(scene_type);
     }
 
     /// Update the transition state
     pub fn update(mgr: *SceneManager, dt: f32) !void {
-        if (mgr.next) |next| {
+        if (mgr.next) |*next| {
             mgr.transition_progress += dt / transition_duration;
             if (mgr.transition_progress >= 1) {
                 mgr.transition_progress = 0;
-                mgr.current = next;
+                mgr.current.deinit();
+                mgr.current = next.*;
                 mgr.next = null;
             }
         }
@@ -104,15 +108,3 @@ pub const SceneManager = struct {
         };
     }
 };
-
-// pub const Scene = struct {
-//     ptr: *anyopaque,
-//     initFn: fn (scene: *anyopaque) void,
-//     deinitFn: fn (scene: *anyopaque) void,
-//     frameFn: fn (scene: *anyopaque) void,
-//     inputFn: fn (scene: *anyopaque, ev: [*c]const sapp.Event) void,
-
-//     pub fn init(self: Scene) void {
-//         self.initFn(self.ptr);
-//     }
-// };
