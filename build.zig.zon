@@ -22,16 +22,13 @@
         },
     },
     .paths = .{
-        // This makes *all* files, recursively, included in this package. It is generally
-        // better to explicitly list the files and directories instead, to insure that
-        // fetching from tarballs, file system paths, and version control all result
-        // in the same contents hash.
-        "",
-        // For example...
-        //"build.zig",
-        //"build.zig.zon",
-        //"src",
-        //"LICENSE",
-        //"README.md",
+        "build.zig",
+        "build.zig.zon",
+        "shell.html",
+        "src",
+        "libs",
+        "assets",
+        "LICENSE",
+        "README.org",
     },
 }
