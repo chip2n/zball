@@ -244,7 +244,6 @@ pub fn endFrame() void {
 }
 
 pub fn setFramebuffer(fb: Framebuffer) void {
-    std.log.warn("set framebuffer", .{});
     state.current_framebuffer = fb;
 }
 
