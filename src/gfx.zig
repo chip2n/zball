@@ -158,8 +158,6 @@ pub fn init(allocator: std.mem.Allocator) !void {
     ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();
 
-    std.log.warn("gfx init", .{});
-
     state.initialized = true;
 }
 

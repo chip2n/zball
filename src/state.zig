@@ -8,7 +8,6 @@ const sapp = sokol.app;
 const m = @import("math");
 const utils = @import("utils.zig");
 const shd = @import("shader");
-const config = @import("config");
 const constants = @import("constants.zig");
 
 const gfx = @import("gfx.zig");
