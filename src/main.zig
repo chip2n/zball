@@ -13,7 +13,6 @@ const sapp = sokol.app;
 const sglue = sokol.glue;
 
 const shd = @import("shader");
-const fwatch = @import("fwatch");
 const m = @import("math");
 
 const input = @import("input.zig");
@@ -45,11 +44,6 @@ const use_gpa = !utils.is_web;
 
 const Rect = m.Rect;
 
-const debug = if (builtin.os.tag == .linux) struct {
-    var watcher: *fwatch.FileWatcher(void) = undefined;
-    var reload: bool = false;
-} else struct {};
-
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 fn initializeGame() !void {
@@ -70,11 +64,6 @@ fn initializeGame() !void {
 
     try state.init(allocator);
     errdefer state.deinit();
-}
-
-fn onFileEvent(event_type: fwatch.FileEventType, path: []const u8, _: void) !void {
-    std.log.info("File event ({}): {s}", .{ event_type, path });
-    debug.reload = true;
 }
 
 // * Sokol
@@ -103,10 +92,6 @@ export fn sokolCleanup() void {
     gfx.deinit();
     audio.deinit();
     sg.shutdown();
-    // NOCOMMIT
-    if (config.shader_reload) {
-        debug.watcher.deinit();
-    }
 
     if (use_gpa) {
         _ = gpa.deinit();

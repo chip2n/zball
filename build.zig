@@ -39,7 +39,6 @@ pub fn build(b: *Build) !void {
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zpool = b.dependency("zpool", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
-    const dep_fwatch = b.dependency("zig_file_watch", .{ .target = target, .optimize = optimize });
 
     // Shader compilation step
     const shdc = dep_sokol_tools.path("bin/linux/sokol-shdc").getPath(b);
@@ -112,8 +111,6 @@ pub fn build(b: *Build) !void {
         const exe = try buildNative(b, target, optimize, deps, true);
         exe.root_module.addOptions("config", options);
         try addAssets(b, exe);
-        // TODO debug only
-        exe.root_module.addImport("fwatch", dep_fwatch.module("fwatch"));
 
         const check_exe = try buildNative(b, target, optimize, deps, false);
         // Used with ZLS for better analysis of comptime shenanigans
