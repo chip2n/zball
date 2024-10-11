@@ -6,6 +6,7 @@ const gfx = @import("gfx.zig");
 const input = @import("input.zig");
 const audio = @import("audio.zig");
 const utils = @import("utils.zig");
+const state = @import("state.zig");
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
@@ -14,50 +15,47 @@ const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 
-const levels = .{
-    "assets/level1.lvl",
-    "assets/level2.lvl",
-};
-
-const Texture = gfx.texture.Texture;
-
-const pi = std.math.pi;
-
 pub const std_options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 
-const state = @import("state.zig");
-
 const use_gpa = !utils.is_web;
-
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
-fn initializeGame() !void {
+// * Sokol
+
+pub fn main() !void {
+    sapp.run(.{
+        .init_cb = sokolInit,
+        .frame_cb = sokolFrame,
+        .cleanup_cb = sokolCleanup,
+        .event_cb = sokolEvent,
+        .width = constants.initial_screen_size[0],
+        .height = constants.initial_screen_size[1],
+        .icon = .{ .sokol_default = true },
+        .window_title = "Game",
+        .logger = .{ .func = slog.func },
+    });
+}
+
+export fn sokolInit() void {
     const allocator = if (use_gpa) gpa.allocator() else std.heap.c_allocator;
 
     sg.setup(.{
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
-    errdefer sg.shutdown();
-
-    audio.init();
-    errdefer audio.deinit();
-
     stm.setup();
 
-    try gfx.init(allocator);
+    gfx.init(allocator) catch |err| {
+        std.log.err("Unable to initialize graphics system: {}", .{err});
+        std.process.exit(1);
+    };
 
-    try state.init(allocator);
-    errdefer state.deinit();
-}
+    audio.init();
 
-// * Sokol
-
-export fn sokolInit() void {
-    initializeGame() catch |err| {
-        std.log.err("Unable to initialize game: {}", .{err});
+    state.init(allocator) catch |err| {
+        std.log.err("Unable to initialize game state: {}", .{err});
         std.process.exit(1);
     };
 }
@@ -85,16 +83,3 @@ export fn sokolCleanup() void {
     }
 }
 
-pub fn main() !void {
-    sapp.run(.{
-        .init_cb = sokolInit,
-        .frame_cb = sokolFrame,
-        .cleanup_cb = sokolCleanup,
-        .event_cb = sokolEvent,
-        .width = constants.initial_screen_size[0],
-        .height = constants.initial_screen_size[1],
-        .icon = .{ .sokol_default = true },
-        .window_title = "Game",
-        .logger = .{ .func = slog.func },
-    });
-}
