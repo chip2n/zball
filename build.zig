@@ -20,17 +20,6 @@ pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Whether to dynamically load background shader from a shared library, thus
-    // allowing for shader reload. If false, the shader will be compiled in to the
-    // binary.
-    const shader_reload = b.option(bool, "shader-reload", "Enable automatic shader reloading") orelse false;
-    if (target.result.isWasm() and shader_reload) {
-        std.log.err("Web builds does not support shader reloading.", .{});
-        return error.InvalidConfiguration;
-    }
-    const options = b.addOptions();
-    options.addOption(bool, "shader_reload", shader_reload);
-
     const dep_sokol = b.dependency("sokol", .{
         .target = target,
         .optimize = optimize,
@@ -105,11 +94,9 @@ pub fn build(b: *Build) !void {
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
         const lib = try buildWeb(b, target, optimize, dep_emsdk, deps);
-        lib.root_module.addOptions("config", options);
         try addAssets(b, lib);
     } else {
         const exe = try buildNative(b, target, optimize, deps, true);
-        exe.root_module.addOptions("config", options);
         try addAssets(b, exe);
 
         const check_exe = try buildNative(b, target, optimize, deps, false);
@@ -117,7 +104,6 @@ pub fn build(b: *Build) !void {
         const check = b.step("check", "Check if game compiles");
         check.dependOn(&check_exe.step);
         try addAssets(b, check_exe);
-        check_exe.root_module.addOptions("config", options);
 
         // Tests
         const tests = b.addTest(.{

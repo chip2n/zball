@@ -2,7 +2,6 @@ pub const Camera = @import("gfx/Camera.zig");
 pub const BatchRenderer = @import("gfx/batch.zig").BatchRenderer;
 pub const BatchResult = @import("gfx/batch.zig").BatchResult;
 pub const particle = @import("gfx/particle.zig");
-pub const Pipeline = @import("gfx/shader.zig").Pipeline;
 pub const texture = @import("gfx/texture.zig");
 pub const ttf = @import("gfx/ttf.zig");
 pub const ui = @import("gfx/ui.zig");
@@ -44,7 +43,11 @@ const GfxState = struct {
         bind: sg.Bindings = .{},
         pass_action: sg.PassAction = .{},
     } = .{},
-    bg: Pipeline = undefined,
+    bg: struct {
+        pip: sg.Pipeline = .{},
+        bind: sg.Bindings = .{},
+        pass_action: sg.PassAction = .{},
+    } = .{},
     spritesheet_texture: Texture = undefined,
     font_texture: Texture = undefined,
     window_size: [2]i32 = constants.initial_screen_size,
@@ -78,28 +81,29 @@ pub fn init(allocator: std.mem.Allocator) !void {
     state.spritesheet_texture = try texture.loadPNG(.{ .data = spritesheet });
     state.font_texture = try texture.loadPNG(.{ .data = font.image });
 
-    // create a shader and pipeline object
-    var pip_desc: sg.PipelineDesc = .{
-        .shader = sg.makeShader(shd.mainShaderDesc(sg.queryBackend())),
-        .cull_mode = .BACK,
-        .sample_count = constants.offscreen_sample_count,
-        .depth = .{
-            .pixel_format = .DEPTH,
-            .compare = .LESS_EQUAL,
-            .write_enabled = false,
-        },
-        .color_count = 1,
-    };
-    pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
-    pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
-    pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
-    pip_desc.colors[0].blend = .{
-        .enabled = true,
-        .src_factor_rgb = .SRC_ALPHA,
-        .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
-    };
+    { // offscreen shader
+        var pip_desc: sg.PipelineDesc = .{
+            .shader = sg.makeShader(shd.mainShaderDesc(sg.queryBackend())),
+            .cull_mode = .BACK,
+            .sample_count = constants.offscreen_sample_count,
+            .depth = .{
+                .pixel_format = .DEPTH,
+                .compare = .LESS_EQUAL,
+                .write_enabled = false,
+            },
+            .color_count = 1,
+        };
+        pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
+        pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
+        pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
+        pip_desc.colors[0].blend = .{
+            .enabled = true,
+            .src_factor_rgb = .SRC_ALPHA,
+            .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+        };
 
-    state.offscreen.pip = sg.makePipeline(pip_desc);
+        state.offscreen.pip = sg.makePipeline(pip_desc);
+    }
 
     // a vertex buffer to render a fullscreen quad
     state.quad_vbuf = sg.makeBuffer(.{
@@ -134,9 +138,22 @@ pub fn init(allocator: std.mem.Allocator) !void {
     state.fsq.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
     state.fsq.bind.fs.samplers[0] = smp;
 
-    // background shader
-    state.bg = try Pipeline.init();
-    state.bg.bind.vertex_buffers[0] = state.quad_vbuf;
+    { // Background shader
+        var pip_desc: sg.PipelineDesc = .{
+            .shader = sg.makeShader(shd.bgShaderDesc(sg.queryBackend())),
+            .primitive_type = .TRIANGLE_STRIP,
+            .depth = .{
+                .pixel_format = .DEPTH,
+                .compare = .LESS_EQUAL,
+                .write_enabled = false,
+            },
+        };
+        pip_desc.layout.attrs[shd.ATTR_vs_bg_pos].format = .FLOAT2;
+        pip_desc.layout.attrs[shd.ATTR_vs_bg_in_uv].format = .FLOAT2;
+        const pip = sg.makePipeline(pip_desc);
+        state.bg.pip = pip;
+        state.bg.bind.vertex_buffers[0] = state.quad_vbuf;
+    }
 
     ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();

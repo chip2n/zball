@@ -16,7 +16,6 @@ const Viewport = gfx.Viewport;
 const Camera = gfx.Camera;
 const BatchRenderer = gfx.BatchRenderer;
 const SceneManager = @import("scene.zig").SceneManager;
-const Pipeline = gfx.Pipeline;
 const Texture = gfx.texture.Texture;
 
 const font = @import("font");

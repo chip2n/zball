@@ -30,7 +30,6 @@ const levels = .{
 
 const Texture = gfx.texture.Texture;
 
-
 const pi = std.math.pi;
 const num_audio_samples = 32;
 
