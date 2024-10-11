@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Build = std.Build;
 const OptimizeMode = std.builtin.OptimizeMode;
+const aseprite = @import("aseprite");
 
 const sokol = @import("sokol");
 
@@ -13,7 +14,8 @@ const CoreDependencies = struct {
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
-    sprite_path: Build.LazyPath,
+    sprite_data_path: Build.LazyPath,
+    sprite_image_path: Build.LazyPath,
 };
 
 pub fn build(b: *Build) !void {
@@ -74,12 +76,18 @@ pub fn build(b: *Build) !void {
     const tool_fontpack_output = tool_fontpack_run.addOutputFileArg("font.zig");
     _ = tool_fontpack_run.addOutputFileArg("font.png");
 
-    const tool_spritepack = try buildSpritePackTool(b, optimize);
-    const tool_spritepack_run = b.addRunArtifact(tool_spritepack);
-    const tool_spritepack_run_step = b.step("spritepack", "Run the sprite packer");
-    tool_spritepack_run_step.dependOn(&tool_spritepack_run.step);
-    tool_spritepack_run.addFileArg(b.path("assets/sprites.json"));
-    const tool_spritepack_output = tool_spritepack_run.addOutputFileArg("sprite.zig");
+    var sprite_data_path: std.Build.LazyPath = undefined;
+    var sprite_image_path: std.Build.LazyPath = undefined;
+    { // Aseprite
+        const dep_aseprite = b.dependency("aseprite", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        const art_aseprite = dep_aseprite.artifact("aseprite");
+        const result = aseprite.exportAseprite(b, art_aseprite, b.path("assets/sprites.ase"));
+        sprite_data_path = result.img_data;
+        sprite_image_path = result.img_path;
+    }
 
     const deps = CoreDependencies{
         .sokol = dep_sokol,
@@ -88,7 +96,8 @@ pub fn build(b: *Build) !void {
         .zpool = dep_zpool,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
-        .sprite_path = tool_spritepack_output,
+        .sprite_data_path = sprite_data_path,
+        .sprite_image_path = sprite_image_path,
     };
 
     if (target.result.isWasm()) {
@@ -159,12 +168,8 @@ fn addDeps(
         },
     });
     step.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
-    step.root_module.addAnonymousImport("sprite", .{
-        .root_source_file = deps.sprite_path,
-        .imports = &.{
-            .{ .name = "math", .module = mod_math },
-        },
-    });
+    step.root_module.addAnonymousImport("sprites.png", .{ .root_source_file = deps.sprite_image_path });
+    step.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_data_path });
 }
 
 fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
@@ -203,19 +208,6 @@ fn buildFontPackTool(
     exe.addIncludePath(dep_stb.path("."));
     exe.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });
     exe.linkLibC();
-    return exe;
-}
-
-fn buildSpritePackTool(
-    b: *Build,
-    optimize: OptimizeMode,
-) !*Build.Step.Compile {
-    const exe = b.addExecutable(.{
-        .name = "spritepack",
-        .root_source_file = b.path("tools/spritepack.zig"),
-        .target = b.host,
-        .optimize = optimize,
-    });
     return exe;
 }
 

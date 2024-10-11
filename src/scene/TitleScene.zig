@@ -5,6 +5,7 @@ const utils = @import("../utils.zig");
 const settings = @import("../settings.zig");
 const sprite = @import("sprite");
 const shd = @import("shader");
+const m = @import("math");
 
 const gfx = @import("../gfx.zig");
 const ui = gfx.ui;
@@ -84,7 +85,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     // NOCOMMIT how do we want to access these textures?
     gfx.setTexture(gfx.spritesheetTexture());
     gfx.render(.{
-        .src = sprite.sprites.title.bounds,
+        .src = m.irect(sprite.sprites.title.bounds),
         .dst = .{
             .x = 0,
             .y = 0,

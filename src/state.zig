@@ -26,8 +26,6 @@ const level_files = .{
     "assets/level2.lvl",
 };
 
-const spritesheet = @embedFile("assets/sprites.png");
-
 pub var arena: std.heap.ArenaAllocator = undefined;
 
 /// Mouse position in unscaled pixels

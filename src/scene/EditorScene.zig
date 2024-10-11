@@ -5,6 +5,7 @@ const input = @import("../input.zig");
 const state = @import("../state.zig");
 const shd = @import("shader");
 const level = @import("../level.zig");
+const m = @import("math");
 
 const gfx = @import("../gfx.zig");
 const ui = gfx.ui;
@@ -129,7 +130,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         const y = brick.pos[1];
         const slice = sprite.get(brick.sprite);
         gfx.render(.{
-            .src = slice.bounds,
+            .src = m.irect(slice.bounds),
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
         });
     }

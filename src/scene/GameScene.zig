@@ -525,7 +525,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
             gfx.render(.{
-                .src = sprite.sprites.ball.bounds,
+                .src = m.irect(sprite.sprites.ball.bounds),
                 .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
             });
         }
@@ -547,7 +547,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         const y = brick.pos[1];
         const slice = sprite.get(brick.sprite);
         gfx.render(.{
-            .src = slice.bounds,
+            .src = m.irect(slice.bounds),
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
         });
     }
@@ -558,7 +558,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         switch (e.type) {
             .ball => {
                 gfx.render(.{
-                    .src = sprite.sprites.ball.bounds,
+                    .src = m.irect(sprite.sprites.ball.bounds),
                     .dst = .{
                         .x = e.pos[0] - ball_w / 2,
                         .y = e.pos[1] - ball_h / 2,
@@ -571,7 +571,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             .laser => {
                 const sp = sprite.sprites.particle_laser;
                 gfx.render(.{
-                    .src = sp.bounds,
+                    .src = m.irect(sp.bounds),
                     .dst = .{
                         .x = e.pos[0] - sp.bounds.w / 2,
                         .y = e.pos[1] - sp.bounds.h / 2,
@@ -589,7 +589,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         const w: f32 = @floatFromInt(sp.bounds.w);
         const h: f32 = @floatFromInt(sp.bounds.h);
         gfx.render(.{
-            .src = sp.bounds,
+            .src = m.irect(sp.bounds),
             .dst = .{
                 .x = scene.paddle_pos[0] - w / 2,
                 .y = scene.paddle_pos[1] - h,
@@ -604,7 +604,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (!p.active) continue;
         const sp = powerupSprite(p.type);
         gfx.render(.{
-            .src = sp.bounds,
+            .src = m.irect(sp.bounds),
             .dst = .{
                 .x = p.pos[0],
                 .y = p.pos[1],

@@ -17,7 +17,7 @@ const sglue = sokol.glue;
 const shd = @import("shader");
 const constants = @import("constants.zig");
 const m = @import("math");
-const spritesheet = @embedFile("assets/sprites.png");
+const spritesheet = @embedFile("sprites.png");
 const Texture = texture.Texture;
 const font = @import("font");
 

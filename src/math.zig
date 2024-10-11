@@ -47,6 +47,11 @@ fn GenRect(comptime T: type) type {
     };
 }
 
+/// Helper to convert a rect-ish type to IRect (e.g. data from zig-aseprite-utils)
+pub fn irect(r: anytype) IRect {
+    return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
+}
+
 pub fn normalize(v: *[2]f32) void {
     const mag = magnitude(v.*);
     v[0] /= mag;

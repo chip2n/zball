@@ -214,15 +214,16 @@ pub fn endWindow() void {
     switch (win_style) {
         .dialog => {
             // Semi-transparent background overlay
+            const overlay = sprites.get(.overlay);
             batch.render(.{
-                .src = sprites.get(.overlay).bounds,
+                .src = m.irect(overlay.bounds),
                 .dst = .{ .x = 0, .y = 0, .w = constants.viewport_size[0], .h = constants.viewport_size[1] },
                 .z = win_z - 0.1,
             });
 
             batch.renderNinePatch(.{
-                .src = dialog.bounds,
-                .center = dialog.center.?,
+                .src = m.irect(dialog.bounds),
+                .center = m.irect(dialog.center.?),
                 .dst = .{
                     .x = origin[0] + offset[0],
                     .y = origin[1] + offset[1],
@@ -257,7 +258,7 @@ pub fn endWindow() void {
                     const rail_active = sprites.get(.slider_rail_active);
                     // inactive rail
                     batch.render(.{
-                        .src = rail_inactive.bounds,
+                        .src = m.irect(rail_inactive.bounds),
                         .dst = .{
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
@@ -268,7 +269,7 @@ pub fn endWindow() void {
                     });
                     // active rail
                     batch.render(.{
-                        .src = rail_active.bounds,
+                        .src = m.irect(rail_active.bounds),
                         .dst = .{
                             .x = s.x + padding + offset[0],
                             .y = s.y + padding + offset[1],
@@ -279,7 +280,7 @@ pub fn endWindow() void {
                     });
                     // thumb
                     batch.render(.{
-                        .src = thumb.bounds,
+                        .src = m.irect(thumb.bounds),
                         .dst = .{
                             .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, @floatFromInt(thumb.bounds.w)) / 2),
                             .y = s.y + padding + offset[1] - @floor(@as(f32, @floatFromInt(thumb.bounds.h)) / 2),
@@ -294,7 +295,7 @@ pub fn endWindow() void {
                     const sp = sprites.get(s.sprite);
 
                     batch.render(.{
-                        .src = sp.bounds,
+                        .src = m.irect(sp.bounds),
                         .dst = .{
                             .x = s.x,
                             .y = s.y,

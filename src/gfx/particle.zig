@@ -237,7 +237,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                             .h = region.h,
                         };
                     }
-                    break :blk sprite.bounds;
+                    break :blk m.irect(sprite.bounds);
                 };
 
                 // Start fading out particles when 400ms left of particle life
