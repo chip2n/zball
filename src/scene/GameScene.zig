@@ -506,9 +506,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
     // Render
     { // Top status bar
-        state.batch.setTexture(state.spritesheet_texture);
+        gfx.setTexture(gfx.spritesheetTexture());
         const d = sprite.sprites.dialog;
-        state.batch.render(.{
+        gfx.render(.{
             .src = .{
                 .x = d.bounds.x + d.center.?.x,
                 .y = d.bounds.y + d.center.?.y,
@@ -524,7 +524,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         });
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
-            state.batch.render(.{
+            gfx.render(.{
                 .src = sprite.sprites.ball.bounds,
                 .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
             });
@@ -532,14 +532,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
         // Score
         // TODO have to always remember this when rendering text...
-        state.batch.setTexture(state.font_texture);
-        var text_renderer = TextRenderer{};
+        gfx.setTexture(gfx.fontTexture());
         var buf: [32]u8 = undefined;
         const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{scene.score}) catch unreachable;
-        text_renderer.render(&state.batch, label, 32, 0, 5);
+        gfx.renderText(label, 32, 0, 5);
     }
 
-    state.batch.setTexture(state.spritesheet_texture);
+    gfx.setTexture(gfx.spritesheetTexture());
 
     // Render all bricks
     for (scene.bricks) |brick| {
@@ -547,7 +546,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         const x = brick.pos[0];
         const y = brick.pos[1];
         const slice = sprite.get(brick.sprite);
-        state.batch.render(.{
+        gfx.render(.{
             .src = slice.bounds,
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
         });
@@ -558,7 +557,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (!e.active) continue;
         switch (e.type) {
             .ball => {
-                state.batch.render(.{
+                gfx.render(.{
                     .src = sprite.sprites.ball.bounds,
                     .dst = .{
                         .x = e.pos[0] - ball_w / 2,
@@ -571,7 +570,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             },
             .laser => {
                 const sp = sprite.sprites.particle_laser;
-                state.batch.render(.{
+                gfx.render(.{
                     .src = sp.bounds,
                     .dst = .{
                         .x = e.pos[0] - sp.bounds.w / 2,
@@ -589,7 +588,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         const sp = paddleSprite(scene.paddle_type);
         const w: f32 = @floatFromInt(sp.bounds.w);
         const h: f32 = @floatFromInt(sp.bounds.h);
-        state.batch.render(.{
+        gfx.render(.{
             .src = sp.bounds,
             .dst = .{
                 .x = scene.paddle_pos[0] - w / 2,
@@ -604,7 +603,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     for (scene.powerups) |p| {
         if (!p.active) continue;
         const sp = powerupSprite(p.type);
-        state.batch.render(.{
+        gfx.render(.{
             .src = sp.bounds,
             .dst = .{
                 .x = p.pos[0],
@@ -617,25 +616,21 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
     // Render brick explosions
     for (scene.bricks) |brick| {
-        brick.emitter.render(&state.batch);
+        gfx.renderEmitter(brick.emitter);
     }
 
     // Render entity explosion particles
     for (scene.entities) |e| {
-        e.explosion.render(&state.batch);
+        gfx.renderEmitter(e.explosion);
     }
 
     // Render entity flame particles
     for (scene.entities) |e| {
-        e.flame.render(&state.batch);
+        gfx.renderEmitter(e.flame);
     }
 
     { // Render game menus
-        try ui.begin(.{
-            .batch = &state.batch,
-            .tex_spritesheet = state.spritesheet_texture,
-            .tex_font = state.font_texture,
-        });
+        try ui.begin(.{});
         defer ui.end();
 
         switch (scene.menu) {
@@ -657,26 +652,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         }
     }
 
-    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-
-    { // Main scene
-        state.beginOffscreenPass();
-
-        // render background
-        sg.applyPipeline(state.bg.pip);
-        const bg_params = shd.FsBgParams{
-            .time = scene.time,
-        };
-        sg.applyUniforms(.FS, shd.SLOT_fs_bg_params, sg.asRange(&bg_params));
-        sg.applyBindings(state.bg.bind);
-        sg.draw(0, 4, 1);
-
-        // render game scene
-        sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        try state.renderBatch();
-        sg.endPass();
-    }
+    gfx.beginOffscreenPass();
+    try gfx.renderBackground(scene.time);
+    try gfx.renderMain();
+    gfx.endOffscreenPass();
 }
 
 fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {

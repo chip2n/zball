@@ -1,5 +1,6 @@
 const m = @import("math");
 const utils = @import("utils.zig");
+const gfx = @import("gfx.zig");
 
 const sokol = @import("sokol");
 const sapp = sokol.app;
@@ -34,10 +35,10 @@ pub fn identifyAction(key: sapp.Keycode) ?InputAction {
 
 /// Get mouse coordinates, scaled to viewport size
 pub fn mouse() [2]f32 {
-    return state.camera.screenToWorld(state.mouse_pos);
+    return gfx.screenToWorld(state.mouse_pos);
 }
 
 /// Get mouse delta, scaled based on zoom
 pub fn mouseDelta() [2]f32 {
-    return m.vmul(state.mouse_delta, 1 / state.camera.zoom());
+    return m.vmul(state.mouse_delta, 1 / gfx.cameraZoom());
 }

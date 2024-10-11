@@ -79,7 +79,15 @@ const WindowStyle = enum {
     hidden,
 };
 
-pub fn init(allocator: std.mem.Allocator) void {
+pub fn init(
+    allocator: std.mem.Allocator,
+    b: *BatchRenderer,
+    spritesheet_texture: Texture,
+    font_texture: Texture,
+) void {
+    batch = b;
+    tex_spritesheet = spritesheet_texture;
+    tex_font = font_texture;
     window_data = std.AutoHashMap(u64, WindowData).init(allocator);
     window_stack = std.ArrayList(u64).init(allocator);
     prev_window_stack = std.ArrayList(u64).init(allocator);
@@ -91,17 +99,11 @@ pub fn deinit() void {
     prev_window_stack.deinit();
 }
 
-pub const BeginDesc = struct {
-    batch: *BatchRenderer,
-    tex_spritesheet: Texture,
-    tex_font: Texture,
-};
+pub const BeginDesc = struct {};
 
 pub fn begin(v: BeginDesc) !void {
+    _ = v;
     window_stack.clearRetainingCapacity();
-    batch = v.batch;
-    tex_spritesheet = v.tex_spritesheet;
-    tex_font = v.tex_font;
 }
 
 pub fn end() void {
@@ -141,7 +143,6 @@ pub fn handleEvent(ev: sapp.Event) void {
             // NOCOMMIT incorrect now - we should handle this some other way
             io.mouse_pos[0] = ev.mouse_x;
             io.mouse_pos[1] = ev.mouse_y;
-
         },
         else => {},
     }

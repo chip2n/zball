@@ -90,7 +90,7 @@ pub const BatchRenderer = struct {
         // std.debug.assert(self.idx < self.buf.len);
     }
 
-    const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
+    pub const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);

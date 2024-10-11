@@ -27,12 +27,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     input.showMouse(false);
     input.lockMouse(true);
 
-    // TODO this is in update, but gamescene menu is in render. maybe silly to break update/render up?
-    try ui.begin(.{
-        .batch = &state.batch,
-        .tex_spritesheet = state.spritesheet_texture,
-        .tex_font = state.font_texture,
-    });
+    try ui.begin(.{});
     defer ui.end();
 
     { // Footer
@@ -86,9 +81,9 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         scene.settings = false;
     }
 
-    state.batch.setTexture(state.spritesheet_texture);
-
-    state.batch.render(.{
+    // NOCOMMIT how do we want to access these textures?
+    gfx.setTexture(gfx.spritesheetTexture());
+    gfx.render(.{
         .src = sprite.sprites.title.bounds,
         .dst = .{
             .x = 0,
@@ -98,13 +93,9 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         },
     });
 
-    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-
-    state.beginOffscreenPass();
-    sg.applyPipeline(state.offscreen.pip);
-    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-    try state.renderBatch();
-    sg.endPass();
+    gfx.beginOffscreenPass();
+    try gfx.renderMain();
+    gfx.endOffscreenPass();
 }
 
 pub fn handleInput(scene: *TitleScene, ev: sapp.Event) !void {

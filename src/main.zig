@@ -64,13 +64,9 @@ fn initializeGame() !void {
     audio.init();
     errdefer audio.deinit();
 
-    gfx.texture.init(allocator);
-    errdefer gfx.texture.deinit();
-
     stm.setup();
 
-    gfx.ui.init(allocator);
-    errdefer gfx.ui.deinit();
+    try gfx.init(allocator);
 
     try state.init(allocator);
     errdefer state.deinit();
@@ -84,11 +80,17 @@ fn onFileEvent(event_type: fwatch.FileEventType, path: []const u8, _: void) !voi
 // * Sokol
 
 export fn sokolInit() void {
-    initializeGame() catch unreachable;
+    initializeGame() catch |err| {
+        std.log.err("Unable to initialize game: {}", .{err});
+        std.process.exit(1);
+    };
 }
 
 export fn sokolFrame() void {
-    state.frame();
+    state.frame() catch |err| {
+        std.log.err("Unable to render frame: {}", .{err});
+        std.process.exit(1);
+    };
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
@@ -98,10 +100,10 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 
 export fn sokolCleanup() void {
     state.deinit();
-    gfx.texture.deinit();
+    gfx.deinit();
     audio.deinit();
     sg.shutdown();
-    gfx.ui.deinit();
+    // NOCOMMIT
     if (config.shader_reload) {
         debug.watcher.deinit();
     }
@@ -117,8 +119,8 @@ pub fn main() !void {
         .frame_cb = sokolFrame,
         .cleanup_cb = sokolCleanup,
         .event_cb = sokolEvent,
-        .width = state.window_size[0],
-        .height = state.window_size[1],
+        .width = constants.initial_screen_size[0],
+        .height = constants.initial_screen_size[1],
         .icon = .{ .sokol_default = true },
         .window_title = "Game",
         .logger = .{ .func = slog.func },

@@ -122,32 +122,28 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
 
     // Render all bricks
     // TODO refactor?
-    state.batch.setTexture(state.spritesheet_texture);
+    gfx.setTexture(gfx.spritesheetTexture());
     for (scene.bricks) |brick| {
         if (brick.destroyed) continue;
         const x = brick.pos[0];
         const y = brick.pos[1];
         const slice = sprite.get(brick.sprite);
-        state.batch.render(.{
+        gfx.render(.{
             .src = slice.bounds,
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
         });
     }
 
     { // Render grid
-        state.batch.setTexture(scene.tex);
+        gfx.setTexture(scene.tex);
         const tex = try gfx.texture.get(scene.tex);
-        state.batch.render(.{
+        gfx.render(.{
             .dst = .{ .x = 0, .y = 0, .w = @floatFromInt(tex.width), .h = @floatFromInt(tex.height) },
         });
     }
 
     { // Palette
-        try ui.begin(.{
-            .batch = &state.batch,
-            .tex_spritesheet = state.spritesheet_texture,
-            .tex_font = state.font_texture,
-        });
+        try ui.begin(.{});
         defer ui.end();
 
         try ui.beginWindow(.{
@@ -167,12 +163,9 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         }
     }
 
-    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-    state.beginOffscreenPass();
-    sg.applyPipeline(state.offscreen.pip);
-    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-    try state.renderBatch();
-    sg.endPass();
+    gfx.beginOffscreenPass();
+    try gfx.renderMain();
+    gfx.endOffscreenPass();
 }
 
 pub fn handleInput(scene: *EditorScene, ev: sapp.Event) !void {

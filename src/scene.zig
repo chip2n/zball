@@ -19,26 +19,26 @@ const Scene = union(enum) {
     game: GameScene,
     editor: EditorScene,
 
-    fn init(scene: *Scene) void {
+    pub fn init(scene: *Scene) void {
         switch (scene.*) {
             inline else => |*impl| impl.init(),
         }
     }
 
-    fn deinit(scene: *Scene) void {
+    pub fn deinit(scene: *Scene) void {
         switch (scene.*) {
             inline else => |*impl| impl.deinit(),
         }
     }
 
-    fn frame(scene: *Scene, dt: f32) !void {
+    pub fn frame(scene: *Scene, dt: f32) !void {
         switch (scene.*) {
             inline else => |*impl| try impl.frame(dt),
         }
     }
 
     // TODO: Could be handled separately and fetched in frame()
-    fn handleInput(scene: *Scene, ev: sapp.Event) !void {
+    pub fn handleInput(scene: *Scene, ev: sapp.Event) !void {
         switch (scene.*) {
             inline else => |*impl| try impl.handleInput(ev),
         }
@@ -80,7 +80,8 @@ pub const SceneManager = struct {
         mgr.next = mgr.createScene(scene_type);
     }
 
-    pub fn frame(mgr: *SceneManager, dt: f32) !void {
+    /// Update the transition state
+    pub fn update(mgr: *SceneManager, dt: f32) !void {
         if (mgr.next) |next| {
             mgr.transition_progress += dt / transition_duration;
             if (mgr.transition_progress >= 1) {
@@ -88,17 +89,6 @@ pub const SceneManager = struct {
                 mgr.current = next;
                 mgr.next = null;
             }
-        }
-
-        try mgr.current.frame(dt);
-
-        // If we're transitioning, render part of the next screen, but flipped
-        // as a "roll down" effect
-        if (mgr.next) |*next| {
-            // TODO ugly
-            mgr.rendering_next = true;
-            defer mgr.rendering_next = false;
-            try next.frame(dt);
         }
     }
 
