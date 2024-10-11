@@ -33,7 +33,7 @@ pub fn main() !void {
         .width = constants.initial_screen_size[0],
         .height = constants.initial_screen_size[1],
         .icon = .{ .sokol_default = true },
-        .window_title = "Game",
+        .window_title = "ZBall",
         .logger = .{ .func = slog.func },
     });
 }
