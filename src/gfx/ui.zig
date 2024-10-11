@@ -136,13 +136,15 @@ pub fn handleEvent(ev: sapp.Event) void {
         .MOUSE_DOWN => {
             io.mouse_pressed = ev.mouse_button;
         },
+        .MOUSE_MOVE => {
+            // const world_mouse_pos = input.mouse();
+            // NOCOMMIT incorrect now - we should handle this some other way
+            io.mouse_pos[0] = ev.mouse_x;
+            io.mouse_pos[1] = ev.mouse_y;
+
+        },
         else => {},
     }
-}
-
-pub fn handleMouseMove(x: f32, y: f32) void {
-    io.mouse_pos[0] = x;
-    io.mouse_pos[1] = y;
 }
 
 fn genId(key: anytype) u64 {

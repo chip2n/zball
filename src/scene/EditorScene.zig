@@ -175,24 +175,24 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     sg.endPass();
 }
 
-pub fn handleInput(scene: *EditorScene, ev: [*c]const sapp.Event) !void {
-    switch (ev.*.type) {
+pub fn handleInput(scene: *EditorScene, ev: sapp.Event) !void {
+    switch (ev.type) {
         .MOUSE_DOWN => {
-            switch (ev.*.mouse_button) {
+            switch (ev.mouse_button) {
                 .LEFT => scene.inputs.mouse_left_down = true,
                 .RIGHT => scene.inputs.mouse_right_down = true,
                 else => {},
             }
         },
         .MOUSE_UP => {
-            switch (ev.*.mouse_button) {
+            switch (ev.mouse_button) {
                 .LEFT => scene.inputs.mouse_left_down = false,
                 .RIGHT => scene.inputs.mouse_right_down = false,
                 else => {},
             }
         },
         .KEY_DOWN => {
-            const action = input.identifyAction(ev.*.key_code) orelse return;
+            const action = input.identifyAction(ev.key_code) orelse return;
             switch (action) {
                 .confirm => {
                     std.log.warn("SAVE", .{});

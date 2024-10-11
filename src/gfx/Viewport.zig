@@ -6,8 +6,9 @@ const sg = sokol.gfx;
 const m = @import("math");
 const shd = @import("shader");
 const Camera = @import("Camera.zig");
+const constants = @import("../constants.zig");
 
-const offscreen_sample_count = root.offscreen_sample_count;
+const offscreen_sample_count = constants.offscreen_sample_count;
 
 const Viewport = @This();
 

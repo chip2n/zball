@@ -14,3 +14,8 @@ pub const initial_ball_dir: [2]f32 = blk: {
     m.normalize(&dir);
     break :blk dir;
 };
+
+pub const max_quads = 4096;
+pub const max_verts = max_quads * 6;
+pub const offscreen_sample_count = 1;
+

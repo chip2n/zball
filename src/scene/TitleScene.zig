@@ -107,11 +107,11 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     sg.endPass();
 }
 
-pub fn handleInput(scene: *TitleScene, ev: [*c]const sapp.Event) !void {
+pub fn handleInput(scene: *TitleScene, ev: sapp.Event) !void {
     if (scene.settings) {
-        switch (ev.*.type) {
+        switch (ev.type) {
             .KEY_DOWN => {
-                const action = input.identifyAction(ev.*.key_code) orelse return;
+                const action = input.identifyAction(ev.key_code) orelse return;
                 switch (action) {
                     .back => scene.settings = false,
                     else => {},

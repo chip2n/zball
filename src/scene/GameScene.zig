@@ -803,12 +803,12 @@ fn ballOnPaddlePos(scene: GameScene) [2]f32 {
     };
 }
 
-pub fn handleInput(scene: *GameScene, ev: [*c]const sapp.Event) !void {
+pub fn handleInput(scene: *GameScene, ev: sapp.Event) !void {
     switch (scene.menu) {
         .none => {
-            switch (ev.*.type) {
+            switch (ev.type) {
                 .KEY_DOWN => {
-                    const action = input.identifyAction(ev.*.key_code) orelse return;
+                    const action = input.identifyAction(ev.key_code) orelse return;
                     switch (action) {
                         .left => {
                             scene.inputs.left_down = true;
@@ -826,7 +826,7 @@ pub fn handleInput(scene: *GameScene, ev: [*c]const sapp.Event) !void {
                     }
                 },
                 .KEY_UP => {
-                    const action = input.identifyAction(ev.*.key_code) orelse return;
+                    const action = input.identifyAction(ev.key_code) orelse return;
                     switch (action) {
                         .left => {
                             scene.inputs.left_down = false;
@@ -850,9 +850,9 @@ pub fn handleInput(scene: *GameScene, ev: [*c]const sapp.Event) !void {
             }
         },
         .pause => {
-            switch (ev.*.type) {
+            switch (ev.type) {
                 .KEY_DOWN => {
-                    const action = input.identifyAction(ev.*.key_code) orelse return;
+                    const action = input.identifyAction(ev.key_code) orelse return;
                     switch (action) {
                         .back => scene.menu = .none,
                         else => {},
@@ -862,9 +862,9 @@ pub fn handleInput(scene: *GameScene, ev: [*c]const sapp.Event) !void {
             }
         },
         .settings => {
-            switch (ev.*.type) {
+            switch (ev.type) {
                 .KEY_DOWN => {
-                    const action = input.identifyAction(ev.*.key_code) orelse return;
+                    const action = input.identifyAction(ev.key_code) orelse return;
                     switch (action) {
                         .back => scene.menu = .pause,
                         else => {},

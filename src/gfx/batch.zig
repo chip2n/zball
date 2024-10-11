@@ -1,13 +1,14 @@
 const std = @import("std");
 const root = @import("root");
 const texture = @import("texture.zig");
+const constants = @import("../constants.zig");
 const Texture = texture.Texture;
 const m = @import("math");
 const Rect = m.Rect;
 const IRect = m.IRect;
 
-const max_quads = root.max_quads;
-const max_verts = root.max_verts;
+const max_quads = constants.max_quads;
+const max_verts = constants.max_verts;
 const max_cmds = max_quads;
 const max_tex = 8;
 

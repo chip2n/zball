@@ -38,7 +38,7 @@ const Scene = union(enum) {
     }
 
     // TODO: Could be handled separately and fetched in frame()
-    fn handleInput(scene: *Scene, ev: [*c]const sapp.Event) !void {
+    fn handleInput(scene: *Scene, ev: sapp.Event) !void {
         switch (scene.*) {
             inline else => |*impl| try impl.handleInput(ev),
         }
@@ -102,7 +102,7 @@ pub const SceneManager = struct {
         }
     }
 
-    pub fn handleInput(mgr: *SceneManager, ev: [*c]const sapp.Event) !void {
+    pub fn handleInput(mgr: *SceneManager, ev: sapp.Event) !void {
         try mgr.current.handleInput(ev);
     }
 
