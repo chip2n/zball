@@ -52,7 +52,9 @@ export fn sokolInit() void {
 }
 
 export fn sokolFrame() void {
-    game.frame() catch |err| {
+    const ticks = stm.now();
+    const now = stm.sec(ticks);
+    game.frame(now) catch |err| {
         std.log.err("Unable to render frame: {}", .{err});
         std.process.exit(1);
     };

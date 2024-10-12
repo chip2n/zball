@@ -143,13 +143,10 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
 }
 
 pub var arena: std.heap.ArenaAllocator = undefined;
-
 pub var time: f64 = 0;
 pub var dt: f32 = 0;
-
 pub var levels: std.ArrayList(Level) = undefined;
 pub var scene_mgr: SceneManager = undefined;
-
 pub var current_framebuffer: gfx.Framebuffer = undefined;
 pub var transition_framebuffer: gfx.Framebuffer = undefined;
 
@@ -186,9 +183,7 @@ pub fn deinit() void {
     arena.deinit();
 }
 
-pub fn frame() !void {
-    const ticks = stm.now();
-    const now = stm.sec(ticks);
+pub fn frame(now: f64) !void {
     const new_dt: f32 = @floatCast(now - time);
     dt = new_dt;
     time = now;
