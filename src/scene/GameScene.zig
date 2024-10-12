@@ -132,13 +132,6 @@ flame_timer: f32 = 0,
 laser_timer: f32 = 0,
 laser_cooldown: f32 = 0,
 
-// TODO make a better input system
-inputs: struct {
-    left_down: bool = false,
-    right_down: bool = false,
-    shoot_down: bool = false,
-} = .{},
-
 pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
     const bricks = try allocator.alloc(Brick, lvl.width * lvl.height);
     errdefer allocator.free(bricks);
@@ -194,6 +187,19 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     // timers"). Scaled by `time_scale` to support slowdown effects.
     const game_dt = scene.time_scale * dt;
 
+    // UI input
+    switch (scene.menu) {
+        .none => if (input.pressed(.back)) {
+            scene.menu = .pause;
+        },
+        .pause => if (input.pressed(.back)) {
+            scene.menu = .none;
+        },
+        .settings => if (input.pressed(.back)) {
+            scene.menu = .pause;
+        },
+    }
+
     if (!scene.paused()) {
         input.showMouse(false);
         input.lockMouse(true);
@@ -210,10 +216,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 }
                 // Keyboard
                 var paddle_dx: f32 = 0;
-                if (scene.inputs.left_down) {
+                if (input.down(.left)) {
                     paddle_dx -= 1;
                 }
-                if (scene.inputs.right_down) {
+                if (input.down(.right)) {
                     paddle_dx += 1;
                 }
                 break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * game_dt;
@@ -224,7 +230,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         }
 
         // Handle shoot input
-        if (scene.inputs.shoot_down) shoot: {
+        if (input.down(.shoot)) shoot: {
             if (scene.ball_state == .idle) {
                 scene.ball_state = .alive;
             } else if (scene.paddle_type == .laser and scene.laser_cooldown <= 0) {
@@ -778,79 +784,6 @@ fn ballOnPaddlePos(scene: GameScene) [2]f32 {
         scene.paddle_pos[0],
         scene.paddle_pos[1] - bounds.h - ball_h / 2,
     };
-}
-
-pub fn handleInput(scene: *GameScene, ev: sapp.Event) !void {
-    switch (scene.menu) {
-        .none => {
-            switch (ev.type) {
-                .KEY_DOWN => {
-                    const action = input.identifyAction(ev.key_code) orelse return;
-                    switch (action) {
-                        .left => {
-                            scene.inputs.left_down = true;
-                        },
-                        .right => {
-                            scene.inputs.right_down = true;
-                        },
-                        .shoot => {
-                            scene.inputs.shoot_down = true;
-                        },
-                        .back => {
-                            scene.menu = .pause;
-                        },
-                        else => {},
-                    }
-                },
-                .KEY_UP => {
-                    const action = input.identifyAction(ev.key_code) orelse return;
-                    switch (action) {
-                        .left => {
-                            scene.inputs.left_down = false;
-                        },
-                        .right => {
-                            scene.inputs.right_down = false;
-                        },
-                        .shoot => {
-                            scene.inputs.shoot_down = false;
-                        },
-                        else => {},
-                    }
-                },
-                .MOUSE_DOWN => {
-                    scene.inputs.shoot_down = true;
-                },
-                .MOUSE_UP => {
-                    scene.inputs.shoot_down = false;
-                },
-                else => {},
-            }
-        },
-        .pause => {
-            switch (ev.type) {
-                .KEY_DOWN => {
-                    const action = input.identifyAction(ev.key_code) orelse return;
-                    switch (action) {
-                        .back => scene.menu = .none,
-                        else => {},
-                    }
-                },
-                else => {},
-            }
-        },
-        .settings => {
-            switch (ev.type) {
-                .KEY_DOWN => {
-                    const action = input.identifyAction(ev.key_code) orelse return;
-                    switch (action) {
-                        .back => scene.menu = .pause,
-                        else => {},
-                    }
-                },
-                else => {},
-            }
-        },
-    }
 }
 
 const Powerup = struct {

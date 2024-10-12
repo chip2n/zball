@@ -213,7 +213,4 @@ pub fn frame(now: f64) !void {
 pub fn handleEvent(ev: sapp.Event) void {
     input.handleEvent(ev);
     gfx.handleEvent(ev);
-    scene_mgr.handleInput(ev) catch |err| {
-        std.log.err("Error while processing input: {}", .{err});
-    };
 }

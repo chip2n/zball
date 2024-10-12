@@ -29,11 +29,6 @@ bricks: []Brick,
 tex: Texture,
 brush: sprite.Sprite = .brick1,
 
-inputs: struct {
-    mouse_left_down: bool = false,
-    mouse_right_down: bool = false,
-} = .{},
-
 pub fn init(allocator: std.mem.Allocator) !EditorScene {
     const bricks = try allocator.alloc(Brick, 20 * 20);
     errdefer allocator.free(bricks);
@@ -88,10 +83,11 @@ pub fn deinit(scene: *EditorScene) void {
 }
 
 pub fn frame(scene: *EditorScene, dt: f32) !void {
+    _ = dt;
+
     input.showMouse(true);
     input.lockMouse(false);
 
-    _ = dt; // autofix
     input: {
         const mouse_pos = input.mouse();
         if (mouse_pos[0] < 0) break :input;
@@ -106,12 +102,28 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         if (brick_y >= 20) break :input;
 
         var brick = &scene.bricks[brick_y * 20 + brick_x];
-        if (scene.inputs.mouse_left_down) {
+        if (input.down(.editor_draw)) {
             brick.sprite = scene.brush;
             brick.destroyed = false;
         }
-        if (scene.inputs.mouse_right_down) {
+        if (input.down(.editor_erase)) {
             brick.destroyed = true;
+        }
+        if (input.pressed(.editor_save)) {
+            std.log.warn("SAVE", .{});
+            // TODO overwrite if already exists
+            const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
+            defer file.close();
+            // TODO stop with this 20 nonsense
+            var data: [20 * 20]level.Brick = undefined;
+            for (scene.bricks, 0..) |b, i| {
+                var id: u8 = 0;
+                if (!b.destroyed) {
+                    id = try game.spriteToBrickId(b.sprite);
+                }
+                data[i] = .{ .id = id };
+            }
+            try level.writeLevel(&data, file.writer());
         }
     }
 
@@ -166,46 +178,4 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     gfx.beginOffscreenPass();
     try gfx.renderMain();
     gfx.endOffscreenPass();
-}
-
-pub fn handleInput(scene: *EditorScene, ev: sapp.Event) !void {
-    switch (ev.type) {
-        .MOUSE_DOWN => {
-            switch (ev.mouse_button) {
-                .LEFT => scene.inputs.mouse_left_down = true,
-                .RIGHT => scene.inputs.mouse_right_down = true,
-                else => {},
-            }
-        },
-        .MOUSE_UP => {
-            switch (ev.mouse_button) {
-                .LEFT => scene.inputs.mouse_left_down = false,
-                .RIGHT => scene.inputs.mouse_right_down = false,
-                else => {},
-            }
-        },
-        .KEY_DOWN => {
-            const action = input.identifyAction(ev.key_code) orelse return;
-            switch (action) {
-                .confirm => {
-                    std.log.warn("SAVE", .{});
-                    // TODO overwrite if already exists
-                    const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
-                    defer file.close();
-                    // TODO stop with this 20 nonsense
-                    var data: [20 * 20]level.Brick = undefined;
-                    for (scene.bricks, 0..) |b, i| {
-                        var id: u8 = 0;
-                        if (!b.destroyed) {
-                            id = try game.spriteToBrickId(b.sprite);
-                        }
-                        data[i] = .{ .id = id };
-                    }
-                    try level.writeLevel(&data, file.writer());
-                },
-                else => {},
-            }
-        },
-        else => {},
-    }
 }

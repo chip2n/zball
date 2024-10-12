@@ -1,3 +1,4 @@
+const std = @import("std");
 const m = @import("math");
 const utils = @import("utils.zig");
 const gfx = @import("gfx.zig");
@@ -10,12 +11,19 @@ pub const lockMouse = sapp.lockMouse;
 
 const game = @import("game.zig");
 
+const KeyTable = std.EnumMap(InputAction, struct {
+    pressed: bool = false,
+    down: bool = false,
+});
+
 const State = struct {
+    keys: KeyTable = KeyTable.initFull(.{}),
+
     /// Mouse position in unscaled pixels
     mouse_pos: [2]f32 = .{ 0, 0 },
     mouse_delta: [2]f32 = .{ 0, 0 },
 };
-var state: State = undefined;
+var state: State = .{};
 
 const InputAction = enum {
     left,
@@ -23,21 +31,31 @@ const InputAction = enum {
     shoot,
     confirm,
     back,
+    editor_draw,
+    editor_erase,
+    editor_save,
 };
 
 const keybindings = .{
-    .{ if (utils.is_web) .BACKSPACE else .ESCAPE, .back },
-    .{ .ENTER, .confirm },
-    .{ .LEFT, .left },
-    .{ .RIGHT, .right },
-    .{ .SPACE, .shoot },
+    .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{ .back } },
+    .{ .ENTER, &.{ .confirm, .editor_save } },
+    .{ .LEFT, &.{ .left } },
+    .{ .RIGHT, &.{ .right } },
+    .{ .SPACE, &.{ .shoot } },
 };
 
-pub fn identifyAction(key: sapp.Keycode) ?InputAction {
-    inline for (keybindings) |binding| {
-        if (key == binding[0]) return binding[1];
-    }
-    return null;
+const mousebindings = .{
+    .{ .LEFT, &.{ .shoot, .editor_draw } },
+    .{ .RIGHT, &.{ .shoot, .editor_erase } },
+    .{ .MIDDLE, &.{ .shoot } },
+};
+
+pub fn pressed(action: InputAction) bool {
+    return state.keys.get(action).?.pressed;
+}
+
+pub fn down(action: InputAction) bool {
+    return state.keys.get(action).?.down;
 }
 
 /// Get mouse coordinates, scaled to viewport size
@@ -52,14 +70,58 @@ pub fn mouseDelta() [2]f32 {
 
 pub fn frame() void {
     state.mouse_delta = .{ 0, 0 };
+    var iter = state.keys.iterator();
+    while (iter.next()) |entry| {
+        entry.value.pressed = false;
+    }
 }
 
 pub fn handleEvent(ev: sapp.Event) void {
     switch (ev.type) {
+        .KEY_DOWN => {
+            for (identifyKeyActions(ev.key_code)) |action| {
+                const ptr = state.keys.getPtr(action).?;
+                ptr.pressed = true;
+                ptr.down = true;
+            }
+        },
+        .KEY_UP => {
+            for (identifyKeyActions(ev.key_code)) |action| {
+                const ptr = state.keys.getPtr(action).?;
+                ptr.down = false;
+            }
+        },
+        .MOUSE_DOWN => {
+            for (identifyMouseActions(ev.mouse_button)) |action| {
+                const ptr = state.keys.getPtr(action).?;
+                ptr.pressed = true;
+                ptr.down = true;
+            }
+        },
+        .MOUSE_UP => {
+            for (identifyMouseActions(ev.mouse_button)) |action| {
+                const ptr = state.keys.getPtr(action).?;
+                ptr.down = false;
+            }
+        },
         .MOUSE_MOVE => {
             state.mouse_pos = .{ ev.mouse_x, ev.mouse_y };
             state.mouse_delta = m.vadd(state.mouse_delta, .{ ev.mouse_dx, ev.mouse_dy });
         },
         else => {},
     }
+}
+
+fn identifyKeyActions(key: sapp.Keycode) []const InputAction {
+    inline for (keybindings) |binding| {
+        if (key == binding[0]) return binding[1];
+    }
+    return &.{};
+}
+
+fn identifyMouseActions(btn: sapp.Mousebutton) []const InputAction {
+    inline for (mousebindings) |binding| {
+        if (btn == binding[0]) return binding[1];
+    }
+    return &.{};
 }

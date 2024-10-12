@@ -36,13 +36,6 @@ const Scene = union(enum) {
             inline else => |*impl| try impl.frame(dt),
         }
     }
-
-    // TODO: Could be handled separately and fetched in frame()
-    pub fn handleInput(scene: *Scene, ev: sapp.Event) !void {
-        switch (scene.*) {
-            inline else => |*impl| try impl.handleInput(ev),
-        }
-    }
 };
 
 pub const SceneManager = struct {
@@ -94,10 +87,6 @@ pub const SceneManager = struct {
                 mgr.next = null;
             }
         }
-    }
-
-    pub fn handleInput(mgr: *SceneManager, ev: sapp.Event) !void {
-        try mgr.current.handleInput(ev);
     }
 
     fn createScene(mgr: SceneManager, scene_type: SceneType) Scene {

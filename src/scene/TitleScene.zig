@@ -28,6 +28,10 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     input.showMouse(false);
     input.lockMouse(true);
 
+    if (input.pressed(.back)) {
+        scene.settings = false;
+    }
+
     try ui.begin(.{});
     defer ui.end();
 
@@ -97,21 +101,6 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     gfx.beginOffscreenPass();
     try gfx.renderMain();
     gfx.endOffscreenPass();
-}
-
-pub fn handleInput(scene: *TitleScene, ev: sapp.Event) !void {
-    if (scene.settings) {
-        switch (ev.type) {
-            .KEY_DOWN => {
-                const action = input.identifyAction(ev.key_code) orelse return;
-                switch (action) {
-                    .back => scene.settings = false,
-                    else => {},
-                }
-            },
-            else => {},
-        }
-    }
 }
 
 pub fn deinit(scene: *TitleScene) void {
