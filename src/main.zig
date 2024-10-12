@@ -2,9 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const constants = @import("constants.zig");
-const gfx = @import("gfx.zig");
 const input = @import("input.zig");
-const audio = @import("audio.zig");
 const utils = @import("utils.zig");
 const state = @import("state.zig");
 
@@ -47,13 +45,6 @@ export fn sokolInit() void {
     });
     stm.setup();
 
-    gfx.init(allocator) catch |err| {
-        std.log.err("Unable to initialize graphics system: {}", .{err});
-        std.process.exit(1);
-    };
-
-    audio.init();
-
     state.init(allocator) catch |err| {
         std.log.err("Unable to initialize game state: {}", .{err});
         std.process.exit(1);
@@ -68,14 +59,11 @@ export fn sokolFrame() void {
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    gfx.ui.handleEvent(ev.*);
     state.handleEvent(ev.*);
 }
 
 export fn sokolCleanup() void {
     state.deinit();
-    gfx.deinit();
-    audio.deinit();
     sg.shutdown();
 
     if (use_gpa) {

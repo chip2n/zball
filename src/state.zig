@@ -5,6 +5,7 @@ const stm = sokol.time;
 const sglue = sokol.glue;
 const sapp = sokol.app;
 
+const audio = @import("audio.zig");
 const m = @import("math");
 const utils = @import("utils.zig");
 const shd = @import("shader");
@@ -41,10 +42,15 @@ pub var scene_mgr: SceneManager = undefined;
 pub var current_framebuffer: gfx.Framebuffer = undefined;
 pub var transition_framebuffer: gfx.Framebuffer = undefined;
 
-// NOCOMMIT this mixes render-specific stuff with game stuff (scene manager etc).
-// NOCOMMIT move some into gfx subsystem?
 pub fn init(allocator: std.mem.Allocator) !void {
     arena = std.heap.ArenaAllocator.init(allocator);
+
+    gfx.init(allocator) catch |err| {
+        std.log.err("Unable to initialize graphics system: {}", .{err});
+        std.process.exit(1);
+    };
+
+    audio.init();
 
     // load all levels
     levels = std.ArrayList(Level).init(arena.allocator());
@@ -65,6 +71,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
 pub fn deinit() void {
     scene_mgr.deinit();
+    gfx.deinit();
+    audio.deinit();
     arena.deinit();
 }
 
@@ -99,6 +107,7 @@ pub fn frame() !void {
 
 // NOCOMMIT make sapp-agnostic
 pub fn handleEvent(ev: sapp.Event) void {
+    gfx.ui.handleEvent(ev);
     switch (ev.type) {
         .RESIZED => {
             const width = ev.window_width;
