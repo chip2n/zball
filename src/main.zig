@@ -5,6 +5,7 @@ const constants = @import("constants.zig");
 const input = @import("input.zig");
 const utils = @import("utils.zig");
 const game = @import("game.zig");
+const gfx = @import("gfx.zig");
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
@@ -61,7 +62,8 @@ export fn sokolFrame() void {
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    game.handleEvent(ev.*);
+    input.handleEvent(ev.*);
+    gfx.handleEvent(ev.*);
 }
 
 export fn sokolCleanup() void {

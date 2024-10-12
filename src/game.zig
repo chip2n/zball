@@ -1,9 +1,4 @@
 const std = @import("std");
-const sokol = @import("sokol");
-const sg = sokol.gfx;
-const stm = sokol.time;
-const sglue = sokol.glue;
-const sapp = sokol.app;
 
 const audio = @import("audio.zig");
 const input = @import("input.zig");
@@ -207,10 +202,4 @@ pub fn frame(now: f64) !void {
     }
 
     input.frame();
-}
-
-// NOCOMMIT make sapp-agnostic
-pub fn handleEvent(ev: sapp.Event) void {
-    input.handleEvent(ev);
-    gfx.handleEvent(ev);
 }
