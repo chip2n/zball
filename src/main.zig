@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const constants = @import("constants.zig");
 const input = @import("input.zig");
 const utils = @import("utils.zig");
-const state = @import("state.zig");
+const game = @import("game.zig");
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
@@ -45,25 +45,25 @@ export fn sokolInit() void {
     });
     stm.setup();
 
-    state.init(allocator) catch |err| {
-        std.log.err("Unable to initialize game state: {}", .{err});
+    game.init(allocator) catch |err| {
+        std.log.err("Unable to initialize game: {}", .{err});
         std.process.exit(1);
     };
 }
 
 export fn sokolFrame() void {
-    state.frame() catch |err| {
+    game.frame() catch |err| {
         std.log.err("Unable to render frame: {}", .{err});
         std.process.exit(1);
     };
 }
 
 export fn sokolEvent(ev: [*c]const sapp.Event) void {
-    state.handleEvent(ev.*);
+    game.handleEvent(ev.*);
 }
 
 export fn sokolCleanup() void {
-    state.deinit();
+    game.deinit();
     sg.shutdown();
 
     if (use_gpa) {

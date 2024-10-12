@@ -2,7 +2,7 @@ const std = @import("std");
 const sprite = @import("sprite");
 const constants = @import("../constants.zig");
 const input = @import("../input.zig");
-const state = @import("../state.zig");
+const game = @import("../game.zig");
 const shd = @import("shader");
 const level = @import("../level.zig");
 const m = @import("math");
@@ -15,7 +15,6 @@ const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sapp = sokol.app;
 
-const game = @import("../game.zig");
 const Brick = game.Brick;
 const ExplosionEmitter = game.ExplosionEmitter; // TODO should not be needed here
 

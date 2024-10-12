@@ -8,7 +8,7 @@ const sapp = sokol.app;
 pub const showMouse = sapp.showMouse;
 pub const lockMouse = sapp.lockMouse;
 
-const state = @import("state.zig");
+const game = @import("game.zig");
 
 const InputAction = enum {
     left,
@@ -35,10 +35,10 @@ pub fn identifyAction(key: sapp.Keycode) ?InputAction {
 
 /// Get mouse coordinates, scaled to viewport size
 pub fn mouse() [2]f32 {
-    return gfx.screenToWorld(state.mouse_pos);
+    return gfx.screenToWorld(game.mouse_pos);
 }
 
 /// Get mouse delta, scaled based on zoom
 pub fn mouseDelta() [2]f32 {
-    return m.vmul(state.mouse_delta, 1 / gfx.cameraZoom());
+    return m.vmul(game.mouse_delta, 1 / gfx.cameraZoom());
 }

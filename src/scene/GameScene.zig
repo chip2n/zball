@@ -28,8 +28,6 @@ const box_intersection = @import("../collision.zig").box_intersection;
 const line_intersection = @import("../collision.zig").line_intersection;
 const pi = std.math.pi;
 
-const state = @import("../state.zig");
-
 // TODO move to constants?
 const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
@@ -468,7 +466,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
             scene.lives -= 1;
             if (scene.lives == 0) {
-                state.scene_mgr.switchTo(.title);
+                game.scene_mgr.switchTo(.title);
             } else {
                 _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir);
                 scene.ball_state = .idle;
@@ -493,12 +491,12 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
 
             // TODO ugly
-            if (state.scene_mgr.level_idx < state.scene_mgr.levels.len - 1) {
-                state.scene_mgr.level_idx += 1;
-                state.scene_mgr.switchTo(.game);
+            if (game.scene_mgr.level_idx < game.scene_mgr.levels.len - 1) {
+                game.scene_mgr.level_idx += 1;
+                game.scene_mgr.switchTo(.game);
             } else {
-                state.scene_mgr.level_idx = 0;
-                state.scene_mgr.switchTo(.title);
+                game.scene_mgr.level_idx = 0;
+                game.scene_mgr.switchTo(.title);
             }
             return;
         }
@@ -637,13 +635,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             .none => {},
             .pause => {
                 if (try renderPauseMenu(&scene.menu)) {
-                    state.scene_mgr.switchTo(.title);
+                    game.scene_mgr.switchTo(.title);
                 }
             },
             .settings => {
                 // We still "render" the pause menu, but flagging it as hidden to preserve its state
                 if (try renderPauseMenu(&scene.menu)) {
-                    state.scene_mgr.switchTo(.title);
+                    game.scene_mgr.switchTo(.title);
                 }
                 if (try settings.renderMenu()) {
                     scene.menu = .pause;
@@ -730,7 +728,7 @@ fn paddleBounds(scene: GameScene) Rect {
 }
 
 fn paused(scene: *GameScene) bool {
-    return scene.menu != .none or state.scene_mgr.next != null;
+    return scene.menu != .none or game.scene_mgr.next != null;
 }
 
 fn spawnEntity(scene: *GameScene, entity_type: EntityType, pos: [2]f32, dir: [2]f32) !*Entity {
