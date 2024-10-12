@@ -212,17 +212,8 @@ pub fn frame(now: f64) !void {
 // NOCOMMIT make sapp-agnostic
 pub fn handleEvent(ev: sapp.Event) void {
     input.handleEvent(ev);
-    gfx.ui.handleEvent(ev);
-    switch (ev.type) {
-        .RESIZED => {
-            const width = ev.window_width;
-            const height = ev.window_height;
-            gfx.resize(width, height);
-        },
-        else => {
-            scene_mgr.handleInput(ev) catch |err| {
-                std.log.err("Error while processing input: {}", .{err});
-            };
-        },
-    }
+    gfx.handleEvent(ev);
+    scene_mgr.handleInput(ev) catch |err| {
+        std.log.err("Error while processing input: {}", .{err});
+    };
 }

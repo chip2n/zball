@@ -12,6 +12,7 @@ const std = @import("std");
 
 const sokol = @import("sokol");
 const sg = sokol.gfx;
+const sapp = sokol.app;
 const sglue = sokol.glue;
 
 const shd = @import("shader");
@@ -170,11 +171,6 @@ pub fn deinit() void {
     state.initialized = false;
 }
 
-pub fn resize(width: i32, height: i32) void {
-    state.window_size = .{ width, height };
-    state.camera.window_size = .{ @intCast(@max(0, width)), @intCast(@max(0, height)) };
-}
-
 // NOCOMMIT should we instead pass out an opaque handler to the attachment to use?
 pub fn beginOffscreenPass() void {
     sg.beginPass(.{
@@ -293,4 +289,17 @@ fn computeFSQParams() shd.VsFsqParams {
         model = m.scaling((2 * viewport_aspect) / aspect, 2, 1);
     }
     return shd.VsFsqParams{ .mvp = model };
+}
+
+pub fn handleEvent(ev: sapp.Event) void {
+    ui.handleEvent(ev);
+    switch (ev.type) {
+        .RESIZED => {
+            const width = ev.window_width;
+            const height = ev.window_height;
+            state.window_size = .{ width, height };
+            state.camera.window_size = .{ @intCast(@max(0, width)), @intCast(@max(0, height)) };
+        },
+        else => {},
+    }
 }
