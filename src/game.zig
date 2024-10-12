@@ -6,6 +6,7 @@ const sglue = sokol.glue;
 const sapp = sokol.app;
 
 const audio = @import("audio.zig");
+const input = @import("input.zig");
 const m = @import("math");
 const utils = @import("utils.zig");
 const shd = @import("shader");
@@ -143,10 +144,6 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
 
 pub var arena: std.heap.ArenaAllocator = undefined;
 
-/// Mouse position in unscaled pixels
-pub var mouse_pos: [2]f32 = .{ 0, 0 };
-pub var mouse_delta: [2]f32 = .{ 0, 0 };
-
 pub var time: f64 = 0;
 pub var dt: f32 = 0;
 
@@ -214,22 +211,18 @@ pub fn frame() !void {
         gfx.renderFramebuffer(transition_framebuffer, scene_mgr.transition_progress);
     }
 
-    // Reset mouse delta
-    mouse_delta = .{ 0, 0 };
+    input.frame();
 }
 
 // NOCOMMIT make sapp-agnostic
 pub fn handleEvent(ev: sapp.Event) void {
+    input.handleEvent(ev);
     gfx.ui.handleEvent(ev);
     switch (ev.type) {
         .RESIZED => {
             const width = ev.window_width;
             const height = ev.window_height;
             gfx.resize(width, height);
-        },
-        .MOUSE_MOVE => {
-            mouse_pos = .{ ev.mouse_x, ev.mouse_y };
-            mouse_delta = m.vadd(mouse_delta, .{ ev.mouse_dx, ev.mouse_dy });
         },
         else => {
             scene_mgr.handleInput(ev) catch |err| {
