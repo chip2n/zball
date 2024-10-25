@@ -657,8 +657,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 
     gfx.beginOffscreenPass();
-    try gfx.renderBackground(scene.time);
-    try gfx.renderMain();
+    gfx.renderBackground(scene.time);
+    gfx.renderMain();
     gfx.endOffscreenPass();
 }
 

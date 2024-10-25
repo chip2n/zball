@@ -99,7 +99,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     });
 
     gfx.beginOffscreenPass();
-    try gfx.renderMain(); // NOCOMMIT do or do not, there is no try
+    gfx.renderMain();
     gfx.endOffscreenPass();
 }
 

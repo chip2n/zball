@@ -183,7 +183,7 @@ pub fn endOffscreenPass() void {
     sg.endPass();
 }
 
-pub fn renderBackground(time: f32) !void {
+pub fn renderBackground(time: f32) void {
     sg.applyPipeline(state.bg.pip);
     const bg_params = shd.FsBgParams{ .time = time };
     sg.applyUniforms(.FS, shd.SLOT_fs_bg_params, sg.asRange(&bg_params));
@@ -191,7 +191,7 @@ pub fn renderBackground(time: f32) !void {
     sg.draw(0, 4, 1);
 }
 
-pub fn renderMain() !void {
+pub fn renderMain() void {
     sg.applyPipeline(state.offscreen.pip);
     const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
     sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
@@ -199,7 +199,10 @@ pub fn renderMain() !void {
     var bind = state.current_framebuffer.bind;
     sg.updateBuffer(bind.vertex_buffers[0], sg.asRange(result.verts));
     for (result.batches) |b| {
-        const tex = try texture.get(b.tex);
+        const tex = texture.get(b.tex) catch |err| {
+            std.log.warn("Could not render texture {}: {}", .{b.tex, err});
+            continue;
+        };
         bind.fs.images[shd.SLOT_tex] = tex.img;
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);

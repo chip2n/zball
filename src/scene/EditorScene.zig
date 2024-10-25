@@ -176,6 +176,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     }
 
     gfx.beginOffscreenPass();
-    try gfx.renderMain();
+    gfx.renderMain();
     gfx.endOffscreenPass();
 }
