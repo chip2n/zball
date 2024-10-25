@@ -80,7 +80,7 @@ pub fn build(b: *Build) !void {
     var sprite_image_path: std.Build.LazyPath = undefined;
     { // Aseprite
         const dep_aseprite = b.dependency("aseprite", .{
-            .target = target,
+            .target = b.host,
             .optimize = optimize,
         });
         const art_aseprite = dep_aseprite.artifact("aseprite");
