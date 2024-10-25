@@ -171,7 +171,6 @@ pub fn deinit() void {
     state.initialized = false;
 }
 
-// NOCOMMIT should we instead pass out an opaque handler to the attachment to use?
 pub fn beginOffscreenPass() void {
     sg.beginPass(.{
         .action = state.offscreen.pass_action,
@@ -213,7 +212,6 @@ pub fn screenToWorld(pos: [2]f32) [2]f32 {
     return state.camera.screenToWorld(pos);
 }
 
-// NOCOMMIT not stoked about this
 pub fn cameraZoom() f32 {
     return state.camera.zoom();
 }

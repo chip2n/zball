@@ -86,7 +86,6 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         scene.settings_open = false;
     }
 
-    // NOCOMMIT how do we want to access these textures?
     gfx.setTexture(gfx.spritesheetTexture());
     gfx.render(.{
         .src = m.irect(sprite.sprites.title.bounds),
