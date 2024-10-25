@@ -16,8 +16,6 @@ const sg = sokol.gfx;
 const sapp = sokol.app;
 
 const Brick = game.Brick;
-const ExplosionEmitter = game.ExplosionEmitter; // TODO should not be needed here
-
 const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 
@@ -126,11 +124,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             try level.writeLevel(&data, file.writer());
         }
     }
-
-    // const editor_texture = try texture.get(scene.tex);
-    // if (x >= editor_texture.width) return;
-    // if (y >= editor_texture.height) return;
-    // try texture.draw(scene.tex, x, y);
 
     // Render all bricks
     // TODO refactor?
