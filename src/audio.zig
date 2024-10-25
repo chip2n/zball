@@ -13,7 +13,7 @@ pub const audio_data = .{
     .explode = embed("assets/explode.wav"),
     .powerup = embed("assets/powerup.wav"),
     .death = embed("assets/death.wav"),
-    .music = embed("assets/music.wav"),
+    .laser = embed("assets/laser.wav"),
 };
 
 const AudioCategory = enum { sfx, bg };

@@ -238,6 +238,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
                 _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
                 scene.laser_cooldown_timer = laser_cooldown;
+                audio.play(.{ .clip = .laser });
             }
         }
 
