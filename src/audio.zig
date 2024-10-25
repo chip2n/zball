@@ -31,6 +31,7 @@ pub fn init() void {
         .stream_cb = stream_callback,
         .logger = .{ .func = sokol.log.func },
     });
+    state.num_channels = @intCast(saudio.channels()); // may be different than requested
 }
 
 fn stream_callback(buffer: [*c]f32, num_frames: i32, num_chan: i32) callconv(.C) void {
@@ -99,6 +100,7 @@ const AudioTrack = struct {
 pub const AudioState = struct {
     const Self = @This();
 
+    num_channels: usize = 2,
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
     playing: [16]AudioTrack = .{.{}} ** 16,
@@ -130,23 +132,22 @@ fn writeSamples(
     volume: f32,
 ) usize {
     const clip_samples = clip.samples();
-    const sample_offset = frame_offset * clip.header.nbrChannels;
-    const frames_left = @divExact(clip_samples.len, clip.header.nbrChannels) - frame_offset;
+    const sample_offset = frame_offset * clip.format.nbrChannels;
+    const frames_left = @divExact(clip_samples.len, clip.format.nbrChannels) - frame_offset;
     const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left));
-    const num_channels: usize = @intCast(saudio.channels());
 
-    const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
-    const dst = output[0 .. frames_to_write * num_channels];
+    const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.format.nbrChannels];
+    const dst = output[0 .. frames_to_write * state.num_channels];
 
     for (src, 0..) |s, i| {
         const fs: f32 = @floatFromInt(s);
         const div: usize = if (fs < 0) @abs(std.math.minInt(i16)) else std.math.maxInt(i16);
         const result = (fs / @as(f32, @floatFromInt(div)));
         std.debug.assert(-1 <= result and result <= 1);
-        if (clip.header.nbrChannels == 1) {
-            dst[i * num_channels + 0] += result * volume;
-            dst[i * num_channels + 1] += result * volume;
-        } else if (clip.header.nbrChannels == 2) {
+        if (clip.format.nbrChannels == 1) {
+            dst[i * state.num_channels + 0] += result * volume;
+            dst[i * state.num_channels + 1] += result * volume;
+        } else if (clip.format.nbrChannels == 2) {
             dst[i] += result * volume;
         } else unreachable;
     }
