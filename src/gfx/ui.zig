@@ -14,7 +14,7 @@ const Texture = @import("texture.zig").Texture;
 const WindowData = struct {
     focus_id: u64 = 0,
     focus_prev_id: u64 = 0,
-    draw_list: [128]DrawListEntry = undefined, // TODO allocator instead?
+    draw_list: [128]DrawListEntry = undefined,
     draw_list_idx: usize = 0,
     same_line: bool = false,
     cursor_advance: [2]f32 = .{ 0, 0 },
@@ -25,8 +25,6 @@ const WindowData = struct {
         data.draw_list_idx += 1;
     }
 };
-
-var window_data: std.AutoHashMap(u64, WindowData) = undefined;
 
 const DrawListEntry = union(enum) {
     text: struct {
@@ -46,6 +44,7 @@ const DrawListEntry = union(enum) {
     },
 };
 
+var window_data: std.AutoHashMap(u64, WindowData) = undefined;
 var origin: [2]f32 = .{ 0, 0 };
 var cursor: [2]f32 = .{ 0, 0 };
 var pivot: [2]f32 = .{ 0, 0 };
@@ -84,13 +83,14 @@ pub fn init(
     b: *BatchRenderer,
     spritesheet_texture: Texture,
     font_texture: Texture,
-) void {
+) !void {
     batch = b;
     tex_spritesheet = spritesheet_texture;
     tex_font = font_texture;
     window_data = std.AutoHashMap(u64, WindowData).init(allocator);
-    window_stack = std.ArrayList(u64).init(allocator);
-    prev_window_stack = std.ArrayList(u64).init(allocator);
+    try window_data.ensureTotalCapacity(16);
+    window_stack = try std.ArrayList(u64).initCapacity(allocator, 16);
+    prev_window_stack = try std.ArrayList(u64).initCapacity(allocator, 16);
 }
 
 pub fn deinit() void {
@@ -101,7 +101,7 @@ pub fn deinit() void {
 
 pub const BeginDesc = struct {};
 
-pub fn begin(v: BeginDesc) !void {
+pub fn begin(v: BeginDesc) void {
     _ = v;
     window_stack.clearRetainingCapacity();
 }
@@ -123,9 +123,7 @@ pub fn end() void {
     }
 
     prev_window_stack.clearRetainingCapacity();
-    // TODO can we avoid memory shenanigans by allocating once in the beginning
-    // so that memory allocations cannot fail?
-    prev_window_stack.appendSlice(window_stack.items) catch unreachable;
+    prev_window_stack.appendSliceAssumeCapacity(window_stack.items);
     window_stack.clearRetainingCapacity();
 }
 
@@ -163,7 +161,7 @@ pub const BeginWindowDesc = struct {
     style: WindowStyle = .dialog,
 };
 
-pub fn beginWindow(v: BeginWindowDesc) !void {
+pub fn beginWindow(v: BeginWindowDesc) void {
     const id = genId(v.id);
     win_id = id;
 
@@ -177,9 +175,9 @@ pub fn beginWindow(v: BeginWindowDesc) !void {
     cursor[1] = v.y;
     pivot = v.pivot;
 
-    try window_stack.append(id);
+    window_stack.appendAssumeCapacity(id);
 
-    const r = try window_data.getOrPut(id);
+    const r = window_data.getOrPutAssumeCapacity(id);
     if (!r.found_existing) {
         r.value_ptr.* = .{};
     } else {

@@ -634,22 +634,22 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 
     { // Render game menus
-        try ui.begin(.{});
+        ui.begin(.{});
         defer ui.end();
 
         switch (scene.menu) {
             .none => {},
             .pause => {
-                if (try renderPauseMenu(&scene.menu)) {
+                if (renderPauseMenu(&scene.menu)) {
                     game.scene_mgr.switchTo(.title);
                 }
             },
             .settings => {
                 // We still "render" the pause menu, but flagging it as hidden to preserve its state
-                if (try renderPauseMenu(&scene.menu)) {
+                if (renderPauseMenu(&scene.menu)) {
                     game.scene_mgr.switchTo(.title);
                 }
-                if (try settings.renderMenu()) {
+                if (settings.renderMenu()) {
                     scene.menu = .pause;
                 }
             },
@@ -866,8 +866,8 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
     }
 }
 
-fn renderPauseMenu(menu: *GameMenu) !bool {
-    try ui.beginWindow(.{
+fn renderPauseMenu(menu: *GameMenu) bool {
+    ui.beginWindow(.{
         .id = "pause",
         .x = constants.viewport_size[0] / 2,
         .y = constants.viewport_size[1] / 2,

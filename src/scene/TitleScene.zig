@@ -32,11 +32,11 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         scene.settings_open = false;
     }
 
-    try ui.begin(.{});
+    ui.begin(.{});
     defer ui.end();
 
     { // Footer
-        try ui.beginWindow(.{
+        ui.beginWindow(.{
             .id = "footer",
             .x = 8,
             .y = constants.viewport_size[1],
@@ -49,7 +49,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     }
 
     { // Main menu
-        try ui.beginWindow(.{
+        ui.beginWindow(.{
             .id = "main",
             .x = constants.viewport_size[0] / 2,
             .y = constants.viewport_size[1] / 2 + 24,
@@ -82,7 +82,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         }
     }
 
-    if (scene.settings_open and try settings.renderMenu()) {
+    if (scene.settings_open and settings.renderMenu()) {
         scene.settings_open = false;
     }
 
@@ -99,7 +99,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     });
 
     gfx.beginOffscreenPass();
-    try gfx.renderMain();
+    try gfx.renderMain(); // NOCOMMIT do or do not, there is no try
     gfx.endOffscreenPass();
 }
 

@@ -156,7 +156,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
         state.bg.bind.vertex_buffers[0] = state.quad_vbuf;
     }
 
-    ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
+    try ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();
 
     state.initialized = true;

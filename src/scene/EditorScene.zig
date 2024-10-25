@@ -155,10 +155,10 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     }
 
     { // Palette
-        try ui.begin(.{});
+        ui.begin(.{});
         defer ui.end();
 
-        try ui.beginWindow(.{
+        ui.beginWindow(.{
             .id = "palette",
             .x = 0,
             .y = constants.viewport_size[1] - 8,

@@ -4,8 +4,8 @@ const audio = @import("audio.zig");
 const gfx = @import("gfx.zig");
 const ui = gfx.ui;
 
-pub fn renderMenu() !bool {
-    try ui.beginWindow(.{
+pub fn renderMenu() bool {
+    ui.beginWindow(.{
         .id = "settings",
         .x = constants.viewport_size[0] / 2,
         .y = constants.viewport_size[1] / 2,
