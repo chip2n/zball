@@ -31,7 +31,6 @@ pub fn init(allocator: std.mem.Allocator) !EditorScene {
     const bricks = try allocator.alloc(Brick, 20 * 20);
     errdefer allocator.free(bricks);
 
-    // TODO reuse
     for (0..20) |y| {
         for (0..20) |x| {
             const i = y * 20 + x;
@@ -42,7 +41,6 @@ pub fn init(allocator: std.mem.Allocator) !EditorScene {
         }
     }
 
-    // TODO handle allocated memory properly
     const width = constants.viewport_size[0];
     const height = constants.viewport_size[1];
     const editor_texture_data = try allocator.alloc(u32, width * height);
@@ -108,11 +106,8 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             brick.destroyed = true;
         }
         if (input.pressed(.editor_save)) {
-            std.log.warn("SAVE", .{});
-            // TODO overwrite if already exists
             const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
             defer file.close();
-            // TODO stop with this 20 nonsense
             var data: [20 * 20]level.Brick = undefined;
             for (scene.bricks, 0..) |b, i| {
                 var id: u8 = 0;
@@ -126,7 +121,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     }
 
     // Render all bricks
-    // TODO refactor?
     gfx.setTexture(gfx.spritesheetTexture());
     for (scene.bricks) |brick| {
         if (brick.destroyed) continue;
