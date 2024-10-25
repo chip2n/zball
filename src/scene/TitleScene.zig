@@ -17,7 +17,7 @@ const sg = sokol.gfx;
 const TitleScene = @This();
 
 idx: usize = 0,
-settings: bool = false,
+settings_open: bool = false,
 
 pub fn init() TitleScene {
     return .{};
@@ -29,7 +29,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     input.lockMouse(true);
 
     if (input.pressed(.back)) {
-        scene.settings = false;
+        scene.settings_open = false;
     }
 
     try ui.begin(.{});
@@ -63,7 +63,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
             game.scene_mgr.switchTo(.game);
         }
         if (ui.selectionItem("Settings", .{})) {
-            scene.settings = true;
+            scene.settings_open = true;
         }
 
         // We only support the editor on desktop builds (don't want to
@@ -82,8 +82,8 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         }
     }
 
-    if (scene.settings and try settings.renderMenu()) {
-        scene.settings = false;
+    if (scene.settings_open and try settings.renderMenu()) {
+        scene.settings_open = false;
     }
 
     // NOCOMMIT how do we want to access these textures?

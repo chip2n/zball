@@ -130,7 +130,7 @@ death_timer: f32 = 0,
 
 flame_timer: f32 = 0,
 laser_timer: f32 = 0,
-laser_cooldown: f32 = 0,
+laser_cooldown_timer: f32 = 0,
 
 pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
     const bricks = try allocator.alloc(Brick, lvl.width * lvl.height);
@@ -233,11 +233,11 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (input.down(.shoot)) shoot: {
             if (scene.ball_state == .idle) {
                 scene.ball_state = .alive;
-            } else if (scene.paddle_type == .laser and scene.laser_cooldown <= 0) {
+            } else if (scene.paddle_type == .laser and scene.laser_cooldown_timer <= 0) {
                 const bounds = scene.paddleBounds();
                 _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
                 _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
-                scene.laser_cooldown = laser_cooldown;
+                scene.laser_cooldown_timer = laser_cooldown;
             }
         }
 
@@ -462,7 +462,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         }
 
         laser: { // Laser powerup
-            _ = scene.tickDownTimer("laser_cooldown", game_dt);
+            _ = scene.tickDownTimer("laser_cooldown_timer", game_dt);
             if (!scene.tickDownTimer("laser_timer", game_dt)) break :laser;
             scene.paddle_type = .normal;
         }
