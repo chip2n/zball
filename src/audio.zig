@@ -161,15 +161,18 @@ const wav_magic = std.mem.bytesToValue(u32, "WAVE");
 const fmt_magic = std.mem.bytesToValue(u32, "fmt ");
 const data_magic = std.mem.bytesToValue(u32, "data");
 
-const WavHeader = packed struct {
+const MasterRiffChunk = packed struct {
     // zig fmt: off
-
-    // [Master RIFF chunk]
     fileTypeBlocID : u32, // Identifier « RIFF »  (0x52, 0x49, 0x46, 0x46)
     fileSize       : u32, // Overall file size minus 8 bytes
     fileFormatID   : u32, // Format = « WAVE »  (0x57, 0x41, 0x56, 0x45)
+    // zig fmt: on
 
-    // [Chunk describing the data format]
+    const byte_size = @divExact(@bitSizeOf(@This()), 8);
+};
+
+const WavFormatChunk = packed struct {
+    // zig fmt: off
     formatBlocID   : u32, // Identifier « fmt␣ »  (0x66, 0x6D, 0x74, 0x20)
     blocSize       : u32, // Chunk size minus 8 bytes  (0x10)
     audioFormat    : u16, // Audio format (1: PCM integer, 3: IEEE 754 float)
@@ -178,26 +181,18 @@ const WavHeader = packed struct {
     bytePerSec     : u32, // Number of bytes to read per second (Frequence * BytePerBloc).
     bytePerBloc    : u16, // Number of bytes per block (NbrChannels * BitsPerSample / 8).
     bitsPerSample  : u16, // Number of bits per sample
-
-   // [Chunk containing the sampled data]
-    dataBlocID     : u32, // Identifier « data »  (0x64, 0x61, 0x74, 0x61)
-    dataSize       : u32, // SampledData size
-
     // zig fmt: on
 
-    const byte_size = @bitSizeOf(WavHeader) / @bitSizeOf(u8);
-
-    comptime {
-        std.debug.assert(byte_size == 44);
-    }
+    const byte_size = @divExact(@bitSizeOf(@This()), 8);
 };
 
 pub const WavData = struct {
-    header: WavHeader,
+    file_size: u32,
+    format: WavFormatChunk,
     data: []const u8,
 
     fn frameCount(self: WavData) usize {
-        return @divExact(self.samples().len, self.header.nbrChannels);
+        return @divExact(self.samples().len, self.format.nbrChannels);
     }
 
     fn samples(self: WavData) []align(1) const i16 {
@@ -206,19 +201,37 @@ pub const WavData = struct {
     }
 };
 
-pub fn parse(data: []const u8) error{InvalidWav}!WavData {
-    if (data.len < WavHeader.byte_size) return error.InvalidWav;
-    const header = std.mem.bytesToValue(WavHeader, data.ptr);
-    if (header.fileTypeBlocID != riff_magic) return error.InvalidWav;
-    if (header.fileFormatID != wav_magic) return error.InvalidWav;
-    if (header.formatBlocID != fmt_magic) return error.InvalidWav;
-    if (header.blocSize != 16) return error.InvalidWav; // TODO
-    if (header.dataBlocID != data_magic) return error.InvalidWav;
-    if (header.bytePerSec != header.frequence * header.bytePerBloc) return error.InvalidWav;
-    if (header.bytePerBloc != header.nbrChannels * header.bitsPerSample / 8) return error.InvalidWav;
+pub fn parse(data: []const u8) !WavData {
+    var fbs = std.io.fixedBufferStream(data);
+    const reader = fbs.reader();
 
-    const samples = data[WavHeader.byte_size .. WavHeader.byte_size + header.dataSize];
-    return .{ .header = header, .data = samples };
+    const file_type_bloc_id = try reader.readInt(u32, .little);
+    if (file_type_bloc_id != riff_magic) return error.InvalidWav;
+
+    const file_size = try reader.readInt(u32, .little);
+
+    const file_format_id = try reader.readInt(u32, .little);
+    if (file_format_id != wav_magic) return error.InvalidWav;
+
+    var chunk: WavFormatChunk = undefined;
+    const bytes = try reader.readBytesNoEof(WavFormatChunk.byte_size);
+    @memcpy(std.mem.asBytes(&chunk)[0..WavFormatChunk.byte_size], bytes[0..WavFormatChunk.byte_size]);
+
+    if (chunk.formatBlocID != fmt_magic) return error.InvalidWav;
+    if (chunk.blocSize < 16) return error.InvalidWav;
+    if (chunk.bytePerSec != chunk.frequence * chunk.bytePerBloc) return error.InvalidWav;
+    if (chunk.bytePerBloc != chunk.nbrChannels * chunk.bitsPerSample / 8) return error.InvalidWav;
+
+    try reader.skipBytes(chunk.blocSize - (WavFormatChunk.byte_size - 8), .{});
+
+    const data_bloc_id = try reader.readInt(u32, .little);
+    if (data_bloc_id != data_magic) return error.InvalidWav;
+
+    const data_size = try reader.readInt(u32, .little);
+
+    const samples_start = MasterRiffChunk.byte_size + WavFormatChunk.byte_size + 8;
+    const samples = data[samples_start .. samples_start + data_size];
+    return .{ .file_size = file_size, .format = chunk, .data = samples };
 }
 
 pub fn embed(comptime path: []const u8) WavData {
@@ -229,13 +242,10 @@ pub fn embed(comptime path: []const u8) WavData {
 test "parse wav" {
     const data = @embedFile("assets/bounce.wav");
     const result = try parse(data);
-    const header = result.header;
+    const format = result.format;
     const samples = result.data;
 
-    const expected = WavHeader{
-        .fileTypeBlocID = riff_magic,
-        .fileSize = 15940,
-        .fileFormatID = wav_magic,
+    const expected_format = WavFormatChunk{
         .formatBlocID = fmt_magic,
         .blocSize = 16,
         .audioFormat = 1,
@@ -244,9 +254,8 @@ test "parse wav" {
         .bytePerSec = 88200,
         .bytePerBloc = 2,
         .bitsPerSample = 16,
-        .dataBlocID = data_magic,
-        .dataSize = 15904,
     };
-    try std.testing.expectEqual(expected, header);
+    try std.testing.expectEqual(15940, result.file_size);
+    try std.testing.expectEqual(expected_format, format);
     try std.testing.expectEqual(15904, samples.len);
 }
