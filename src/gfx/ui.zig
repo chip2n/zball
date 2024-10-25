@@ -2,6 +2,7 @@ const std = @import("std");
 const root = @import("root");
 const font = @import("font");
 const constants = @import("../constants.zig");
+const input = @import("../input.zig");
 const m = @import("math");
 const sprites = @import("sprite");
 const Sprite = sprites.Sprite;
@@ -137,10 +138,9 @@ pub fn handleEvent(ev: sapp.Event) void {
             io.mouse_pressed = ev.mouse_button;
         },
         .MOUSE_MOVE => {
-            // const world_mouse_pos = input.mouse();
-            // NOCOMMIT incorrect now - we should handle this some other way
-            io.mouse_pos[0] = ev.mouse_x;
-            io.mouse_pos[1] = ev.mouse_y;
+            const world_mouse_pos = input.mouse();
+            io.mouse_pos[0] = world_mouse_pos[0];
+            io.mouse_pos[1] = world_mouse_pos[1];
         },
         else => {},
     }
