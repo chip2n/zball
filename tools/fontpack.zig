@@ -142,7 +142,6 @@ pub fn pack(
         }
         c.stbtt_MakeCodepointBitmap(&font, bitmap[y * stride + x ..].ptr, x2 - x1, y2 - y1, @intCast(stride), scale, scale, ch);
         glyphs[i] = .{
-            // TODO refactor these params to make it clear that they are tex coords
             .pos = .{ x, y },
             .size = .{ @intCast(x2 - x1), @intCast(y2 - y1) },
             .bbox = .{ @intCast(x1), @intCast(y1), @intCast(x2), @intCast(y2) },

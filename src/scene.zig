@@ -47,7 +47,6 @@ pub const SceneManager = struct {
     levels: []Level,
     rendering_next: bool = false,
 
-    // TODO: Do we actually need the allocator?
     pub fn init(
         allocator: std.mem.Allocator,
         levels: []Level,

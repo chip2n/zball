@@ -43,7 +43,8 @@ pub const TextRenderer = struct {
     }
 
     fn findGlyph(ch: u8) ?font.Glyph {
-        // TODO inefficient - make a lookup table
+        // We could make a lookup table for this but we're not going to display
+        // much text in this game
         for (font.glyphs) |g| {
             if (g.ch == ch) return g;
         }

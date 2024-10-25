@@ -4,9 +4,7 @@ const root = @import("root");
 const sokol = @import("sokol");
 const saudio = sokol.audio;
 
-const num_channels = 2;
-const sample_buf_length = 4096; // TODO
-const sample_rate = 44100; // TODO
+const sample_buf_length = 4096;
 
 const AudioHandle = usize;
 
@@ -28,11 +26,8 @@ var state = AudioState{};
 
 pub fn init() void {
     saudio.setup(.{
-        // TODO: The sample_rate and num_channels parameters are only hints for
-        // the audio backend, it isn't guaranteed that those are the values used
-        // for actual playback.
         .num_channels = 2,
-        .buffer_frames = 512, // lowers audio latency (TODO shitty on web though)
+        .buffer_frames = 512, // lowers audio latency
         .stream_cb = stream_callback,
         .logger = .{ .func = sokol.log.func },
     });
@@ -137,7 +132,8 @@ fn writeSamples(
     const clip_samples = clip.samples();
     const sample_offset = frame_offset * clip.header.nbrChannels;
     const frames_left = @divExact(clip_samples.len, clip.header.nbrChannels) - frame_offset;
-    const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left)); // TODO rename sample_buf_length?
+    const frames_to_write = @min(sample_buf_length, @min(frame_count, frames_left));
+    const num_channels: usize = @intCast(saudio.channels());
 
     const src = clip_samples[sample_offset .. sample_offset + frames_to_write * clip.header.nbrChannels];
     const dst = output[0 .. frames_to_write * num_channels];
