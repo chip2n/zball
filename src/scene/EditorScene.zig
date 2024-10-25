@@ -44,6 +44,7 @@ pub fn init(allocator: std.mem.Allocator) !EditorScene {
     const width = constants.viewport_size[0];
     const height = constants.viewport_size[1];
     const editor_texture_data = try allocator.alloc(u32, width * height);
+    defer allocator.free(editor_texture_data);
     for (editor_texture_data) |*d| {
         d.* = 0x000000;
     }
