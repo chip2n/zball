@@ -39,7 +39,7 @@ const GfxState = struct {
         pip: sg.Pipeline = .{},
         pass_action: sg.PassAction = .{},
     } = .{},
-    fsq: struct {
+    scene: struct {
         pip: sg.Pipeline = .{},
         bind: sg.Bindings = .{},
         pass_action: sg.PassAction = .{},
@@ -113,15 +113,15 @@ pub fn init(allocator: std.mem.Allocator) !void {
     });
 
     // shader and pipeline object to render a fullscreen quad
-    var fsq_pip_desc: sg.PipelineDesc = .{
-        .shader = sg.makeShader(shd.fsqShaderDesc(sg.queryBackend())),
+    var scene_pip_desc: sg.PipelineDesc = .{
+        .shader = sg.makeShader(shd.sceneShaderDesc(sg.queryBackend())),
         .primitive_type = .TRIANGLE_STRIP,
     };
-    fsq_pip_desc.layout.attrs[shd.ATTR_vs_fsq_pos].format = .FLOAT2;
-    fsq_pip_desc.layout.attrs[shd.ATTR_vs_fsq_in_uv].format = .FLOAT2;
-    state.fsq.pip = sg.makePipeline(fsq_pip_desc);
-    // setup pass action for fsq render pass
-    state.fsq.pass_action.colors[0] = .{
+    scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_pos].format = .FLOAT2;
+    scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_in_uv].format = .FLOAT2;
+    state.scene.pip = sg.makePipeline(scene_pip_desc);
+    // setup pass action for scene render pass
+    state.scene.pass_action.colors[0] = .{
         .load_action = .CLEAR,
         .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
     };
@@ -136,8 +136,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     // resource bindings to render the fullscreen quad (composed from the
     // offscreen render target textures
-    state.fsq.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
-    state.fsq.bind.fs.samplers[0] = smp;
+    state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
+    state.scene.bind.fs.samplers[0] = smp;
 
     { // Background shader
         var pip_desc: sg.PipelineDesc = .{
@@ -247,7 +247,7 @@ pub fn createFramebuffer() Framebuffer {
 }
 
 pub fn beginFrame() void {
-    sg.beginPass(.{ .action = state.fsq.pass_action, .swapchain = sglue.swapchain() });
+    sg.beginPass(.{ .action = state.scene.pass_action, .swapchain = sglue.swapchain() });
 }
 
 pub fn endFrame() void {
@@ -260,23 +260,23 @@ pub fn setFramebuffer(fb: Framebuffer) void {
 }
 
 pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
-    const fsq_params = computeFSQParams();
-    var fs_fsq_params = shd.FsFsqParams{ .value = 1.0 };
+    const scene_params = computeSceneParams();
+    var fs_scene_params = shd.FsSceneParams{ .value = 1.0 };
 
     // Update uniform transition progress (shader uses it to display part of the
     // screen while a transition is in progress)
-    fs_fsq_params.value = transition_progress;
+    fs_scene_params.value = transition_progress;
 
-    state.fsq.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
-    sg.applyPipeline(state.fsq.pip);
-    state.fsq.bind.vertex_buffers[0] = state.quad_vbuf;
-    sg.applyBindings(state.fsq.bind);
-    sg.applyUniforms(.VS, shd.SLOT_vs_fsq_params, sg.asRange(&fsq_params));
-    sg.applyUniforms(.FS, shd.SLOT_fs_fsq_params, sg.asRange(&fs_fsq_params));
+    state.scene.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
+    sg.applyPipeline(state.scene.pip);
+    state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
+    sg.applyBindings(state.scene.bind);
+    sg.applyUniforms(.VS, shd.SLOT_vs_scene_params, sg.asRange(&scene_params));
+    sg.applyUniforms(.FS, shd.SLOT_fs_scene_params, sg.asRange(&fs_scene_params));
     sg.draw(0, 4, 1);
 }
 
-fn computeFSQParams() shd.VsFsqParams {
+fn computeSceneParams() shd.VsSceneParams {
     const width: f32 = @floatFromInt(state.window_size[0]);
     const height: f32 = @floatFromInt(state.window_size[1]);
     const aspect = width / height;
@@ -289,7 +289,7 @@ fn computeFSQParams() shd.VsFsqParams {
     if (aspect > viewport_aspect) {
         model = m.scaling((2 * viewport_aspect) / aspect, 2, 1);
     }
-    return shd.VsFsqParams{ .mvp = model };
+    return shd.VsSceneParams{ .mvp = model };
 }
 
 pub fn handleEvent(ev: sapp.Event) void {

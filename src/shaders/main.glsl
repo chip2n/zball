@@ -37,13 +37,12 @@ void main() {
 
 @program main vs fs
 
-// TODO name this "scene shader"?
-//* fullscreen quad shader
+//* scene shader
 
-@vs vs_fsq
+@vs vs_scene
 @glsl_options flip_vert_y
 
-uniform vs_fsq_params {
+uniform vs_scene_params {
     mat4 mvp;
 };
 
@@ -60,10 +59,10 @@ void main() {
 }
 @end
 
-@fs fs_fsq
+@fs fs_scene
 uniform texture2D tex;
 uniform sampler smp;
-uniform fs_fsq_params {
+uniform fs_scene_params {
     float value;
 };
 
@@ -108,7 +107,7 @@ void main() {
 }
 @end
 
-@program fsq vs_fsq fs_fsq
+@program scene vs_scene fs_scene
 
 //* background shader
 
