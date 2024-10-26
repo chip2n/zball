@@ -109,7 +109,7 @@ menu: GameMenu = .none,
 time: f32 = 0,
 time_scale: f32 = 1,
 
-lives: u8 = 1,
+lives: u8 = 3,
 score: u32 = 0,
 
 paddle_type: PaddleType = .normal,
