@@ -32,7 +32,9 @@ const pi = std.math.pi;
 const paddle_speed: f32 = 180;
 const ball_w: f32 = sprite.sprites.ball.bounds.w;
 const ball_h: f32 = sprite.sprites.ball.bounds.h;
-const ball_speed: f32 = 200;
+const ball_base_speed: f32 = 200;
+const ball_speed_min: f32 = 100;
+const ball_speed_max: f32 = 300;
 const initial_paddle_pos: [2]f32 = .{
     constants.viewport_size[0] / 2,
     constants.viewport_size[1] - 4,
@@ -98,6 +100,12 @@ const PowerupType = enum {
 
     /// Shrink the paddle size
     paddle_shrink,
+
+    /// Increase the ball speed
+    ball_speed_up,
+
+    /// Decrease the ball speed
+    ball_speed_down,
 };
 
 const GameScene = @This();
@@ -121,6 +129,7 @@ paddle_size: PaddleSize = .normal,
 entities: []Entity,
 
 ball_state: BallState = .idle,
+ball_speed: f32 = ball_base_speed,
 
 // When player clears the board, we start this timer. When it reaches zero,
 // we switch to the next board (or the title screen, if the board cleared
@@ -288,8 +297,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                             scene.updateIdleBall();
                         },
                         .alive => {
-                            ball.pos[0] += ball.dir[0] * ball_speed * game_dt;
-                            ball.pos[1] += ball.dir[1] * ball_speed * game_dt;
+                            ball.pos[0] += ball.dir[0] * scene.ball_speed * game_dt;
+                            ball.pos[1] += ball.dir[1] * scene.ball_speed * game_dt;
                         },
                     }
                     const new_ball_pos = ball.pos;
@@ -836,6 +845,8 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .laser => sprite.sprites.pow_laser,
         .paddle_grow => sprite.sprites.pow_paddlegrow,
         .paddle_shrink => sprite.sprites.pow_paddleshrink,
+        .ball_speed_up => sprite.sprites.pow_ballspeedup,
+        .ball_speed_down => sprite.sprites.pow_ballspeeddown,
     };
 }
 
@@ -874,6 +885,12 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
             if (i > 0) {
                 scene.paddle_size = @enumFromInt(i - 1);
             }
+        },
+        .ball_speed_up => {
+            scene.ball_speed = @min(ball_speed_max, scene.ball_speed + 50);
+        },
+        .ball_speed_down => {
+            scene.ball_speed = @max(ball_speed_min, scene.ball_speed - 50);
         },
     }
 }
