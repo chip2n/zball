@@ -153,7 +153,7 @@ pub const BatchRenderer = struct {
         self.batches[0].tex = tex;
 
         for (buf) |cmd| {
-            if (tex.id != cmd.tex().handle.id) {
+            if (tex != cmd.tex().handle) {
                 // Make new batch
                 tex = cmd.tex().handle;
                 tw = cmd.tex().tw;

@@ -61,9 +61,6 @@ var state: GfxState = .{};
 pub fn init(allocator: std.mem.Allocator) !void {
     std.debug.assert(!state.initialized);
 
-    texture.init(allocator);
-    errdefer texture.deinit();
-
     state.camera = Camera.init(.{
         .pos = .{ constants.viewport_size[0] / 2, constants.viewport_size[1] / 2 },
         .viewport_size = constants.viewport_size,
@@ -164,10 +161,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
 pub fn deinit() void {
     std.debug.assert(state.initialized);
-
-    texture.deinit();
     ui.deinit();
-
     state.initialized = false;
 }
 

@@ -1,39 +1,28 @@
 const std = @import("std");
+const constants = @import("../constants.zig");
 const sokol = @import("sokol");
 const sg = sokol.gfx;
-const zpool = @import("zpool");
+
+const max_textures = constants.max_textures;
 
 const c = @cImport({
     @cInclude("stb_image.h");
 });
 
-const TexturePool = zpool.Pool(16, 16, TextureData, struct { data: TextureData });
+var textures: [max_textures]TextureData = .{.{}} ** max_textures;
 
-var pool: TexturePool = undefined;
-
-pub const TextureUsage = enum {
-    immutable,
-    mutable,
-};
-
-pub const Texture = TexturePool.Handle;
+pub const Texture = usize;
 
 const TextureData = struct {
-    desc: sg.ImageDesc,
-    img: sg.Image,
-    width: usize,
-    height: usize,
-    data: []u8,
+    active: bool = false,
+    desc: sg.ImageDesc = .{},
+    img: sg.Image = .{},
+    width: usize = 0,
+    height: usize = 0,
+    data: []u8 = undefined,
 };
 
-pub fn init(allocator: std.mem.Allocator) void {
-    pool = TexturePool.init(allocator);
-}
-
-pub fn deinit() void {
-    pool.deinit();
-    pool = undefined;
-}
+pub const TextureUsage = enum { immutable, mutable };
 
 pub fn loadPNG(v: struct { data: []const u8, usage: TextureUsage = .immutable }) !Texture {
     var x: c_int = undefined;
@@ -53,15 +42,15 @@ pub fn loadPNG(v: struct { data: []const u8, usage: TextureUsage = .immutable })
     const img_data_slice = img_data[0..size];
     const img = makeSokolImage(&desc, img_data_slice);
 
-    const handle = try pool.add(.{
-        .data = .{
-            .desc = desc,
-            .img = img,
-            .width = @intCast(x),
-            .height = @intCast(y),
-            .data = img_data_slice,
-        },
-    });
+    const handle = try newTextureHandle();
+    textures[handle] = .{
+        .active = true,
+        .desc = desc,
+        .img = img,
+        .width = @intCast(x),
+        .height = @intCast(y),
+        .data = img_data_slice,
+    };
 
     return handle;
 }
@@ -80,21 +69,23 @@ pub fn loadRGB8(v: struct { data: []u8, width: usize, height: usize, usage: Text
 
     const img = makeSokolImage(&desc, v.data[0..size]);
 
-    const handle = try pool.add(.{
-        .data = .{
-            .desc = desc,
-            .img = img,
-            .width = v.width,
-            .height = v.height,
-            .data = v.data,
-        },
+    const handle = try newTextureHandle();
+    textures[handle] = (.{
+        .active = true,
+        .desc = desc,
+        .img = img,
+        .width = v.width,
+        .height = v.height,
+        .data = v.data,
     });
 
     return handle;
 }
 
 pub fn get(handle: Texture) !TextureData {
-    return try pool.getColumn(handle, .data);
+    const tex = textures[handle];
+    if (!tex.active) return error.TextureNotFound;
+    return tex;
 }
 
 fn makeSokolImage(desc: *sg.ImageDesc, data: []const u8) sg.Image {
@@ -113,7 +104,7 @@ fn makeSokolImage(desc: *sg.ImageDesc, data: []const u8) sg.Image {
 }
 
 pub fn draw(handle: Texture, x: usize, y: usize) !void {
-    const tex = try pool.getColumnPtr(handle, .data);
+    const tex = try get(handle);
     std.debug.assert(x < tex.desc.width);
     std.debug.assert(y < tex.desc.height);
 
@@ -121,4 +112,12 @@ pub fn draw(handle: Texture, x: usize, y: usize) !void {
     data[y * tex.width + x] = 0xFFFF0000;
     tex.desc.data.subimage[0][0] = sg.asRange(tex.data);
     sg.updateImage(tex.img, tex.desc.data);
+}
+
+fn newTextureHandle() !usize {
+    for (textures, 0..) |t, i| {
+        if (t.active) continue;
+        return i;
+    }
+    return error.MaxTexturesReached;
 }

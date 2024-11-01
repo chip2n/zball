@@ -10,7 +10,6 @@ const CoreDependencies = struct {
     sokol: *Build.Dependency,
     stb: *Build.Dependency,
     zmath: *Build.Dependency,
-    zpool: *Build.Dependency,
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
@@ -28,7 +27,6 @@ pub fn build(b: *Build) !void {
     });
     const dep_sokol_tools = b.dependency("sokol_tools", .{ .target = target, .optimize = optimize });
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
-    const dep_zpool = b.dependency("zpool", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
     // Shader compilation step
@@ -93,7 +91,6 @@ pub fn build(b: *Build) !void {
         .sokol = dep_sokol,
         .stb = dep_stb,
         .zmath = dep_zmath,
-        .zpool = dep_zpool,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
         .sprite_data_path = sprite_data_path,
@@ -145,10 +142,6 @@ fn addDeps(
     // zmath
     const mod_zmath = deps.zmath.module("root");
     step.root_module.addImport("zmath", mod_zmath);
-
-    // zpool
-    const mod_zpool = deps.zpool.module("root");
-    step.root_module.addImport("zpool", mod_zpool);
 
     // math
     const mod_math = b.addModule("math", .{
