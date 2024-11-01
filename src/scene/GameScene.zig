@@ -494,6 +494,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             } else {
                 _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir);
                 scene.ball_state = .idle;
+                scene.ball_speed = ball_base_speed;
+                scene.ball_size = .normal;
+                scene.flame_timer = 0;
             }
         }
 
