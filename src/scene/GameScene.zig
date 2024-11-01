@@ -105,6 +105,9 @@ const PowerupType = enum {
 
     /// Decrease the ball size
     ball_size_down,
+
+    /// Kills the player instantly
+    death,
 };
 
 const GameScene = @This();
@@ -189,12 +192,6 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
 pub fn deinit(scene: GameScene) void {
     scene.allocator.free(scene.bricks);
     scene.allocator.free(scene.entities);
-}
-
-pub fn start(scene: *GameScene) void {
-    scene.death_timer = 0;
-    scene.flame_timer = 0;
-    scene.laser_timer = 0;
 }
 
 pub fn frame(scene: *GameScene, dt: f32) !void {
@@ -434,8 +431,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                                 if (entity.type != .ball) continue;
                                 if (entity.active) break;
                             } else {
-                                audio.play(.{ .clip = .death });
-                                scene.death_timer = 2.5;
+                                scene.killPlayer();
                             }
                         }
                     }
@@ -849,6 +845,11 @@ fn updateIdleBall(scene: *GameScene) void {
     }
 }
 
+fn killPlayer(scene: *GameScene) void {
+    audio.play(.{ .clip = .death });
+    scene.death_timer = 2.5;
+}
+
 fn ballOnPaddlePos(scene: GameScene) [2]f32 {
     const paddle_bounds = scene.paddleBounds();
     const ball_sprite = scene.ballSprite();
@@ -877,6 +878,7 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .ball_speed_down => sprite.sprites.pow_ballspeeddown,
         .ball_size_up => sprite.sprites.pow_ballsizeup,
         .ball_size_down => sprite.sprites.pow_ballsizedown,
+        .death => sprite.sprites.pow_death,
     };
 }
 
@@ -934,6 +936,27 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
             if (i > 0) {
                 scene.ball_size = @enumFromInt(i - 1);
             }
+        },
+        .death => {
+            // Destroy all balls
+            for (scene.entities) |*e| {
+                if (!e.active) continue;
+                switch (e.type) {
+                    .ball => {
+                        e.active = false;
+                        e.flame.emitting = false;
+                        audio.play(.{ .clip = .explode, .vol = 0.5 });
+                        // TODO avoid recreation
+                        e.explosion = ExplosionEmitter.init(.{
+                            .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                            .sprites = game.particleExplosionSprites(.ball_normal),
+                        });
+                        e.explosion.emitting = true;
+                    },
+                    .laser => {},
+                }
+            }
+            scene.killPlayer();
         },
     }
 }
