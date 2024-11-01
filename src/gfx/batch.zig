@@ -106,7 +106,7 @@ pub const BatchRenderer = struct {
         });
     }
 
-    const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
+    pub const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);

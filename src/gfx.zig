@@ -231,8 +231,12 @@ pub fn renderText(s: []const u8, x: f32, y: f32, z: f32) void {
     text_renderer.render(&state.batch, s, x, y, z);
 }
 
-pub fn render(opts: BatchRenderer.RenderOptions) void {
+pub inline fn render(opts: BatchRenderer.RenderOptions) void {
     state.batch.render(opts);
+}
+
+pub inline fn renderNinePatch(opts: BatchRenderer.RenderNinePatchOptions) void {
+    state.batch.renderNinePatch(opts);
 }
 
 // TODO return a handler?

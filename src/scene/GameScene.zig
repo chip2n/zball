@@ -72,17 +72,13 @@ const BallState = enum {
 
 const GameMenu = enum { none, pause, settings };
 
-const PaddleType = enum {
+const PaddleSize = enum {
+    smallest,
+    smaller,
     normal,
-    laser,
+    larger,
+    largest,
 };
-
-fn paddleSprite(p: PaddleType) sprite.SpriteData {
-    return switch (p) {
-        .normal => sprite.sprites.paddle_normal,
-        .laser => sprite.sprites.paddle_laser,
-    };
-}
 
 const PowerupType = enum {
     /// Splits the ball into two in a Y-shape
@@ -96,6 +92,12 @@ const PowerupType = enum {
 
     /// Make the paddle shoot lasers
     laser,
+
+    /// Grow the paddle size
+    paddle_grow,
+
+    /// Shrink the paddle size
+    paddle_shrink,
 };
 
 const GameScene = @This();
@@ -113,8 +115,8 @@ time_scale: f32 = 1,
 lives: u8 = 3,
 score: u32 = 0,
 
-paddle_type: PaddleType = .normal,
 paddle_pos: [2]f32 = initial_paddle_pos,
+paddle_size: PaddleSize = .normal,
 
 entities: []Entity,
 
@@ -237,7 +239,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (input.down(.shoot)) shoot: {
             if (scene.ball_state == .idle) {
                 scene.ball_state = .alive;
-            } else if (scene.paddle_type == .laser and scene.laser_cooldown_timer <= 0) {
+            } else if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
                 const bounds = scene.paddleBounds();
                 _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
                 _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
@@ -466,11 +468,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
         }
 
-        laser: { // Laser powerup
-            _ = scene.tickDownTimer("laser_cooldown_timer", game_dt);
-            if (!scene.tickDownTimer("laser_timer", game_dt)) break :laser;
-            scene.paddle_type = .normal;
-        }
+        _ = scene.tickDownTimer("laser_cooldown_timer", game_dt);
+        _ = scene.tickDownTimer("laser_timer", game_dt);
+        _ = scene.tickDownTimer("powerup_timer", dt);
 
         death: {
             if (!scene.tickDownTimer("death_timer", dt)) break :death;
@@ -483,8 +483,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 scene.ball_state = .idle;
             }
         }
-
-        _ = scene.tickDownTimer("powerup_timer", dt);
 
         clear: {
             const clear_delay = 2.5;
@@ -596,16 +594,37 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 
     { // Render paddle
-        const sp = paddleSprite(scene.paddle_type);
-        const w: f32 = @floatFromInt(sp.bounds.w);
-        const h: f32 = @floatFromInt(sp.bounds.h);
-        gfx.render(.{
+        const sp = sprite.sprites.paddle;
+        const bounds = scene.paddleBounds();
+
+        gfx.renderNinePatch(.{
             .src = m.irect(sp.bounds),
+            .center = m.irect(sp.center.?),
+            .dst = bounds,
+        });
+    }
+
+    // Render the laser cannons, if active
+    if (scene.laser_timer > 0) {
+        const bounds = scene.paddleBounds();
+        const left = sprite.sprites.laser_left;
+        const right = sprite.sprites.laser_right;
+        gfx.render(.{
+            .src = m.irect(left.bounds),
             .dst = .{
-                .x = scene.paddle_pos[0] - w / 2,
-                .y = scene.paddle_pos[1] - h,
-                .w = w,
-                .h = h,
+                .x = bounds.x - 2,
+                .y = bounds.y - 2,
+                .w = left.bounds.w,
+                .h = left.bounds.h,
+            },
+        });
+        gfx.render(.{
+            .src = m.irect(right.bounds),
+            .dst = .{
+                .x = bounds.x + bounds.w - right.bounds.w + 2,
+                .y = bounds.y - 2,
+                .w = right.bounds.w,
+                .h = right.bounds.h,
             },
         });
     }
@@ -728,8 +747,18 @@ fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
 }
 
 fn paddleBounds(scene: GameScene) Rect {
-    const sp = paddleSprite(scene.paddle_type);
-    const w: f32 = @floatFromInt(sp.bounds.w);
+    const sp = sprite.sprites.paddle;
+
+    const scale: f32 = switch (scene.paddle_size) {
+        .smallest => 0.25,
+        .smaller => 0.5,
+        .normal => 1.0,
+        .larger => 1.5,
+        .largest => 2.0,
+    };
+
+    var w: f32 = @floatFromInt(sp.bounds.w);
+    w *= scale;
     // NOTE: Hard coded because we can't extract this based on sprite bounds
     const h: f32 = 7;
     return m.Rect{
@@ -805,6 +834,8 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .scatter => sprite.sprites.pow_scatter,
         .flame => sprite.sprites.pow_flame,
         .laser => sprite.sprites.pow_laser,
+        .paddle_grow => sprite.sprites.pow_paddlegrow,
+        .paddle_shrink => sprite.sprites.pow_paddleshrink,
     };
 }
 
@@ -830,7 +861,19 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         },
         .laser => {
             scene.laser_timer = laser_duration;
-            scene.paddle_type = .laser;
+        },
+        .paddle_grow => {
+            const sizes = std.enums.values(PaddleSize);
+            const i = @intFromEnum(scene.paddle_size);
+            if (i < sizes.len - 1) {
+                scene.paddle_size = @enumFromInt(i + 1);
+            }
+        },
+        .paddle_shrink => {
+            const i = @intFromEnum(scene.paddle_size);
+            if (i > 0) {
+                scene.paddle_size = @enumFromInt(i - 1);
+            }
         },
     }
 }
