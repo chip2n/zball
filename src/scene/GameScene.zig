@@ -39,7 +39,8 @@ const initial_paddle_pos: [2]f32 = .{
 };
 const max_balls = 32;
 const max_entities = 128;
-const powerup_freq = 0.3;
+const powerup_freq = 0.1;
+const powerup_spawn_cooldown = 1.0;
 const powerup_fall_speed = 100;
 const flame_duration = 5;
 const laser_duration = 5;
@@ -127,6 +128,9 @@ clear_timer: f32 = 0,
 // When player dies, we start this timer. When it reaches zero, we start a new
 // round (or send them to the title screen).
 death_timer: f32 = 0,
+
+// When a powerup spawns, we wait a little bit before spawning the next powerup
+powerup_timer: f32 = 0,
 
 flame_timer: f32 = 0,
 laser_timer: f32 = 0,
@@ -479,6 +483,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 scene.ball_state = .idle;
             }
         }
+
+        _ = scene.tickDownTimer("powerup_timer", dt);
 
         clear: {
             const clear_delay = 2.5;
@@ -851,6 +857,8 @@ fn splitBall(scene: *GameScene, angles: []const f32) void {
 }
 
 fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
+    if (scene.powerup_timer > 0) return;
+
     var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rng = prng.random();
     const value = rng.float(f32);
@@ -863,6 +871,7 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
             .pos = pos,
             .active = true,
         };
+        scene.powerup_timer = powerup_spawn_cooldown;
         return;
     }
 }
