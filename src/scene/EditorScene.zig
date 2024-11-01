@@ -107,6 +107,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             brick.destroyed = true;
         }
         if (input.pressed(.editor_save)) {
+            std.log.info("Saving level", .{});
             const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
             defer file.close();
             var data: [20 * 20]level.Brick = undefined;
