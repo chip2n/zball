@@ -67,7 +67,7 @@ uniform fs_scene_params {
 };
 
 in vec2 frag_pos;
-in vec2 uv; // TODO not really needed I guess
+in vec2 uv;
 
 out vec4 frag_color;
 
@@ -167,7 +167,6 @@ void main() {
     uv.y = y;
 
     vec3 final_color = vec3(0);
-
 
     for (float i = 0.0; i < 3.0; i++) {
         uv = fract(uv * 2) - 0.5;
