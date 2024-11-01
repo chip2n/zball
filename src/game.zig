@@ -84,7 +84,7 @@ const brick_sprites1 = .{.{ .sprite = .brick1, .weight = 1, .regions = &brick_ex
 const brick_sprites2 = .{.{ .sprite = .brick2, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites3 = .{.{ .sprite = .brick3, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites4 = .{.{ .sprite = .brick4, .weight = 1, .regions = &brick_explosion_regions }};
-const ball_sprites = .{.{ .sprite = .ball, .weight = 1, .regions = &ball_explosion_regions }};
+const ball_sprites = .{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
 
 pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     return switch (s) {
@@ -92,7 +92,11 @@ pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
         .brick2 => &brick_sprites2,
         .brick3 => &brick_sprites3,
         .brick4 => &brick_sprites4,
-        .ball => &ball_sprites,
+        .ball_smallest => &ball_sprites,
+        .ball_smaller => &ball_sprites,
+        .ball_normal => &ball_sprites,
+        .ball_larger => &ball_sprites,
+        .ball_largest => &ball_sprites,
         else => unreachable,
     };
 }

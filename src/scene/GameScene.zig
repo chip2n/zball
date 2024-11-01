@@ -30,8 +30,6 @@ const pi = std.math.pi;
 
 // TODO move to constants?
 const paddle_speed: f32 = 180;
-const ball_w: f32 = sprite.sprites.ball.bounds.w;
-const ball_h: f32 = sprite.sprites.ball.bounds.h;
 const ball_base_speed: f32 = 200;
 const ball_speed_min: f32 = 100;
 const ball_speed_max: f32 = 300;
@@ -74,13 +72,8 @@ const BallState = enum {
 
 const GameMenu = enum { none, pause, settings };
 
-const PaddleSize = enum {
-    smallest,
-    smaller,
-    normal,
-    larger,
-    largest,
-};
+const BallSize = enum { smallest, smaller, normal, larger, largest };
+const PaddleSize = enum { smallest, smaller, normal, larger, largest };
 
 const PowerupType = enum {
     /// Splits the ball into two in a Y-shape
@@ -95,17 +88,23 @@ const PowerupType = enum {
     /// Make the paddle shoot lasers
     laser,
 
-    /// Grow the paddle size
-    paddle_grow,
+    /// Increase the paddle size
+    paddle_size_up,
 
-    /// Shrink the paddle size
-    paddle_shrink,
+    /// Decrease the paddle size
+    paddle_size_down,
 
     /// Increase the ball speed
     ball_speed_up,
 
     /// Decrease the ball speed
     ball_speed_down,
+
+    /// Increase the ball size
+    ball_size_up,
+
+    /// Decrease the ball size
+    ball_size_down,
 };
 
 const GameScene = @This();
@@ -130,6 +129,7 @@ entities: []Entity,
 
 ball_state: BallState = .idle,
 ball_speed: f32 = ball_base_speed,
+ball_size: BallSize = .normal,
 
 // When player clears the board, we start this timer. When it reaches zero,
 // we switch to the next board (or the title screen, if the board cleared
@@ -285,6 +285,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
         }
 
+        const ball_sprite = scene.ballSprite();
+        const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
+        const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
+
         // Update entities
         for (scene.entities) |*e| {
             if (!e.active) continue;
@@ -419,7 +423,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                             // TODO avoid recreation
                             ball.explosion = ExplosionEmitter.init(.{
                                 .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                                .sprites = game.particleExplosionSprites(.ball),
+                                .sprites = game.particleExplosionSprites(.ball_normal),
                             });
                             ball.explosion.emitting = true;
                             ball.active = false;
@@ -522,6 +526,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         }
     }
 
+    const ball_sprite = scene.ballSprite();
+    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
+    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
+
     // Render
     { // Top status bar
         gfx.setTexture(gfx.spritesheetTexture());
@@ -542,9 +550,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         });
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
+            const sp = sprite.sprites.ball_normal;
             gfx.render(.{
-                .src = m.irect(sprite.sprites.ball.bounds),
-                .dst = .{ .x = 2 + fi * (ball_w + 2), .y = 2, .w = ball_w, .h = ball_h },
+                .src = m.irect(sp.bounds),
+                .dst = .{ .x = 2 + fi * (sp.bounds.w + 2), .y = 2, .w = sp.bounds.w, .h = sp.bounds.h },
             });
         }
 
@@ -576,7 +585,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         switch (e.type) {
             .ball => {
                 gfx.render(.{
-                    .src = m.irect(sprite.sprites.ball.bounds),
+                    .src = m.irect(ball_sprite.bounds),
                     .dst = .{
                         .x = e.pos[0] - ball_w / 2,
                         .y = e.pos[1] - ball_h / 2,
@@ -704,6 +713,10 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
 
+    const ball_sprite = scene.ballSprite();
+    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
+    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
+
     var collided = false;
     var coll_dist = std.math.floatMax(f32);
     for (scene.bricks) |*brick| {
@@ -755,6 +768,16 @@ fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
     return true;
 }
 
+fn ballSprite(scene: GameScene) sprite.SpriteData {
+    return switch (scene.ball_size) {
+        .smallest => sprite.sprites.ball_smallest,
+        .smaller => sprite.sprites.ball_smaller,
+        .normal => sprite.sprites.ball_normal,
+        .larger => sprite.sprites.ball_larger,
+        .largest => sprite.sprites.ball_largest,
+    };
+}
+
 fn paddleBounds(scene: GameScene) Rect {
     const sp = sprite.sprites.paddle;
 
@@ -796,7 +819,7 @@ fn spawnEntity(scene: *GameScene, entity_type: EntityType, pos: [2]f32, dir: [2]
             }),
             .explosion = ExplosionEmitter.init(.{
                 .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                .sprites = game.particleExplosionSprites(.ball),
+                .sprites = game.particleExplosionSprites(.ball_normal),
             }),
             .active = true,
         };
@@ -824,10 +847,12 @@ fn updateIdleBall(scene: *GameScene) void {
 }
 
 fn ballOnPaddlePos(scene: GameScene) [2]f32 {
-    const bounds = scene.paddleBounds();
+    const paddle_bounds = scene.paddleBounds();
+    const ball_sprite = scene.ballSprite();
+    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
     return .{
         scene.paddle_pos[0],
-        scene.paddle_pos[1] - bounds.h - ball_h / 2,
+        scene.paddle_pos[1] - paddle_bounds.h - ball_h / 2,
     };
 }
 
@@ -843,10 +868,12 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .scatter => sprite.sprites.pow_scatter,
         .flame => sprite.sprites.pow_flame,
         .laser => sprite.sprites.pow_laser,
-        .paddle_grow => sprite.sprites.pow_paddlegrow,
-        .paddle_shrink => sprite.sprites.pow_paddleshrink,
+        .paddle_size_up => sprite.sprites.pow_paddlesizeup,
+        .paddle_size_down => sprite.sprites.pow_paddlesizedown,
         .ball_speed_up => sprite.sprites.pow_ballspeedup,
         .ball_speed_down => sprite.sprites.pow_ballspeeddown,
+        .ball_size_up => sprite.sprites.pow_ballsizeup,
+        .ball_size_down => sprite.sprites.pow_ballsizedown,
     };
 }
 
@@ -873,14 +900,14 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         .laser => {
             scene.laser_timer = laser_duration;
         },
-        .paddle_grow => {
+        .paddle_size_up => {
             const sizes = std.enums.values(PaddleSize);
             const i = @intFromEnum(scene.paddle_size);
             if (i < sizes.len - 1) {
                 scene.paddle_size = @enumFromInt(i + 1);
             }
         },
-        .paddle_shrink => {
+        .paddle_size_down => {
             const i = @intFromEnum(scene.paddle_size);
             if (i > 0) {
                 scene.paddle_size = @enumFromInt(i - 1);
@@ -891,6 +918,19 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         },
         .ball_speed_down => {
             scene.ball_speed = @max(ball_speed_min, scene.ball_speed - 50);
+        },
+        .ball_size_up => {
+            const sizes = std.enums.values(BallSize);
+            const i = @intFromEnum(scene.ball_size);
+            if (i < sizes.len - 1) {
+                scene.ball_size = @enumFromInt(i + 1);
+            }
+        },
+        .ball_size_down => {
+            const i = @intFromEnum(scene.ball_size);
+            if (i > 0) {
+                scene.ball_size = @enumFromInt(i - 1);
+            }
         },
     }
 }
