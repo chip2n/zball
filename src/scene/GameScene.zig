@@ -61,6 +61,7 @@ pub const Entity = struct {
     active: bool = false,
     pos: [2]f32 = .{ 0, 0 },
     dir: [2]f32 = constants.initial_ball_dir,
+    magnetized: bool = false,
     flame: FlameEmitter = undefined,
     explosion: ExplosionEmitter = undefined,
 };
@@ -106,6 +107,9 @@ const PowerupType = enum {
     /// Decrease the ball size
     ball_size_down,
 
+    /// Makes the ball(s) stick to the paddle; player can shoot them manually
+    magnet,
+
     /// Kills the player instantly
     death,
 };
@@ -127,9 +131,11 @@ score: u32 = 0,
 
 paddle_pos: [2]f32 = initial_paddle_pos,
 paddle_size: PaddleSize = .normal,
+paddle_magnet: bool = true,
 
 entities: []Entity,
 
+// TODO remove "idle" ball state - use magnetized logic instead
 ball_state: BallState = .idle,
 ball_speed: f32 = ball_base_speed,
 ball_size: BallSize = .normal,
@@ -221,10 +227,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         scene.time += game_dt;
 
         { // Move paddle
-            const new_pos = blk: {
+            const dx = blk: {
                 // Mouse
                 if (m.magnitude(mouse_delta) > 0) {
-                    break :blk scene.paddle_pos[0] + (mouse_delta[0] * scene.time_scale);
+                    break :blk mouse_delta[0] * scene.time_scale;
                 }
                 // Keyboard
                 var paddle_dx: f32 = 0;
@@ -234,23 +240,47 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 if (input.down(.right)) {
                     paddle_dx += 1;
                 }
-                break :blk scene.paddle_pos[0] + paddle_dx * paddle_speed * game_dt;
+                break :blk paddle_dx * paddle_speed * game_dt;
             };
 
             const bounds = scene.paddleBounds();
-            scene.paddle_pos[0] = std.math.clamp(new_pos, bounds.w / 2, constants.viewport_size[0] - bounds.w / 2);
+            scene.paddle_pos[0] = std.math.clamp(scene.paddle_pos[0] + dx, bounds.w / 2, constants.viewport_size[0] - bounds.w / 2);
+            for (scene.entities) |*e| {
+                if (!e.active) continue;
+                if (!e.magnetized) continue;
+                e.pos[0] += dx;
+            }
         }
 
         // Handle shoot input
         if (input.down(.shoot)) shoot: {
             if (scene.ball_state == .idle) {
                 scene.ball_state = .alive;
-            } else if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
-                const bounds = scene.paddleBounds();
-                _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
-                _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
-                scene.laser_cooldown_timer = laser_cooldown;
-                audio.play(.{ .clip = .laser });
+            } else {
+                if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
+                    const bounds = scene.paddleBounds();
+                    _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
+                    _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
+                    scene.laser_cooldown_timer = laser_cooldown;
+                    audio.play(.{ .clip = .laser });
+                }
+
+                if (scene.paddle_magnet) {
+                    // When any ball is magnetized, shooting means releasing all
+                    // the balls and deactivating the magnet
+                    var any_ball_magnetized = false;
+                    for (scene.entities) |e| {
+                        if (!e.active) continue;
+                        if (!e.magnetized) continue;
+                        any_ball_magnetized = true;
+                    }
+                    if (any_ball_magnetized) {
+                        scene.paddle_magnet = false;
+                        for (scene.entities) |*e| {
+                            e.magnetized = false;
+                        }
+                    }
+                }
             }
         }
 
@@ -298,8 +328,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                             scene.updateIdleBall();
                         },
                         .alive => {
-                            ball.pos[0] += ball.dir[0] * scene.ball_speed * game_dt;
-                            ball.pos[1] += ball.dir[1] * scene.ball_speed * game_dt;
+                            if (!ball.magnetized) {
+                                ball.pos[0] += ball.dir[0] * scene.ball_speed * game_dt;
+                                ball.pos[1] += ball.dir[1] * scene.ball_speed * game_dt;
+                            }
                         },
                     }
                     const new_ball_pos = ball.pos;
@@ -353,9 +385,18 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         }
 
                         if (collided) {
-                            audio.play(.{ .clip = .bounce });
-                            ball.pos = out;
                             ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
+                            if (scene.paddle_magnet) {
+                                // Paddle is magnetized - make ball stick!
+                                // TODO sound?
+                                ball.pos = out;
+                                ball.pos[1] = paddle_bounds.y - ball_h / 2;
+                                ball.magnetized = true;
+                            } else {
+                                // Bounce the ball
+                                audio.play(.{ .clip = .bounce });
+                                ball.pos = out;
+                            }
                         }
                     }
 
@@ -878,6 +919,7 @@ fn powerupSprite(p: PowerupType) sprite.SpriteData {
         .ball_speed_down => sprite.sprites.pow_ballspeeddown,
         .ball_size_up => sprite.sprites.pow_ballsizeup,
         .ball_size_down => sprite.sprites.pow_ballsizedown,
+        .magnet => sprite.sprites.pow_magnet,
         .death => sprite.sprites.pow_death,
     };
 }
@@ -936,6 +978,9 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
             if (i > 0) {
                 scene.ball_size = @enumFromInt(i - 1);
             }
+        },
+        .magnet => {
+            scene.paddle_magnet = true;
         },
         .death => {
             // Destroy all balls
