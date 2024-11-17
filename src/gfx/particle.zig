@@ -91,7 +91,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         pos: [2]f32 = .{ 0, 0 },
 
         /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
-        sprites: []const SpriteDesc,
+        sprites: []const SpriteDesc = undefined,
 
         particles: [count]Particle = .{.{}} ** count,
         idx: usize = 0,
@@ -100,7 +100,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         cycle_timer: f32 = 0,
         next_spawn: f32 = 0,
         cycle_spawns: usize = 0,
-        prng: std.Random.DefaultPrng,
+        prng: std.Random.DefaultPrng = undefined,
 
         const EmitterInitDesc = struct {
             seed: u64,

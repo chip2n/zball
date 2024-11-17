@@ -38,7 +38,7 @@ const initial_paddle_pos: [2]f32 = .{
     constants.viewport_size[1] - 4,
 };
 const max_balls = 32;
-const max_entities = 128;
+const max_entities = 1024;
 const powerup_freq = 0.8; // TODO 0.1?
 const powerup_spawn_cooldown = 1.0;
 const powerup_fall_speed = 100;
@@ -46,24 +46,26 @@ const flame_duration = 5;
 const laser_duration = 5;
 const laser_speed = 200;
 const laser_cooldown = 0.2;
-const max_brick_emitters = 20;
 const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 const brick_start_y = constants.brick_start_y;
 
 pub const EntityType = enum {
+    none,
+    brick,
     ball,
     laser,
+    explosion,
 };
 
 pub const Entity = struct {
-    type: EntityType = .ball, // TODO introduce null-entity and use that instead of active field?
-    active: bool = false,
+    type: EntityType = .none,
     pos: [2]f32 = .{ 0, 0 },
     dir: [2]f32 = constants.initial_ball_dir,
+    sprite: ?sprite.Sprite = null,
     magnetized: bool = false,
-    flame: FlameEmitter = undefined,
-    explosion: ExplosionEmitter = undefined,
+    flame: FlameEmitter = .{},
+    explosion: ExplosionEmitter = .{},
 };
 
 const BallState = enum {
@@ -118,7 +120,6 @@ const GameScene = @This();
 
 allocator: std.mem.Allocator,
 
-bricks: []Brick,
 powerups: [16]Powerup = .{.{}} ** 16,
 
 menu: GameMenu = .none,
@@ -157,14 +158,11 @@ laser_timer: f32 = 0,
 laser_cooldown_timer: f32 = 0,
 
 pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
-    const bricks = try allocator.alloc(Brick, lvl.width * lvl.height);
-    errdefer allocator.free(bricks);
     const entities = try allocator.alloc(Entity, max_entities);
     errdefer allocator.free(entities);
 
     var scene = GameScene{
         .allocator = allocator,
-        .bricks = bricks,
         .entities = entities,
     };
 
@@ -177,26 +175,32 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
             const i = y * lvl.width + x;
             const brick = lvl.bricks[i];
             if (brick.id == 0) {
-                scene.bricks[i] = .{};
                 continue;
             }
             const fx: f32 = @floatFromInt(x);
             const fy: f32 = @floatFromInt(y);
             const s: sprite.Sprite = try game.brickIdToSprite(brick.id);
-            scene.bricks[i] = Brick.init(fx, fy, s);
-            scene.bricks[i].pos[1] += brick_start_y;
+
+            const sp = sprite.get(s);
+            const w: f32 = @floatFromInt(sp.bounds.w);
+            const h: f32 = @floatFromInt(sp.bounds.h);
+            _ = try scene.spawnEntity(
+                .brick,
+                .{ fx * w + w / 2, fy * h + h / 2 + brick_start_y },
+                .{ 0, 0 },
+                s,
+            );
         }
     }
 
     // spawn one ball to start
     const initial_ball_pos = scene.ballOnPaddlePos();
-    _ = scene.spawnEntity(.ball, initial_ball_pos, constants.initial_ball_dir) catch unreachable;
+    _ = scene.spawnEntity(.ball, initial_ball_pos, constants.initial_ball_dir, .ball_normal) catch unreachable;
 
     return scene;
 }
 
 pub fn deinit(scene: GameScene) void {
-    scene.allocator.free(scene.bricks);
     scene.allocator.free(scene.entities);
 }
 
@@ -246,7 +250,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             const bounds = scene.paddleBounds();
             scene.paddle_pos[0] = std.math.clamp(scene.paddle_pos[0] + dx, bounds.w / 2, constants.viewport_size[0] - bounds.w / 2);
             for (scene.entities) |*e| {
-                if (!e.active) continue;
+                if (e.type == .none) continue;
                 if (!e.magnetized) continue;
                 e.pos[0] += dx;
             }
@@ -259,8 +263,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             } else {
                 if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
                     const bounds = scene.paddleBounds();
-                    _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
-                    _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }) catch break :shoot;
+                    _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }, .particle_laser) catch break :shoot;
+                    _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }, .particle_laser) catch break :shoot;
                     scene.laser_cooldown_timer = laser_cooldown;
                     audio.play(.{ .clip = .laser });
                 }
@@ -270,7 +274,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     // the balls and deactivating the magnet
                     var any_ball_magnetized = false;
                     for (scene.entities) |e| {
-                        if (!e.active) continue;
+                        if (e.type == .none) continue;
                         if (!e.magnetized) continue;
                         any_ball_magnetized = true;
                     }
@@ -312,17 +316,23 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
         }
 
-        const ball_sprite = scene.ballSprite();
+        const ball_sprite = sprite.get(scene.ballSprite());
         const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
         const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
 
         // Update entities
         for (scene.entities) |*e| {
-            if (!e.active) continue;
+            if (e.type == .none) continue;
             switch (e.type) {
+                .none => {},
+                .brick => {},
                 .ball => {
                     const ball = e;
                     const old_ball_pos = ball.pos;
+
+                    // Set the ball sprite based on stored size
+                    e.sprite = scene.ballSprite();
+
                     switch (scene.ball_state) {
                         .idle => {
                             scene.updateIdleBall();
@@ -458,19 +468,14 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         );
                         if (c) {
                             audio.play(.{ .clip = .explode, .vol = 0.5 });
-                            // TODO avoid recreation
-                            ball.explosion = ExplosionEmitter.init(.{
-                                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                                .sprites = game.particleExplosionSprites(.ball_normal),
-                            });
-                            ball.explosion.emitting = true;
-                            ball.active = false;
+                            _ = scene.spawnExplosion(ball.pos, .ball_normal) catch {};
+                            ball.type = .none;
                             ball.flame.emitting = false;
 
                             // If the ball was the final ball, start a death timer
                             for (scene.entities) |entity| {
                                 if (entity.type != .ball) continue;
-                                if (entity.active) break;
+                                if (entity.type != .none) break;
                             } else {
                                 scene.killPlayer();
                             }
@@ -492,7 +497,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     e.pos = new_pos;
 
                     if (scene.collideBricks(old_pos, new_pos)) |_| {
-                        e.active = false;
+                        e.type = .none;
+                    }
+                },
+                .explosion => {
+                    // When the emitter stops, we remove the entity
+                    if (!e.explosion.emitting) {
+                        e.* = .{};
                     }
                 },
             }
@@ -502,12 +513,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         for (scene.entities) |*e| {
             e.flame.pos = e.pos;
             e.flame.update(game_dt);
-
             e.explosion.pos = e.pos;
             e.explosion.update(game_dt);
-        }
-        for (scene.bricks) |*brick| {
-            brick.emitter.update(game_dt);
         }
 
         flame: {
@@ -529,7 +536,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             if (scene.lives == 0) {
                 game.scene_mgr.switchTo(.title);
             } else {
-                _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir);
+                _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir, .ball_normal);
                 scene.ball_state = .idle;
                 scene.ball_speed = ball_base_speed;
                 scene.ball_size = .normal;
@@ -542,8 +549,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
             // Has player cleared all the bricks?
             if (scene.clear_timer == 0) {
-                for (scene.bricks) |brick| {
-                    if (!brick.destroyed) break :clear;
+                for (scene.entities) |e| {
+                    if (e.type != .brick) continue;
+                    if (e.type != .none) break :clear;
                 }
                 scene.clear_timer = clear_delay;
                 break :clear;
@@ -565,10 +573,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             return;
         }
     }
-
-    const ball_sprite = scene.ballSprite();
-    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
-    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
 
     // * Render
 
@@ -625,48 +629,22 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
     gfx.setTexture(gfx.spritesheetTexture());
 
-    // Render all bricks
-    for (scene.bricks) |brick| {
-        if (brick.destroyed) continue;
-        const x = brick.pos[0];
-        const y = brick.pos[1];
-        const slice = sprite.get(brick.sprite);
-        gfx.render(.{
-            .src = m.irect(slice.bounds),
-            .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
-        });
-    }
-
     // Render entities
     for (scene.entities) |e| {
-        if (!e.active) continue;
-        switch (e.type) {
-            .ball => {
-                gfx.render(.{
-                    .src = m.irect(ball_sprite.bounds),
-                    .dst = .{
-                        .x = e.pos[0] - ball_w / 2,
-                        .y = e.pos[1] - ball_h / 2,
-                        .w = ball_w,
-                        .h = ball_h,
-                    },
-                    .z = 2,
-                });
-            },
-            .laser => {
-                const sp = sprite.sprites.particle_laser;
-                gfx.render(.{
-                    .src = m.irect(sp.bounds),
-                    .dst = .{
-                        .x = e.pos[0] - sp.bounds.w / 2,
-                        .y = e.pos[1] - sp.bounds.h / 2,
-                        .w = sp.bounds.w,
-                        .h = sp.bounds.h,
-                    },
-                    .z = 2,
-                    .layer = .particles,
-                });
-            },
+        if (e.type == .none) continue;
+        if (e.sprite) |s| {
+            const sp = sprite.get(s);
+            const w: f32 = @floatFromInt(sp.bounds.w);
+            const h: f32 = @floatFromInt(sp.bounds.h);
+            gfx.render(.{
+                .src = m.irect(sp.bounds),
+                .dst = .{
+                    .x = e.pos[0] - w / 2,
+                    .y = e.pos[1] - h / 2,
+                    .w = w,
+                    .h = h,
+                },
+            });
         }
     }
 
@@ -720,12 +698,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 .h = @floatFromInt(sp.bounds.h),
             },
             .layer = .main,
+            .z = 5,
         });
-    }
-
-    // Render brick explosions
-    for (scene.bricks) |brick| {
-        gfx.renderEmitter(brick.emitter);
     }
 
     // Render entity explosion particles
@@ -769,44 +743,37 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
 
-    const ball_sprite = scene.ballSprite();
+    const ball_sprite = sprite.get(scene.ballSprite());
     const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
     const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
 
     var collided = false;
     var coll_dist = std.math.floatMax(f32);
-    for (scene.bricks) |*brick| {
-        if (brick.destroyed) continue;
+
+    for (scene.entities) |*e| {
+        if (e.type != .brick) continue;
 
         var r = @import("../collision.zig").Rect{
-            .min = .{ brick.pos[0], brick.pos[1] },
-            .max = .{ brick.pos[0] + brick_w, brick.pos[1] + brick_h },
+            .min = .{ e.pos[0] - brick_w / 2, e.pos[1] - brick_h / 2 },
+            .max = .{ e.pos[0] + brick_w / 2, e.pos[1] + brick_h / 2 },
         };
         r.grow(.{ ball_w / 2, ball_h / 2 });
         var c_normal: [2]f32 = undefined;
         const c = box_intersection(old_pos, new_pos, r, &out, &c_normal);
         if (c) {
             // always use the normal of the closest brick for ball reflection
-            const brick_pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-            const brick_dist = m.magnitude(m.vsub(brick_pos, new_pos));
+            const brick_dist = m.magnitude(m.vsub(e.pos, new_pos));
             if (brick_dist < coll_dist) {
                 normal = c_normal;
                 coll_dist = brick_dist;
             }
-            brick.destroyed = true;
-            // If we haven't reached the max emitter count for bricks, start a new one
-            var emitter_count: usize = 0;
-            for (scene.bricks) |b2| {
-                if (!b2.emitter.emitting) continue;
-                emitter_count += 1;
-            }
-            if (emitter_count < max_brick_emitters) {
-                brick.explode();
-            }
+            e.type = .none;
+
+            if (e.sprite) |sp| scene.spawnExplosion(e.pos, sp) catch {};
             audio.play(.{ .clip = .explode });
             scene.score += 100;
 
-            spawnPowerup(scene, brick.pos);
+            spawnPowerup(scene, e.pos);
         }
         collided = collided or c;
     }
@@ -824,13 +791,13 @@ fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
     return true;
 }
 
-fn ballSprite(scene: GameScene) sprite.SpriteData {
+fn ballSprite(scene: GameScene) sprite.Sprite {
     return switch (scene.ball_size) {
-        .smallest => sprite.sprites.ball_smallest,
-        .smaller => sprite.sprites.ball_smaller,
-        .normal => sprite.sprites.ball_normal,
-        .larger => sprite.sprites.ball_larger,
-        .largest => sprite.sprites.ball_largest,
+        .smallest => .ball_smallest,
+        .smaller => .ball_smaller,
+        .normal => .ball_normal,
+        .larger => .ball_larger,
+        .largest => .ball_largest,
     };
 }
 
@@ -861,28 +828,38 @@ fn paused(scene: *GameScene) bool {
     return scene.menu != .none or game.scene_mgr.next != null;
 }
 
-fn spawnEntity(scene: *GameScene, entity_type: EntityType, pos: [2]f32, dir: [2]f32) !*Entity {
+fn spawnEntity(
+    scene: *GameScene,
+    entity_type: EntityType,
+    pos: [2]f32,
+    dir: [2]f32,
+    s: ?sprite.Sprite,
+) !*Entity {
     for (scene.entities) |*e| {
-        if (e.active) continue;
+        if (e.type != .none) continue;
         e.* = .{
             .type = entity_type,
             .pos = pos,
             .dir = dir,
-            // TODO some entities don't need emitters...
             .flame = FlameEmitter.init(.{
                 .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
                 .sprites = game.particleFlameSprites,
             }),
-            .explosion = ExplosionEmitter.init(.{
-                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                .sprites = game.particleExplosionSprites(.ball_normal),
-            }),
-            .active = true,
+            .sprite = s,
         };
         return e;
     } else {
         return error.MaxEntitiesReached;
     }
+}
+
+fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
+    const expl = try scene.spawnEntity(.explosion, pos, .{ 0, 0 }, null);
+    expl.explosion = ExplosionEmitter.init(.{
+        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+        .sprites = game.particleExplosionSprites(sp),
+    });
+    expl.explosion.emitting = true;
 }
 
 // The angle depends on how far the ball is from the center of the paddle
@@ -896,7 +873,6 @@ fn paddleReflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir:
 fn updateIdleBall(scene: *GameScene) void {
     // TODO make iterator for this
     for (scene.entities) |*e| {
-        if (!e.active) continue;
         if (e.type != .ball) continue;
         e.pos = scene.ballOnPaddlePos();
     }
@@ -909,7 +885,7 @@ fn killPlayer(scene: *GameScene) void {
 
 fn ballOnPaddlePos(scene: GameScene) [2]f32 {
     const paddle_bounds = scene.paddleBounds();
-    const ball_sprite = scene.ballSprite();
+    const ball_sprite = sprite.get(scene.ballSprite());
     const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
     return .{
         scene.paddle_pos[0],
@@ -955,7 +931,6 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         .flame => {
             scene.flame_timer = flame_duration;
             for (scene.entities) |*e| {
-                if (!e.active) continue;
                 if (e.type != .ball) continue;
                 e.flame.emitting = true;
             }
@@ -1001,20 +976,14 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
         .death => {
             // Destroy all balls
             for (scene.entities) |*e| {
-                if (!e.active) continue;
                 switch (e.type) {
                     .ball => {
-                        e.active = false;
+                        e.type = .none;
                         e.flame.emitting = false;
                         audio.play(.{ .clip = .explode, .vol = 0.5 });
-                        // TODO avoid recreation
-                        e.explosion = ExplosionEmitter.init(.{
-                            .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                            .sprites = game.particleExplosionSprites(.ball_normal),
-                        });
-                        e.explosion.emitting = true;
+                        _ = scene.spawnExplosion(e.pos, .ball_normal) catch {};
                     },
-                    .laser => {},
+                    else => {},
                 }
             }
             scene.killPlayer();
@@ -1025,7 +994,6 @@ fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
 fn splitBall(scene: *GameScene, angles: []const f32) void {
     var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
     for (scene.entities, 0..) |e, i| {
-        if (!e.active) continue;
         if (e.type != .ball) continue;
         active_balls.append(i) catch continue;
     }
@@ -1036,7 +1004,7 @@ fn splitBall(scene: *GameScene, angles: []const f32) void {
         for (angles[1..]) |angle| {
             var d2 = ball.dir;
             m.vrot(&d2, angle);
-            const new_ball = scene.spawnEntity(.ball, ball.pos, d2) catch break;
+            const new_ball = scene.spawnEntity(.ball, ball.pos, d2, ball.sprite.?) catch break;
             new_ball.flame.emitting = ball.flame.emitting;
         }
         ball.dir = d1;

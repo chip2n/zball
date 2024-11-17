@@ -218,7 +218,6 @@ pub fn renderMain(fb: Framebuffer) void {
     // Render background
     for (result.batches) |b| {
         if (b.layer != .background) continue;
-        std.log.warn("{} {}", .{b.offset, b.len});
         const tex = texture.get(b.tex) catch |err| {
             std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
