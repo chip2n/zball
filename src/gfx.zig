@@ -35,14 +35,16 @@ pub const Vertex = extern struct {
 const GfxState = struct {
     initialized: bool = false,
     camera: Camera = undefined,
+    // TODO rename these shaders so its clearer what they do
     offscreen: struct {
         pip: sg.Pipeline = .{},
-        pass_action: sg.PassAction = .{},
+    } = .{},
+    shadow: struct {
+        pip: sg.Pipeline = .{},
     } = .{},
     scene: struct {
         pip: sg.Pipeline = .{},
         bind: sg.Bindings = .{},
-        pass_action: sg.PassAction = .{},
     } = .{},
     bg: struct {
         pip: sg.Pipeline = .{},
@@ -54,7 +56,6 @@ const GfxState = struct {
     window_size: [2]i32 = constants.initial_screen_size,
     batch: BatchRenderer = BatchRenderer.init(),
     quad_vbuf: sg.Buffer = undefined,
-    current_framebuffer: Framebuffer = undefined,
 };
 var state: GfxState = .{};
 
@@ -71,11 +72,6 @@ pub fn init(allocator: std.mem.Allocator) !void {
     });
 
     // set pass action for offscreen render pass
-    state.offscreen.pass_action.colors[0] = .{
-        .load_action = .CLEAR,
-        .clear_value = .{ .r = 0.05, .g = 0.05, .b = 0.05, .a = 1 },
-    };
-
     state.spritesheet_texture = try texture.loadPNG(.{ .data = spritesheet });
     state.font_texture = try texture.loadPNG(.{ .data = font.image });
 
@@ -98,15 +94,48 @@ pub fn init(allocator: std.mem.Allocator) !void {
             .enabled = true,
             .src_factor_rgb = .SRC_ALPHA,
             .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+            .src_factor_alpha = .SRC_ALPHA,
+            .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
         };
 
         state.offscreen.pip = sg.makePipeline(pip_desc);
     }
 
+    { // shadow shader
+        var pip_desc: sg.PipelineDesc = .{
+            .shader = sg.makeShader(shd.shadowShaderDesc(sg.queryBackend())),
+            .cull_mode = .BACK,
+            .sample_count = constants.offscreen_sample_count,
+            .depth = .{
+                .pixel_format = .DEPTH,
+                .compare = .LESS_EQUAL,
+                .write_enabled = false,
+            },
+            .color_count = 1,
+        };
+        pip_desc.layout.attrs[shd.ATTR_vs_shadow_position].format = .FLOAT3;
+        pip_desc.layout.attrs[shd.ATTR_vs_shadow_color0].format = .UBYTE4N;
+        pip_desc.layout.attrs[shd.ATTR_vs_shadow_texcoord0].format = .FLOAT2;
+        pip_desc.colors[0].blend = .{
+            .enabled = true,
+            .src_factor_rgb = .SRC_ALPHA,
+            .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+            .src_factor_alpha = .SRC_ALPHA,
+            .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
+        };
+
+        state.shadow.pip = sg.makePipeline(pip_desc);
+    }
+
     // a vertex buffer to render a fullscreen quad
     state.quad_vbuf = sg.makeBuffer(.{
         .usage = .IMMUTABLE,
-        .data = sg.asRange(&[_]f32{ -0.5, -0.5, 0, 0, 0.5, -0.5, 1, 0, -0.5, 0.5, 0, 1, 0.5, 0.5, 1, 1 }),
+        .data = sg.asRange(&[_]f32{
+            -0.5, -0.5, 0, 0,
+            0.5,  -0.5, 1, 0,
+            -0.5, 0.5,  0, 1,
+            0.5,  0.5,  1, 1,
+        }),
     });
 
     // shader and pipeline object to render a fullscreen quad
@@ -116,12 +145,14 @@ pub fn init(allocator: std.mem.Allocator) !void {
     };
     scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_pos].format = .FLOAT2;
     scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_in_uv].format = .FLOAT2;
-    state.scene.pip = sg.makePipeline(scene_pip_desc);
-    // setup pass action for scene render pass
-    state.scene.pass_action.colors[0] = .{
-        .load_action = .CLEAR,
-        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+    scene_pip_desc.colors[0].blend = .{
+        .enabled = true,
+        .src_factor_rgb = .SRC_ALPHA,
+        .dst_factor_rgb = .ONE_MINUS_SRC_ALPHA,
+        .src_factor_alpha = .SRC_ALPHA,
+        .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
     };
+    state.scene.pip = sg.makePipeline(scene_pip_desc);
 
     // a sampler to sample the offscreen render target as texture
     const smp = sg.makeSampler(.{
@@ -165,38 +196,81 @@ pub fn deinit() void {
     state.initialized = false;
 }
 
-pub fn beginOffscreenPass() void {
-    sg.beginPass(.{
-        .action = state.offscreen.pass_action,
-        .attachments = state.current_framebuffer.attachments,
-    });
-}
-
-pub fn endOffscreenPass() void {
-    sg.endPass();
-}
-
-pub fn renderBackground(time: f32) void {
-    sg.applyPipeline(state.bg.pip);
-    const bg_params = shd.FsBgParams{ .time = time };
-    sg.applyUniforms(.FS, shd.SLOT_fs_bg_params, sg.asRange(&bg_params));
-    sg.applyBindings(state.bg.bind);
-    sg.draw(0, 4, 1);
-}
-
-pub fn renderMain() void {
-    sg.applyPipeline(state.offscreen.pip);
-    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
-    sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+pub fn renderMain(fb: Framebuffer) void {
     const result = state.batch.commit();
-    var bind = state.current_framebuffer.bind;
+    if (result.batches.len == 0) return;
+
+    var pass_action: sg.PassAction = .{};
+    pass_action.colors[0] = .{
+        .load_action = .CLEAR,
+        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+    };
+    sg.beginPass(.{
+        .action = pass_action,
+        .attachments = fb.attachments,
+    });
+    defer sg.endPass();
+
+    var bind = fb.bind;
     sg.updateBuffer(bind.vertex_buffers[0], sg.asRange(result.verts));
+    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
+
+    // Render background
     for (result.batches) |b| {
+        if (b.layer != .background) continue;
+        std.log.warn("{} {}", .{b.offset, b.len});
         const tex = texture.get(b.tex) catch |err| {
-            std.log.warn("Could not render texture {}: {}", .{b.tex, err});
+            std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
         };
         bind.fs.images[shd.SLOT_tex] = tex.img;
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyBindings(bind);
+        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+    }
+
+    // Render shadows
+    for (result.batches) |b| {
+        if (b.layer != .main) continue;
+        const tex = texture.get(b.tex) catch |err| {
+            std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
+            continue;
+        };
+        bind.fs.images[shd.SLOT_tex] = tex.img;
+
+        // We render the main layer two times to display a shadow
+        // TODO avoid switching pipelines often
+        sg.applyPipeline(state.shadow.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyBindings(bind);
+        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+    }
+
+    // Render main layer
+    for (result.batches) |b| {
+        if (b.layer != .main) continue;
+        const tex = texture.get(b.tex) catch |err| {
+            std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
+            continue;
+        };
+        bind.fs.images[shd.SLOT_tex] = tex.img;
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyBindings(bind);
+        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+    }
+
+    // Render particles
+    for (result.batches) |b| {
+        if (b.layer != .particles) continue;
+        const tex = texture.get(b.tex) catch |err| {
+            std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
+            continue;
+        };
+        bind.fs.images[shd.SLOT_tex] = tex.img;
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
@@ -245,7 +319,15 @@ pub fn createFramebuffer() Framebuffer {
 }
 
 pub fn beginFrame() void {
-    sg.beginPass(.{ .action = state.scene.pass_action, .swapchain = sglue.swapchain() });
+    var pass_action: sg.PassAction = .{};
+    pass_action.colors[0] = .{
+        .load_action = .CLEAR,
+        .clear_value = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+    };
+    sg.beginPass(.{
+        .action = pass_action,
+        .swapchain = sglue.swapchain(),
+    });
 }
 
 pub fn endFrame() void {
@@ -253,24 +335,19 @@ pub fn endFrame() void {
     sg.commit();
 }
 
-pub fn setFramebuffer(fb: Framebuffer) void {
-    state.current_framebuffer = fb;
-}
-
 pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
     const scene_params = computeSceneParams();
     var fs_scene_params = shd.FsSceneParams{ .value = 1.0 };
-
     // Update uniform transition progress (shader uses it to display part of the
     // screen while a transition is in progress)
     fs_scene_params.value = transition_progress;
 
-    state.scene.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
     sg.applyPipeline(state.scene.pip);
-    state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
-    sg.applyBindings(state.scene.bind);
     sg.applyUniforms(.VS, shd.SLOT_vs_scene_params, sg.asRange(&scene_params));
     sg.applyUniforms(.FS, shd.SLOT_fs_scene_params, sg.asRange(&fs_scene_params));
+    state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
+    state.scene.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
+    sg.applyBindings(state.scene.bind);
     sg.draw(0, 4, 1);
 }
 

@@ -262,6 +262,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                     },
                     .z = p.z,
                     .alpha = alpha,
+                    .layer = .particles,
                 });
             }
         }

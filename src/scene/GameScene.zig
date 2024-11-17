@@ -39,7 +39,7 @@ const initial_paddle_pos: [2]f32 = .{
 };
 const max_balls = 32;
 const max_entities = 128;
-const powerup_freq = 0.1;
+const powerup_freq = 0.8; // TODO 0.1?
 const powerup_spawn_cooldown = 1.0;
 const powerup_fall_speed = 100;
 const flame_duration = 5;
@@ -570,9 +570,27 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
     const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
 
-    // Render
-    { // Top status bar
+    // * Render
+
+    // TODO should not have to do this
+    gfx.setTexture(gfx.spritesheetTexture());
+
+    { // Background
         gfx.setTexture(gfx.spritesheetTexture());
+        const sp = sprite.sprites.bg;
+        gfx.render(.{
+            .src = m.irect(sp.bounds),
+            .dst = .{
+                .x = 0,
+                .y = 0,
+                .w = constants.viewport_size[0],
+                .h = constants.viewport_size[1],
+            },
+            .layer = .background,
+        });
+    }
+
+    { // Top status bar
         const d = sprite.sprites.dialog;
         gfx.render(.{
             .src = .{
@@ -646,6 +664,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         .h = sp.bounds.h,
                     },
                     .z = 2,
+                    .layer = .particles,
                 });
             },
         }
@@ -659,6 +678,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             .src = m.irect(sp.bounds),
             .center = m.irect(sp.center.?),
             .dst = bounds,
+            .layer = .main,
         });
     }
 
@@ -699,6 +719,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 .w = @floatFromInt(sp.bounds.w),
                 .h = @floatFromInt(sp.bounds.h),
             },
+            .layer = .main,
         });
     }
 
@@ -739,11 +760,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             },
         }
     }
-
-    gfx.beginOffscreenPass();
-    gfx.renderBackground(scene.time);
-    gfx.renderMain();
-    gfx.endOffscreenPass();
 }
 
 fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {

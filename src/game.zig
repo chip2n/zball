@@ -147,8 +147,8 @@ pub var time: f64 = 0;
 pub var dt: f32 = 0;
 pub var levels: std.ArrayList(Level) = undefined;
 pub var scene_mgr: SceneManager = undefined;
-pub var current_framebuffer: gfx.Framebuffer = undefined;
-pub var transition_framebuffer: gfx.Framebuffer = undefined;
+pub var fb_current: gfx.Framebuffer = undefined;
+pub var fb_transition: gfx.Framebuffer = undefined;
 
 pub fn init(allocator: std.mem.Allocator) !void {
     arena = std.heap.ArenaAllocator.init(allocator);
@@ -171,8 +171,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
         try levels.append(lvl);
     }
 
-    current_framebuffer = gfx.createFramebuffer();
-    transition_framebuffer = gfx.createFramebuffer();
+    fb_current = gfx.createFramebuffer();
+    fb_transition = gfx.createFramebuffer();
     scene_mgr = SceneManager.init(allocator, levels.items);
 }
 
@@ -191,19 +191,21 @@ pub fn frame(now: f64) !void {
     try scene_mgr.update(dt);
 
     // Render the current scene, as well as the next scene if we're transitioning
-    gfx.setFramebuffer(current_framebuffer);
     try scene_mgr.current.frame(dt);
+
+    gfx.renderMain(fb_current);
+
     if (scene_mgr.next) |*next| {
-        gfx.setFramebuffer(transition_framebuffer);
         try next.frame(dt);
+        gfx.renderMain(fb_transition);
     }
 
     gfx.beginFrame();
     defer gfx.endFrame();
 
-    gfx.renderFramebuffer(current_framebuffer, 100);
+    gfx.renderFramebuffer(fb_current, 100);
     if (scene_mgr.next != null) {
-        gfx.renderFramebuffer(transition_framebuffer, scene_mgr.transition_progress);
+        gfx.renderFramebuffer(fb_transition, scene_mgr.transition_progress);
     }
 
     input.frame();

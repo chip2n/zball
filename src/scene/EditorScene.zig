@@ -163,8 +163,4 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             ui.sameLine();
         }
     }
-
-    gfx.beginOffscreenPass();
-    gfx.renderMain();
-    gfx.endOffscreenPass();
 }

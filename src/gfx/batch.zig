@@ -16,6 +16,7 @@ const TextureId = usize;
 
 // TODO we can look up tw and th afterwards. Also, tex could be just u8
 const TextureInfo = struct { handle: Texture, tw: f32, th: f32 };
+const Layer = enum { background, main, particles, ui };
 
 const RenderCommand = union(enum) {
     sprite: struct {
@@ -24,6 +25,7 @@ const RenderCommand = union(enum) {
         z: f32,
         alpha: u8,
         tex: TextureInfo,
+        layer: Layer,
     },
     nine_patch: struct {
         src: IRect,
@@ -32,7 +34,15 @@ const RenderCommand = union(enum) {
         z: f32,
         alpha: u8,
         tex: TextureInfo,
+        layer: Layer,
     },
+
+    fn layer(cmd: RenderCommand) Layer {
+        return switch (cmd) {
+            .sprite => |c| c.layer,
+            .nine_patch => |c| c.layer,
+        };
+    }
 
     fn z_index(cmd: RenderCommand) f32 {
         return switch (cmd) {
@@ -58,6 +68,7 @@ pub const Batch = struct {
     offset: usize,
     len: usize,
     tex: Texture,
+    layer: Layer,
 };
 
 pub const BatchRenderer = struct {
@@ -90,7 +101,7 @@ pub const BatchRenderer = struct {
         // std.debug.assert(self.idx < self.buf.len);
     }
 
-    pub const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
+    pub const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF, layer: Layer = .main };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);
@@ -102,11 +113,12 @@ pub const BatchRenderer = struct {
                 .z = v.z,
                 .alpha = v.alpha,
                 .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
+                .layer = v.layer,
             },
         });
     }
 
-    pub const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF };
+    pub const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF, layer: Layer = .main };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);
@@ -119,6 +131,7 @@ pub const BatchRenderer = struct {
                 .z = v.z,
                 .alpha = v.alpha,
                 .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
+                .layer = v.layer,
             },
         });
     }
@@ -136,14 +149,13 @@ pub const BatchRenderer = struct {
         if (self.idx == 0) return .{ .verts = &.{}, .batches = &.{} };
 
         const buf = self.buf[0..self.idx];
-
-        // Order draw calls by z-index first and texture ID second
         std.mem.sort(RenderCommand, buf, {}, cmdLessThan);
 
         // TODO maybe an easier way?
         var tex = buf[0].tex().handle;
         var tw = buf[0].tex().tw;
         var th = buf[0].tex().th;
+        var layer = buf[0].layer();
 
         var i: usize = 0;
         var batch_idx: usize = 0;
@@ -151,19 +163,22 @@ pub const BatchRenderer = struct {
         self.batches[0].offset = 0;
         self.batches[0].len = 0;
         self.batches[0].tex = tex;
+        self.batches[0].layer = layer;
 
         for (buf) |cmd| {
-            if (tex != cmd.tex().handle) {
+            if (tex != cmd.tex().handle or layer != cmd.layer()) {
                 // Make new batch
                 tex = cmd.tex().handle;
                 tw = cmd.tex().tw;
                 th = cmd.tex().th;
+                layer = cmd.layer();
 
                 batch_idx += 1;
                 batch_count += 1;
                 self.batches[batch_idx].offset = i;
                 self.batches[batch_idx].len = 0;
                 self.batches[batch_idx].tex = tex;
+                self.batches[batch_idx].layer = layer;
             }
 
             switch (cmd) {
@@ -444,25 +459,24 @@ pub const BatchRenderer = struct {
     }
 
     fn cmdLessThan(_: void, lhs: RenderCommand, rhs: RenderCommand) bool {
+        const le = lhs.layer();
+        const re = rhs.layer();
+        const lt = lhs.tex();
+        const rt = lhs.tex();
         const lz = lhs.z_index();
         const rz = rhs.z_index();
 
+        if (@intFromEnum(le) < @intFromEnum(re)) return true;
+        if (@intFromEnum(le) > @intFromEnum(re)) return false;
         if (lz < rz) return true;
         if (lz > rz) return false;
+        if (lt.handle < rt.handle) return true;
+        if (lt.handle > rt.handle) return false;
         return false;
     }
 };
 
-// TODO below is copied - where does it belong?
-
-const Vertex = extern struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    color: u32,
-    u: f32,
-    v: f32,
-};
+const Vertex = @import("../gfx.zig").Vertex;
 
 const QuadOptions = struct {
     buf: []Vertex,

@@ -31,11 +31,49 @@ in vec2 uv;
 out vec4 frag_color;
 
 void main() {
-    frag_color = texture(sampler2D(tex, smp), uv) * color;
+    frag_color = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guess
 }
 @end
 
 @program main vs fs
+
+//* shadow shader
+
+// This shader renders everything in a solid shadow color, placing it at an offset to give the illusion of a drop shadow. Fancy!
+
+@vs vs_shadow
+
+uniform vs_params {
+    mat4 mvp;
+};
+
+in vec4 position;
+in vec4 color0;
+in vec2 texcoord0;
+
+out vec2 uv;
+
+void main() {
+    vec4 offset = vec4(2, 2, 0, 0);
+    gl_Position = mvp * (position + offset);
+    uv = texcoord0;
+}
+@end
+
+@fs fs_shadow
+uniform texture2D tex;
+uniform sampler smp;
+
+in vec2 uv;
+out vec4 frag_color;
+
+void main() {
+    vec4 sampled_color = texture(sampler2D(tex, smp), uv);
+    frag_color = vec4(26.0/255, 31.0/255, 37.0/255, sampled_color.a);
+}
+@end
+
+@program shadow vs_shadow fs_shadow
 
 //* scene shader
 
@@ -60,6 +98,7 @@ void main() {
 @end
 
 @fs fs_scene
+
 uniform texture2D tex;
 uniform sampler smp;
 uniform fs_scene_params {
@@ -93,16 +132,15 @@ void main() {
 
     if (frag_progress < transition_progress - roll_fraction) {
         // Fragment is fully "rolled out" - render normally
-        vec3 c = texture(sampler2D(tex, smp), uv).xyz;
-        frag_color = vec4(c, 1.0);
+        frag_color = texture(sampler2D(tex, smp), uv);
     } else {
         // Fragment is inside the roll - warp the UV y-coord to fake 3D effect
         float distance_from_bottom = transition_progress - frag_progress;
         float roll_offset = distance_from_bottom/roll_fraction;
         vec2 roll_uv = vec2(uv.x, transition_progress + roll_fraction * warp(roll_offset));
-        vec3 c = texture(sampler2D(tex, smp), roll_uv).xyz;
-        c = darken(roll_offset, c);
-        frag_color = vec4(c, 1.0);
+        vec4 c = texture(sampler2D(tex, smp), roll_uv);
+        vec3 modified_color = darken(roll_offset, c.xyz);
+        frag_color = vec4(modified_color, c.a);
     }
 }
 @end

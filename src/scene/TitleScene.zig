@@ -32,6 +32,17 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         scene.settings_open = false;
     }
 
+    gfx.setTexture(gfx.spritesheetTexture());
+    gfx.render(.{
+        .src = m.irect(sprite.sprites.title.bounds),
+        .dst = .{
+            .x = 0,
+            .y = 0,
+            .w = constants.viewport_size[0],
+            .h = constants.viewport_size[1],
+        },
+    });
+
     ui.begin(.{});
     defer ui.end();
 
@@ -85,21 +96,6 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     if (scene.settings_open and settings.renderMenu()) {
         scene.settings_open = false;
     }
-
-    gfx.setTexture(gfx.spritesheetTexture());
-    gfx.render(.{
-        .src = m.irect(sprite.sprites.title.bounds),
-        .dst = .{
-            .x = 0,
-            .y = 0,
-            .w = constants.viewport_size[0],
-            .h = constants.viewport_size[1],
-        },
-    });
-
-    gfx.beginOffscreenPass();
-    gfx.renderMain();
-    gfx.endOffscreenPass();
 }
 
 pub fn deinit(scene: *TitleScene) void {
