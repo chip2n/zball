@@ -248,15 +248,15 @@ test "parse wav" {
 
     const expected_format = WavFormatChunk{
         .formatBlocID = fmt_magic,
-        .blocSize = 16,
+        .blocSize = 18,
         .audioFormat = 1,
-        .nbrChannels = 1,
+        .nbrChannels = 2,
         .frequence = 44100,
-        .bytePerSec = 88200,
-        .bytePerBloc = 2,
+        .bytePerSec = 176400,
+        .bytePerBloc = 4,
         .bitsPerSample = 16,
     };
-    try std.testing.expectEqual(15940, result.file_size);
+    try std.testing.expectEqual(30034, result.file_size);
     try std.testing.expectEqual(expected_format, format);
-    try std.testing.expectEqual(15904, samples.len);
+    try std.testing.expectEqual(29996, samples.len);
 }

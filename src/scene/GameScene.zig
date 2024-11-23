@@ -132,7 +132,7 @@ score: u32 = 0,
 
 paddle_pos: [2]f32 = initial_paddle_pos,
 paddle_size: PaddleSize = .normal,
-paddle_magnet: bool = true,
+paddle_magnet: bool = false,
 
 entities: []Entity,
 
@@ -170,26 +170,24 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
     for (scene.entities) |*e| e.* = .{};
 
     // initialize bricks
-    for (0..lvl.height) |y| {
-        for (0..lvl.width) |x| {
-            const i = y * lvl.width + x;
-            const brick = lvl.bricks[i];
-            if (brick.id == 0) {
-                continue;
-            }
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
-            const s: sprite.Sprite = try game.brickIdToSprite(brick.id);
+    for (lvl.entities) |e| {
+        switch (e.type) {
+            .brick => {
+                const s: sprite.Sprite = try game.brickIdToSprite(e.sprite);
 
-            const sp = sprite.get(s);
-            const w: f32 = @floatFromInt(sp.bounds.w);
-            const h: f32 = @floatFromInt(sp.bounds.h);
-            _ = try scene.spawnEntity(
-                .brick,
-                .{ fx * w + w / 2, fy * h + h / 2 + brick_start_y },
-                .{ 0, 0 },
-                s,
-            );
+                const fx: f32 = @floatFromInt(e.x);
+                const fy: f32 = @floatFromInt(e.y);
+                const sp = sprite.get(s);
+                const w: f32 = @floatFromInt(sp.bounds.w);
+                const h: f32 = @floatFromInt(sp.bounds.h);
+                // TODO not a fan of the entity pivot point differences between editor and game
+                _ = try scene.spawnEntity(
+                    .brick,
+                    .{ fx + w / 2, fy + h / 2 + brick_start_y },
+                    .{ 0, 0 },
+                    s,
+                );
+            },
         }
     }
 
@@ -594,22 +592,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         });
     }
 
-    { // Top status bar
-        const d = sprite.sprites.dialog;
-        gfx.render(.{
-            .src = .{
-                .x = d.bounds.x + d.center.?.x,
-                .y = d.bounds.y + d.center.?.y,
-                .w = d.center.?.w,
-                .h = d.center.?.h,
-            },
-            .dst = .{
-                .x = 0,
-                .y = 0,
-                .w = constants.viewport_size[0],
-                .h = 8,
-            },
-        });
+    { // Top bar
         for (0..scene.lives) |i| {
             const fi: f32 = @floatFromInt(i);
             const sp = sprite.sprites.ball_normal;
@@ -842,7 +825,7 @@ fn spawnEntity(
             .pos = pos,
             .dir = dir,
             .flame = FlameEmitter.init(.{
-                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+                .rng = game.prng.random(),
                 .sprites = game.particleFlameSprites,
             }),
             .sprite = s,
@@ -856,7 +839,7 @@ fn spawnEntity(
 fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
     const expl = try scene.spawnEntity(.explosion, pos, .{ 0, 0 }, null);
     expl.explosion = ExplosionEmitter.init(.{
-        .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
+        .rng = game.prng.random(),
         .sprites = game.particleExplosionSprites(sp),
     });
     expl.explosion.emitting = true;
@@ -1014,8 +997,7 @@ fn splitBall(scene: *GameScene, angles: []const f32) void {
 fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
     if (scene.powerup_timer > 0) return;
 
-    var prng = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
-    const rng = prng.random();
+    const rng = game.prng.random();
     const value = rng.float(f32);
     if (value < 1 - powerup_freq) return;
 

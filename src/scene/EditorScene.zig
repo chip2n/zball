@@ -15,63 +15,50 @@ const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sapp = sokol.app;
 
-const Brick = game.Brick;
 const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 
 const EditorScene = @This();
 
+pub const Brick = struct {
+    pos: [2]f32 = .{ 0, 0 },
+    sprite: sprite.Sprite = .brick0,
+};
+
+const LevelEntity = level.LevelEntity;
+
 allocator: std.mem.Allocator,
 
 bricks: []Brick,
-tex: Texture,
-brush: sprite.Sprite = .brick1,
+brush: sprite.Sprite = .brick1a,
 
 pub fn init(allocator: std.mem.Allocator) !EditorScene {
-    const bricks = try allocator.alloc(Brick, 20 * 20);
-    errdefer allocator.free(bricks);
+    var bricks = std.ArrayList(Brick).init(allocator);
+    errdefer bricks.deinit();
 
+    const base_offset_x = (constants.viewport_size[0] - 18 * brick_w) / 2;
+    const base_offset_y = base_offset_x; // for symmetry
+    var i: usize = 0;
     for (0..20) |y| {
-        for (0..20) |x| {
-            const i = y * 20 + x;
-            const fx: f32 = @floatFromInt(x);
-            const fy: f32 = @floatFromInt(y);
-            bricks[i] = Brick.init(fx, fy, .brick1);
-            bricks[i].destroyed = true;
-        }
-    }
+        const count: usize = if (y % 2 == 0) 19 else 18; // staggered
+        for (0..count) |x| {
+            var offset_x: usize = base_offset_x;
+            if (y % 2 == 1) {
+                offset_x += brick_w / 2;
+            }
 
-    const width = constants.viewport_size[0];
-    const height = constants.viewport_size[1];
-    const editor_texture_data = try allocator.alloc(u32, width * height);
-    defer allocator.free(editor_texture_data);
-    for (editor_texture_data) |*d| {
-        d.* = 0x000000;
-    }
-    // Horizontal lines
-    for (1..21) |y| {
-        for (0..width) |x| {
-            editor_texture_data[y * width * 8 + x] = 0x10FFFFFF;
-        }
-    }
+            // Brick sprites are overlapping by a pixel
+            const fx: f32 = @floatFromInt(x * brick_w - x + offset_x);
+            const fy: f32 = @floatFromInt(y * brick_h - y + base_offset_y);
+            try bricks.append(Brick{ .pos = .{ fx, fy } });
 
-    // Vertical lines
-    for (1..20) |x| {
-        for (0..height - 80) |y| {
-            editor_texture_data[x * 16 + y * width] = 0x10FFFFFF;
+            i += 1;
         }
     }
-    const tex = try gfx.texture.loadRGB8(.{
-        .data = std.mem.sliceAsBytes(editor_texture_data),
-        .width = width,
-        .height = height,
-        .usage = .mutable,
-    });
 
     return EditorScene{
         .allocator = allocator,
-        .bricks = bricks,
-        .tex = tex,
+        .bricks = try bricks.toOwnedSlice(),
     };
 }
 
@@ -93,53 +80,45 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         const x: usize = @intFromFloat(mouse_pos[0]);
         const y: usize = @intFromFloat(mouse_pos[1]);
 
-        const brick_x = x / 16;
-        const brick_y = y / 8;
-        if (brick_x >= 20) break :input;
-        if (brick_y >= 20) break :input;
+        var brick = scene.getBrickAt(x, y) orelse break :input;
 
-        var brick = &scene.bricks[brick_y * 20 + brick_x];
         if (input.down(.editor_draw)) {
             brick.sprite = scene.brush;
-            brick.destroyed = false;
         }
         if (input.down(.editor_erase)) {
-            brick.destroyed = true;
+            brick.sprite = .brick0;
         }
         if (input.pressed(.editor_save)) {
             std.log.info("Saving level", .{});
-            const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
-            defer file.close();
-            var data: [20 * 20]level.Brick = undefined;
-            for (scene.bricks, 0..) |b, i| {
-                var id: u8 = 0;
-                if (!b.destroyed) {
-                    id = try game.spriteToBrickId(b.sprite);
-                }
-                data[i] = .{ .id = id };
-            }
-            try level.writeLevel(&data, file.writer());
+            try scene.saveLevel();
         }
+    }
+
+    { // Background
+        gfx.setTexture(gfx.spritesheetTexture());
+        const sp = sprite.sprites.bg;
+        gfx.render(.{
+            .src = m.irect(sp.bounds),
+            .dst = .{
+                .x = 0,
+                .y = 0,
+                .w = constants.viewport_size[0],
+                .h = constants.viewport_size[1],
+            },
+            .layer = .background,
+        });
     }
 
     // Render all bricks
     gfx.setTexture(gfx.spritesheetTexture());
     for (scene.bricks) |brick| {
-        if (brick.destroyed) continue;
         const x = brick.pos[0];
         const y = brick.pos[1];
         const slice = sprite.get(brick.sprite);
         gfx.render(.{
             .src = m.irect(slice.bounds),
             .dst = .{ .x = x, .y = y, .w = brick_w, .h = brick_h },
-        });
-    }
-
-    { // Render grid
-        gfx.setTexture(scene.tex);
-        const tex = try gfx.texture.get(scene.tex);
-        gfx.render(.{
-            .dst = .{ .x = 0, .y = 0, .w = @floatFromInt(tex.width), .h = @floatFromInt(tex.height) },
+            .layer = if (brick.sprite == .brick0) .background else .main,
         });
     }
 
@@ -155,7 +134,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         });
         defer ui.endWindow();
 
-        const palette = [_]sprite.Sprite{ .brick1, .brick2, .brick3, .brick4 };
+        const palette = [_]sprite.Sprite{ .brick1a, .brick2a, .brick3a, .brick4a };
         for (palette) |s| {
             if (ui.sprite(.{ .sprite = s })) {
                 scene.brush = s;
@@ -163,4 +142,33 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             ui.sameLine();
         }
     }
+}
+
+fn getBrickAt(scene: *EditorScene, x: usize, y: usize) ?*Brick {
+    for (scene.bricks) |*brick| {
+        const bounds = m.Rect{ .x = brick.pos[0], .y = brick.pos[1], .w = brick_w, .h = brick_h };
+        if (bounds.containsPoint(@floatFromInt(x), @floatFromInt(y))) {
+            return brick;
+        }
+    }
+    return null;
+}
+
+fn saveLevel(scene: *EditorScene) !void {
+    const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
+    defer file.close();
+
+    var entities = std.ArrayList(LevelEntity).init(scene.allocator);
+    defer entities.deinit();
+
+    for (scene.bricks) |b| {
+        if (b.sprite == .brick0) continue;
+        try entities.append(.{
+            .type = .brick,
+            .x = @intFromFloat(b.pos[0]),
+            .y = @intFromFloat(b.pos[1]),
+            .sprite = try game.spriteToBrickId(b.sprite),
+        });
+    }
+    try level.writeLevel(entities.items, file.writer());
 }

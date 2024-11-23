@@ -23,40 +23,10 @@ const Level = level.Level;
 const level_files = .{
     "assets/level1.lvl",
     "assets/level2.lvl",
-    "assets/level3.lvl",
 };
 
 const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
-
-pub const Brick = struct {
-    pos: [2]f32 = .{ 0, 0 },
-    sprite: sprite.Sprite = .brick1,
-    emitter: ExplosionEmitter = undefined,
-    destroyed: bool = true,
-
-    pub fn init(x: f32, y: f32, sp: sprite.Sprite) Brick {
-        return .{
-            .pos = .{ x * brick_w, y * brick_h },
-            .sprite = sp,
-            .emitter = ExplosionEmitter.init(.{
-                .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-                .sprites = particleExplosionSprites(.brick1),
-            }),
-            .destroyed = false,
-        };
-    }
-
-    pub fn explode(brick: *Brick) void {
-        const pos = .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 };
-        brick.emitter = ExplosionEmitter.init(.{
-            .seed = @as(u64, @bitCast(std.time.milliTimestamp())),
-            .sprites = particleExplosionSprites(brick.sprite),
-        });
-        brick.emitter.pos = pos;
-        brick.emitter.emitting = true;
-    }
-};
 
 pub const ExplosionEmitter = particle.Emitter(.{
     .loop = false,
@@ -72,26 +42,32 @@ pub const ExplosionEmitter = particle.Emitter(.{
 });
 
 const brick_explosion_regions = .{
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
-    .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
+    .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 0.3 },
+    .{ .bounds = .{ .x = 1, .y = 1, .w = 1, .h = 1 }, .weight = 1 },
+    .{ .bounds = .{ .x = 2, .y = 2, .w = 1, .h = 1 }, .weight = 1 },
+    .{ .bounds = .{ .x = 1, .y = 1, .w = 2, .h = 2 }, .weight = 1 },
 };
 const ball_explosion_regions = .{
     .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
     .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
 };
 
-const brick_sprites1 = .{.{ .sprite = .brick1, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites2 = .{.{ .sprite = .brick2, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites3 = .{.{ .sprite = .brick3, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites4 = .{.{ .sprite = .brick4, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites1 = .{.{ .sprite = .brick1a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites2 = .{.{ .sprite = .brick2a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites3 = .{.{ .sprite = .brick3a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites4 = .{.{ .sprite = .brick4a, .weight = 1, .regions = &brick_explosion_regions }};
 const ball_sprites = .{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
 
 pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     return switch (s) {
-        .brick1 => &brick_sprites1,
-        .brick2 => &brick_sprites2,
-        .brick3 => &brick_sprites3,
-        .brick4 => &brick_sprites4,
+        .brick1a => &brick_sprites1,
+        .brick1b => &brick_sprites1,
+        .brick2a => &brick_sprites2,
+        .brick2b => &brick_sprites2,
+        .brick3a => &brick_sprites3,
+        .brick3b => &brick_sprites3,
+        .brick4a => &brick_sprites4,
+        .brick4b => &brick_sprites4,
         .ball_smallest => &ball_sprites,
         .ball_smaller => &ball_sprites,
         .ball_normal => &ball_sprites,
@@ -123,26 +99,33 @@ pub const particleFlameSprites = &.{
 };
 
 pub fn brickIdToSprite(id: u8) !sprite.Sprite {
+    // Randomize a variant for this brick
+    const rng = prng.random();
     return switch (id) {
-        1 => .brick1,
-        2 => .brick2,
-        3 => .brick3,
-        4 => .brick4,
+        1 => (&[_]sprite.Sprite{ .brick1a, .brick1b })[rng.intRangeAtMost(usize, 0, 1)],
+        2 => (&[_]sprite.Sprite{ .brick2a, .brick2b })[rng.intRangeAtMost(usize, 0, 1)],
+        3 => (&[_]sprite.Sprite{ .brick3a, .brick3b })[rng.intRangeAtMost(usize, 0, 1)],
+        4 => (&[_]sprite.Sprite{ .brick4a, .brick4b })[rng.intRangeAtMost(usize, 0, 1)],
         else => return error.UnknownBrickId,
     };
 }
 
 pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
     return switch (sp) {
-        .brick1 => 1,
-        .brick2 => 2,
-        .brick3 => 3,
-        .brick4 => 4,
+        .brick1a => 1,
+        .brick1b => 1,
+        .brick2a => 2,
+        .brick2b => 2,
+        .brick3a => 3,
+        .brick3b => 3,
+        .brick4a => 4,
+        .brick4b => 4,
         else => return error.BrickSpriteMissing,
     };
 }
 
 pub var arena: std.heap.ArenaAllocator = undefined;
+pub var prng: std.Random.DefaultPrng = undefined;
 pub var time: f64 = 0;
 pub var dt: f32 = 0;
 pub var levels: std.ArrayList(Level) = undefined;
@@ -166,14 +149,18 @@ pub fn init(allocator: std.mem.Allocator) !void {
     inline for (level_files) |path| {
         const data = @embedFile(path);
         var fbs = std.io.fixedBufferStream(data);
-        const lvl = try level.parseLevel(arena.allocator(), fbs.reader());
-        errdefer lvl.deinit(arena.allocator());
+        const lvl = try level.readLevel(arena.allocator(), fbs.reader());
+        errdefer lvl.deinit();
         try levels.append(lvl);
     }
 
     fb_current = gfx.createFramebuffer();
     fb_transition = gfx.createFramebuffer();
     scene_mgr = SceneManager.init(allocator, levels.items);
+
+    const seed: u64 = @bitCast(std.time.milliTimestamp());
+    std.log.info("Seed: {}", .{seed});
+    prng = std.Random.DefaultPrng.init(seed);
 }
 
 pub fn deinit() void {
@@ -192,6 +179,12 @@ pub fn frame(now: f64) !void {
 
     // Render the current scene, as well as the next scene if we're transitioning
     try scene_mgr.current.frame(dt);
+
+    // TODO render FPS when player presses a button
+    // gfx.setTexture(gfx.fontTexture());
+    // var buf: [64]u8 = undefined;
+    // const text = try std.fmt.bufPrint(&buf, "{d:2}", .{dt});
+    // gfx.renderText(text, 16, 16, 5);
 
     gfx.renderMain(fb_current);
 

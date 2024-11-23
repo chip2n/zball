@@ -90,6 +90,8 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         emitting: bool = false,
         pos: [2]f32 = .{ 0, 0 },
 
+        rng: std.Random = undefined,
+
         /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
         sprites: []const SpriteDesc = undefined,
 
@@ -100,18 +102,16 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         cycle_timer: f32 = 0,
         next_spawn: f32 = 0,
         cycle_spawns: usize = 0,
-        prng: std.Random.DefaultPrng = undefined,
 
         const EmitterInitDesc = struct {
-            seed: u64,
+            rng: std.Random,
             sprites: []const SpriteDesc,
         };
 
         pub fn init(v: EmitterInitDesc) Self {
-            const prng = std.Random.DefaultPrng.init(v.seed);
             return .{
+                .rng = v.rng,
                 .sprites = v.sprites,
-                .prng = prng,
             };
         }
 
@@ -160,30 +160,29 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         fn spawnParticle(self: *Self) void {
-            const rng = self.prng.random();
             const pos = blk: {
-                const len = rng.float(f32) * desc.spawn_radius;
+                const len = self.rng.float(f32) * desc.spawn_radius;
                 var result = [2]f32{ len, 0 };
-                const angle = rng.float(f32) * std.math.tau;
+                const angle = self.rng.float(f32) * std.math.tau;
                 vrot(&result, angle);
                 break :blk result;
             };
 
             const vel = blk: {
                 var result = desc.velocity;
-                result = vmul(result, (1 - rng.float(f32) * desc.velocity_randomness));
-                const angle = rng.float(f32) * desc.velocity_sweep;
+                result = vmul(result, (1 - self.rng.float(f32) * desc.velocity_randomness));
+                const angle = self.rng.float(f32) * desc.velocity_sweep;
                 vrot(&result, angle);
                 break :blk result;
             };
 
-            const p_lifetime = min_lifetime + rng.float(f32) * (lifetime - min_lifetime);
+            const p_lifetime = min_lifetime + self.rng.float(f32) * (lifetime - min_lifetime);
 
             self.particles[self.idx] = .{
-                .seed = rng.int(u8),
+                .seed = self.rng.int(u8),
                 .active = true,
                 .pos = vadd(self.pos, pos),
-                .z = rng.float(f32),
+                .z = self.rng.float(f32),
                 .vel = vel,
                 .time = 0,
                 .lifetime = p_lifetime,
