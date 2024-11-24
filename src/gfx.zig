@@ -46,11 +46,6 @@ const GfxState = struct {
         pip: sg.Pipeline = .{},
         bind: sg.Bindings = .{},
     } = .{},
-    bg: struct {
-        pip: sg.Pipeline = .{},
-        bind: sg.Bindings = .{},
-        pass_action: sg.PassAction = .{},
-    } = .{},
     spritesheet_texture: Texture = undefined,
     font_texture: Texture = undefined,
     window_size: [2]i32 = constants.initial_screen_size,
@@ -166,23 +161,6 @@ pub fn init(allocator: std.mem.Allocator) !void {
     // offscreen render target textures
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
     state.scene.bind.fs.samplers[0] = smp;
-
-    { // Background shader
-        var pip_desc: sg.PipelineDesc = .{
-            .shader = sg.makeShader(shd.bgShaderDesc(sg.queryBackend())),
-            .primitive_type = .TRIANGLE_STRIP,
-            .depth = .{
-                .pixel_format = .DEPTH,
-                .compare = .LESS_EQUAL,
-                .write_enabled = false,
-            },
-        };
-        pip_desc.layout.attrs[shd.ATTR_vs_bg_pos].format = .FLOAT2;
-        pip_desc.layout.attrs[shd.ATTR_vs_bg_in_uv].format = .FLOAT2;
-        const pip = sg.makePipeline(pip_desc);
-        state.bg.pip = pip;
-        state.bg.bind.vertex_buffers[0] = state.quad_vbuf;
-    }
 
     try ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();
