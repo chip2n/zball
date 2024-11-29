@@ -491,8 +491,9 @@ const QuadOptions = struct {
 
 inline fn quad(v: QuadOptions) void {
     const buf = v.buf;
-    const x = v.dst.x;
-    const y = v.dst.y;
+    // NOTE: Render at exact pixel coordinates for pixel perfect rendering
+    const x = std.math.round(v.dst.x);
+    const y = std.math.round(v.dst.y);
     const z = v.z;
     const w = v.dst.w;
     const h = v.dst.h;

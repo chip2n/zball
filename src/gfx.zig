@@ -123,13 +123,16 @@ pub fn init(allocator: std.mem.Allocator) !void {
     }
 
     // a vertex buffer to render a fullscreen quad
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
     state.quad_vbuf = sg.makeBuffer(.{
         .usage = .IMMUTABLE,
         .data = sg.asRange(&[_]f32{
-            -0.5, -0.5, 0, 0,
-            0.5,  -0.5, 1, 0,
-            -0.5, 0.5,  0, 1,
-            0.5,  0.5,  1, 1,
+            0,  0,  0, 0,
+            vw, 0,  1, 0,
+            0,  vh, 0, 1,
+            vw, vh, 1,
+            1,
         }),
     });
 
@@ -292,7 +295,7 @@ pub inline fn renderNinePatch(opts: BatchRenderer.RenderNinePatchOptions) void {
 
 // TODO return a handler?
 pub fn createFramebuffer() Framebuffer {
-    return Framebuffer.init(@intCast(state.window_size[0]), @intCast(state.window_size[1]));
+    return Framebuffer.init(@intCast(constants.viewport_size[0]), @intCast(constants.viewport_size[1]));
 }
 
 pub fn beginFrame() void {
@@ -313,35 +316,51 @@ pub fn endFrame() void {
 }
 
 pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
-    const scene_params = computeSceneParams();
-    var fs_scene_params = shd.FsSceneParams{ .value = 1.0 };
+    const width: f32 = @floatFromInt(state.window_size[0]);
+    const height: f32 = @floatFromInt(state.window_size[1]);
+
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+
+    const persp = m.orthographicRh(width, height, 0.1, 10);
+
+    const scale = @min(@floor(width / vw), @floor(height / vh));
+
+    // Move the viewport to center of the screen
+    const offset_x = width / 2 - (vw * scale) / 2;
+    const offset_y = height / 2 - (vh * scale) / 2;
+    const view = m.translation(
+        std.math.round(-width / 2 + offset_x),
+        std.math.round(-height / 2 + offset_y),
+        0,
+    );
+    const model = m.scaling(scale, scale, 1);
+    const vs_scene_params = shd.VsSceneParams{ .mvp = m.mul(model, m.mul(view, persp)) };
+    var fs_scene_params = shd.FsSceneParams{
+        .value = 1.0,
+        .scanline_amount = 0.0,
+        .vignette_amount = 0.4,
+        .vignette_intensity = 0.5,
+        .aberation_amount = 0.0,
+    };
+    if (scale > 2) {
+        // Scale is big enough for scanlines
+        fs_scene_params.scanline_amount = 1.0;
+        fs_scene_params.vignette_amount = 0.6;
+        fs_scene_params.vignette_intensity = 0.4;
+        fs_scene_params.aberation_amount = 0.3;
+    }
     // Update uniform transition progress (shader uses it to display part of the
     // screen while a transition is in progress)
     fs_scene_params.value = transition_progress;
 
     sg.applyPipeline(state.scene.pip);
-    sg.applyUniforms(.VS, shd.SLOT_vs_scene_params, sg.asRange(&scene_params));
+    sg.applyUniforms(.VS, shd.SLOT_vs_scene_params, sg.asRange(&vs_scene_params));
     sg.applyUniforms(.FS, shd.SLOT_fs_scene_params, sg.asRange(&fs_scene_params));
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
     state.scene.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
     sg.applyBindings(state.scene.bind);
     sg.draw(0, 4, 1);
-}
-
-fn computeSceneParams() shd.VsSceneParams {
-    const width: f32 = @floatFromInt(state.window_size[0]);
-    const height: f32 = @floatFromInt(state.window_size[1]);
-    const aspect = width / height;
-
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-    const viewport_aspect = vw / vh;
-
-    var model = m.scaling(2, (2 / viewport_aspect) * aspect, 1);
-    if (aspect > viewport_aspect) {
-        model = m.scaling((2 * viewport_aspect) / aspect, 2, 1);
-    }
-    return shd.VsSceneParams{ .mvp = model };
 }
 
 pub fn handleEvent(ev: sapp.Event) void {
