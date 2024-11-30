@@ -14,24 +14,57 @@ in vec2 texcoord0;
 
 out vec4 color;
 out vec2 uv;
+out vec2 frag_position;
 
 void main() {
     gl_Position = mvp * position;
     color = color0;
     uv = texcoord0;
+    frag_position = position.xy;
 }
 @end
 
 @fs fs
 uniform texture2D tex;
 uniform sampler smp;
+uniform fs_params {
+    vec4 flags;
+    vec4 light_positions[16];
+    vec4 light_colors[16];
+};
 
 in vec4 color;
 in vec2 uv;
+in vec2 frag_position;
 out vec4 frag_color;
 
+float constant = 2.0;  // Constant factor
+float linear = 0.09;   // Linear attenuation
+float quadratic = 0.032;  // Quadratic attenuation
+
 void main() {
-    frag_color = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guess
+    vec4 c = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guessa
+
+    if (flags.x > 0) {
+    for (int i = 0; i < light_positions.length(); i++) {
+        vec2 light_pos = light_positions[i].xy;
+        vec3 light_color = light_colors[i].rgb;
+        float distance_to_light = length(light_pos - frag_position);
+        float light_strength = 0.5;
+        float attenuation = 1.0 / (constant + linear * distance_to_light + quadratic * (distance_to_light * distance_to_light));
+        float s = attenuation * light_strength;
+        vec3 light_result = vec3(s, s, s) * light_color;
+        c += vec4(light_result, 0);
+
+        // A little bit extra glow
+        if (distance_to_light < 10) {
+            c += vec4(light_color * 0.03, 0);
+        } else if (distance_to_light < 14) {
+            c += vec4(light_color * 0.015, 0);
+        }
+    }
+    }
+    frag_color = c;
 }
 @end
 
@@ -52,24 +85,39 @@ in vec4 color0;
 in vec2 texcoord0;
 
 out vec2 uv;
+out vec2 frag_position;
 
 void main() {
     vec4 offset = vec4(2, 2, 0, 0);
     gl_Position = mvp * (position + offset);
     uv = texcoord0;
+    frag_position = position.xy;
 }
 @end
 
+// TODO share between shaders
 @fs fs_shadow
 uniform texture2D tex;
 uniform sampler smp;
+uniform fs_params {
+    vec4 flags;
+    vec4 light_positions[16];
+    vec4 light_colors[16];
+};
 
 in vec2 uv;
+in vec2 frag_position;
 out vec4 frag_color;
 
 void main() {
     vec4 sampled_color = texture(sampler2D(tex, smp), uv);
-    frag_color = vec4(26.0/255, 31.0/255, 37.0/255, sampled_color.a);
+    vec3 shadow_color = vec3(26.0/255, 31.0/255, 37.0/255);
+    float distance_to_light = 9999;
+    for (int i = 0; i < light_positions.length(); i++) {
+        vec2 light_pos = light_positions[i].xy;
+        distance_to_light = min(distance_to_light, length(light_pos - frag_position));
+    }
+    frag_color = vec4(shadow_color, sampled_color.a * max(0.2, (1 - (20 / distance_to_light))));
 }
 @end
 

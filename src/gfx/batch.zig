@@ -26,6 +26,7 @@ const RenderCommand = union(enum) {
         alpha: u8,
         tex: TextureInfo,
         layer: Layer,
+        illuminated: bool,
     },
     nine_patch: struct {
         src: IRect,
@@ -35,26 +36,30 @@ const RenderCommand = union(enum) {
         alpha: u8,
         tex: TextureInfo,
         layer: Layer,
+        illuminated: bool,
     },
 
     fn layer(cmd: RenderCommand) Layer {
         return switch (cmd) {
-            .sprite => |c| c.layer,
-            .nine_patch => |c| c.layer,
+            inline else => |c| c.layer,
         };
     }
 
     fn z_index(cmd: RenderCommand) f32 {
         return switch (cmd) {
-            .sprite => |c| c.z,
-            .nine_patch => |c| c.z,
+            inline else => |c| c.z,
         };
     }
 
     fn tex(cmd: RenderCommand) TextureInfo {
         return switch (cmd) {
-            .sprite => |c| c.tex,
-            .nine_patch => |c| c.tex,
+            inline else => |c| c.tex,
+        };
+    }
+
+    fn illuminated(cmd: RenderCommand) bool {
+        return switch (cmd) {
+            inline else => |c| c.illuminated,
         };
     }
 };
@@ -69,6 +74,7 @@ pub const Batch = struct {
     len: usize,
     tex: Texture,
     layer: Layer,
+    illuminated: bool,
 };
 
 pub const BatchRenderer = struct {
@@ -101,7 +107,14 @@ pub const BatchRenderer = struct {
         // std.debug.assert(self.idx < self.buf.len);
     }
 
-    pub const RenderOptions = struct { src: ?IRect = null, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF, layer: Layer = .main };
+    pub const RenderOptions = struct {
+        src: ?IRect = null,
+        dst: Rect,
+        z: f32 = 0,
+        alpha: u8 = 0xFF,
+        layer: Layer = .main,
+        illuminated: bool = true,
+    };
     pub fn render(self: *BatchRenderer, v: RenderOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);
@@ -114,11 +127,20 @@ pub const BatchRenderer = struct {
                 .alpha = v.alpha,
                 .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
                 .layer = v.layer,
+                .illuminated = v.illuminated,
             },
         });
     }
 
-    pub const RenderNinePatchOptions = struct { src: IRect, center: IRect, dst: Rect, z: f32 = 0, alpha: u8 = 0xFF, layer: Layer = .main };
+    pub const RenderNinePatchOptions = struct {
+        src: IRect,
+        center: IRect,
+        dst: Rect,
+        z: f32 = 0,
+        alpha: u8 = 0xFF,
+        layer: Layer = .main,
+        illuminated: bool = true,
+    };
     pub fn renderNinePatch(self: *BatchRenderer, v: RenderNinePatchOptions) void {
         const tex = texture.get(self.tex.?) catch return;
         const tw: f32 = @floatFromInt(tex.width);
@@ -132,6 +154,7 @@ pub const BatchRenderer = struct {
                 .alpha = v.alpha,
                 .tex = .{ .handle = self.tex.?, .tw = tw, .th = th },
                 .layer = v.layer,
+                .illuminated = v.illuminated,
             },
         });
     }
@@ -156,6 +179,7 @@ pub const BatchRenderer = struct {
         var tw = buf[0].tex().tw;
         var th = buf[0].tex().th;
         var layer = buf[0].layer();
+        var illuminated = buf[0].illuminated();
 
         var i: usize = 0;
         var batch_idx: usize = 0;
@@ -164,14 +188,16 @@ pub const BatchRenderer = struct {
         self.batches[0].len = 0;
         self.batches[0].tex = tex;
         self.batches[0].layer = layer;
+        self.batches[0].illuminated = illuminated;
 
         for (buf) |cmd| {
-            if (tex != cmd.tex().handle or layer != cmd.layer()) {
+            if (tex != cmd.tex().handle or layer != cmd.layer() or illuminated != cmd.illuminated()) {
                 // Make new batch
                 tex = cmd.tex().handle;
                 tw = cmd.tex().tw;
                 th = cmd.tex().th;
                 layer = cmd.layer();
+                illuminated = cmd.illuminated();
 
                 batch_idx += 1;
                 batch_count += 1;
@@ -179,6 +205,7 @@ pub const BatchRenderer = struct {
                 self.batches[batch_idx].len = 0;
                 self.batches[batch_idx].tex = tex;
                 self.batches[batch_idx].layer = layer;
+                self.batches[batch_idx].illuminated = illuminated;
             }
 
             switch (cmd) {
@@ -470,6 +497,8 @@ pub const BatchRenderer = struct {
         if (@intFromEnum(le) > @intFromEnum(re)) return false;
         if (lz < rz) return true;
         if (lz > rz) return false;
+        if (lhs.illuminated() and !rhs.illuminated()) return true;
+        if (!lhs.illuminated() and rhs.illuminated()) return false;
         if (lt.handle < rt.handle) return true;
         if (lt.handle > rt.handle) return false;
         return false;

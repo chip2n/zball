@@ -32,6 +32,11 @@ pub const Vertex = extern struct {
     v: f32,
 };
 
+const Light = struct {
+    pos: [2]f32 = .{ 0, 0 },
+    color: u32,
+};
+
 const GfxState = struct {
     initialized: bool = false,
     camera: Camera = undefined,
@@ -51,6 +56,7 @@ const GfxState = struct {
     window_size: [2]i32 = constants.initial_screen_size,
     batch: BatchRenderer = BatchRenderer.init(),
     quad_vbuf: sg.Buffer = undefined,
+    lights: std.ArrayList(Light) = undefined,
 };
 var state: GfxState = .{};
 
@@ -131,8 +137,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
             0,  0,  0, 0,
             vw, 0,  1, 0,
             0,  vh, 0, 1,
-            vw, vh, 1,
-            1,
+            vw, vh, 1, 1,
         }),
     });
 
@@ -165,6 +170,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
     state.scene.bind.fs.samplers[0] = smp;
 
+    state.lights = try std.ArrayList(Light).initCapacity(allocator, constants.max_lights);
+
     try ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();
 
@@ -174,10 +181,18 @@ pub fn init(allocator: std.mem.Allocator) !void {
 pub fn deinit() void {
     std.debug.assert(state.initialized);
     ui.deinit();
+    state.lights.deinit();
     state.initialized = false;
 }
 
+pub fn addLight(pos: [2]f32, color: u32) void {
+    if (state.lights.items.len >= constants.max_lights) return;
+    state.lights.appendAssumeCapacity(.{ .pos = pos, .color = color });
+}
+
 pub fn renderMain(fb: Framebuffer) void {
+    defer state.lights.clearRetainingCapacity();
+
     const result = state.batch.commit();
     if (result.batches.len == 0) return;
 
@@ -194,7 +209,32 @@ pub fn renderMain(fb: Framebuffer) void {
 
     var bind = fb.bind;
     sg.updateBuffer(bind.vertex_buffers[0], sg.asRange(result.verts));
-    const vs_params = shd.VsParams{ .mvp = state.camera.view_proj };
+    const vs_params = shd.VsParams{
+        .mvp = state.camera.view_proj,
+    };
+
+    var light_positions = std.mem.zeroes([16][4]f32);
+    var light_colors = std.mem.zeroes([16][4]f32);
+    for (state.lights.items, 0..) |l, i| {
+        const r: f32 = @floatFromInt((l.color >> 16) & 0xFF);
+        const g: f32 = @floatFromInt((l.color >> 8) & 0xFF);
+        const b: f32 = @floatFromInt((l.color >> 0) & 0xFF);
+        light_positions[i][0] = l.pos[0];
+        light_positions[i][1] = l.pos[1];
+        light_colors[i][0] = r / 255;
+        light_colors[i][1] = g / 255;
+        light_colors[i][2] = b / 255;
+    }
+    const fs_params = shd.FsParams{
+        .flags = .{ 1, 0, 0, 0 },
+        .light_positions = light_positions,
+        .light_colors = light_colors,
+    };
+    const fs_params2 = shd.FsParams{
+        .flags = .{ 0, 0, 0, 0 },
+        .light_positions = light_positions,
+        .light_colors = light_colors,
+    };
 
     // Render background
     for (result.batches) |b| {
@@ -206,6 +246,7 @@ pub fn renderMain(fb: Framebuffer) void {
         bind.fs.images[shd.SLOT_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
@@ -223,11 +264,13 @@ pub fn renderMain(fb: Framebuffer) void {
         // TODO avoid switching pipelines often
         sg.applyPipeline(state.shadow.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
 
     // Render main layer
+    var illuminated = false;
     for (result.batches) |b| {
         if (b.layer != .main) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -237,8 +280,14 @@ pub fn renderMain(fb: Framebuffer) void {
         bind.fs.images[shd.SLOT_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        if (!illuminated and b.illuminated) {
+            sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
+        } else {
+            sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params2));
+        }
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+        illuminated = b.illuminated;
     }
 
     // Render particles
@@ -251,6 +300,7 @@ pub fn renderMain(fb: Framebuffer) void {
         bind.fs.images[shd.SLOT_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }

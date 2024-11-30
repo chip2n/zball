@@ -497,6 +497,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     if (scene.collideBricks(old_pos, new_pos)) |_| {
                         e.type = .none;
                     }
+
+                    if (new_pos[1] < -16) {
+                        e.type = .none;
+                    }
                 },
                 .explosion => {
                     // When the emitter stops, we remove the entity
@@ -615,6 +619,14 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     // Render entities
     for (scene.entities) |e| {
         if (e.type == .none) continue;
+        if (e.type == .ball) {
+            if (e.flame.emitting) {
+                gfx.addLight(e.pos, 0xf2a54c);
+            }
+        }
+        if (e.type == .laser) {
+            gfx.addLight(e.pos, 0x99E550);
+        }
         if (e.sprite) |s| {
             const sp = sprite.get(s);
             const w: f32 = @floatFromInt(sp.bounds.w);
@@ -627,6 +639,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     .w = w,
                     .h = h,
                 },
+                .illuminated = switch (e.type) {
+                    .laser => false,
+                    else => true,
+                }
             });
         }
     }
