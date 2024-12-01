@@ -1,104 +1,72 @@
+const std = @import("std");
+const constants = @import("../constants.zig");
 const m = @import("math");
 const Mat4 = m.Mat4;
 
 const Camera = @This();
 
-pos: [2]f32,
-viewport_size: [2]u32,
-window_size: [2]u32,
-proj: Mat4,
+win_size: [2]u32,
 view: Mat4,
-view_inv: Mat4,
+proj: Mat4,
 view_proj: Mat4,
 view_proj_inv: Mat4,
 
 pub fn init(v: struct {
-    pos: [2]f32 = .{ 0, 0 },
-    viewport_size: [2]u32,
-    window_size: [2]u32,
+    win_size: [2]u32,
 }) Camera {
-    const proj = calculateProj(v.viewport_size);
-    const view = calculateView(v.pos);
+    const view = calculateView(v.win_size[0], v.win_size[1]);
+    const proj = calculateProj(v.win_size[0], v.win_size[1]);
     const view_proj = m.mul(view, proj);
     return .{
-        .pos = v.pos,
-        .viewport_size = v.viewport_size,
-        .window_size = v.window_size,
-        .proj = proj,
+        .win_size = v.win_size,
         .view = view,
-        .view_inv = m.inverse(view),
+        .proj = proj,
         .view_proj = view_proj,
         .view_proj_inv = m.inverse(view_proj),
     };
 }
 
-fn calculateProj(viewport_size: [2]u32) Mat4 {
-    return m.orthographicRh(
-        @floatFromInt(viewport_size[0]),
-        @floatFromInt(viewport_size[1]),
-        -10,
-        10,
-    );
-}
-
-fn calculateView(pos: [2]f32) Mat4 {
-    return m.translation(-pos[0], -pos[1], 0);
-}
-
 pub fn invalidate(cam: *Camera) void {
-    cam.view = calculateView(cam.pos);
-    cam.view_inv = m.inverse(cam.view);
+    cam.proj = calculateProj(cam.win_size[0], cam.win_size[1]);
+    cam.view = calculateView(cam.win_size[0], cam.win_size[1]);
     cam.view_proj = m.mul(cam.view, cam.proj);
     cam.view_proj_inv = m.inverse(cam.view_proj);
 }
 
-/// Convert a screen coordinate into world space
+fn calculateView(width: u32, height: u32) Mat4 {
+    const w: f32 = @floatFromInt(width);
+    const h: f32 = @floatFromInt(height);
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const scale = @min(@floor(w / vw), @floor(h / vh));
+    const offset_x = w / 2 - (vw * scale) / 2;
+    const offset_y = h / 2 - (vh * scale) / 2;
+    var view = m.translation(
+        std.math.round(-w / 2 + offset_x),
+        std.math.round(-h / 2 + offset_y),
+        0,
+    );
+    view = m.mul(m.scaling(scale, scale, 1), view);
+    return view;
+}
+
+fn calculateProj(width: u32, height: u32) Mat4 {
+    return m.orthographicRh(@floatFromInt(width), @floatFromInt(height), 0.1, 10);
+}
+
 pub fn screenToWorld(cam: Camera, p: [2]f32) [2]f32 {
-    const win_w: f32 = @floatFromInt(cam.window_size[0]);
-    const win_h: f32 = @floatFromInt(cam.window_size[1]);
-    const win_aspect = win_w / win_h;
-
-    const viewport_w: f32 = @floatFromInt(cam.viewport_size[0]);
-    const viewport_h: f32 = @floatFromInt(cam.viewport_size[1]);
-    const viewport_aspect = viewport_w / viewport_h;
-
-    const clip_coords = blk: {
-        if (win_aspect > viewport_aspect) {
-            break :blk m.Vec4(
-                (p[0] - win_w / 2) / (win_h * viewport_aspect / 2),
-                -(p[1] - win_h / 2) / (win_h / 2),
-                0,
-                0,
-            );
-        }
-        break :blk m.Vec4(
-            (p[0] - win_w / 2) / (win_w / 2),
-            -(p[1] - win_h / 2) / (win_w / viewport_aspect / 2),
-            0,
-            0,
-        );
-    };
-
-    const result = m.mul(clip_coords, cam.view_proj_inv);
-    return .{
-        result[0] + cam.pos[0],
-        // TODO Why do I need to invert this?
-        viewport_h - (result[1] + cam.pos[1]),
-    };
+    const w: f32 = @floatFromInt(cam.win_size[0]);
+    const h: f32 = @floatFromInt(cam.win_size[1]);
+    const mx = 2 * p[0] / w - 1;
+    const my = (2 * p[1] / h - 1);
+    const result = m.mul(@Vector(4, f32){ mx, my, 0, 1 }, cam.view_proj_inv);
+    return .{ result[0], result[1] };
 }
 
 pub fn zoom(cam: Camera) f32 {
-    const win_w: f32 = @floatFromInt(cam.window_size[0]);
-    const win_h: f32 = @floatFromInt(cam.window_size[1]);
-    const win_aspect = win_w / win_h;
-
-    const viewport_w: f32 = @floatFromInt(cam.viewport_size[0]);
-    const viewport_h: f32 = @floatFromInt(cam.viewport_size[1]);
-    const viewport_aspect = viewport_w / viewport_h;
-
-    if (win_aspect > viewport_aspect) {
-        return win_h / viewport_h;
-    } else {
-        return win_w / viewport_w;
-    }
+    const w: f32 = @floatFromInt(cam.win_size[0]);
+    const h: f32 = @floatFromInt(cam.win_size[1]);
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    return @min(@floor(w / vw), @floor(h / vh));
 }

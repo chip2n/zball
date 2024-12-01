@@ -64,9 +64,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     std.debug.assert(!state.initialized);
 
     state.camera = Camera.init(.{
-        .pos = .{ constants.viewport_size[0] / 2, constants.viewport_size[1] / 2 },
-        .viewport_size = constants.viewport_size,
-        .window_size = .{
+        .win_size = .{
             @intCast(state.window_size[0]),
             @intCast(state.window_size[1]),
         },
@@ -209,12 +207,15 @@ pub fn renderMain(fb: Framebuffer) void {
 
     var bind = fb.bind;
     sg.updateBuffer(bind.vertex_buffers[0], sg.asRange(result.verts));
-    const vs_params = shd.VsParams{
-        .mvp = state.camera.view_proj,
-    };
 
-    var light_positions = std.mem.zeroes([16][4]f32);
-    var light_colors = std.mem.zeroes([16][4]f32);
+    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    var mvp = m.orthographicRh(vw, vh, 0.1, 100);
+    mvp = m.mul(m.translation(-vw / 2, -vh / 2, 0), mvp);
+    const vs_params = shd.VsParams{ .mvp = mvp };
+
+    var light_positions = std.mem.zeroes([constants.max_lights][4]f32);
+    var light_colors = std.mem.zeroes([constants.max_lights][4]f32);
     for (state.lights.items, 0..) |l, i| {
         const r: f32 = @floatFromInt((l.color >> 16) & 0xFF);
         const g: f32 = @floatFromInt((l.color >> 8) & 0xFF);
@@ -366,26 +367,8 @@ pub fn endFrame() void {
 }
 
 pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
-    const width: f32 = @floatFromInt(state.window_size[0]);
-    const height: f32 = @floatFromInt(state.window_size[1]);
-
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-
-    const persp = m.orthographicRh(width, height, 0.1, 10);
-
-    const scale = @min(@floor(width / vw), @floor(height / vh));
-
-    // Move the viewport to center of the screen
-    const offset_x = width / 2 - (vw * scale) / 2;
-    const offset_y = height / 2 - (vh * scale) / 2;
-    const view = m.translation(
-        std.math.round(-width / 2 + offset_x),
-        std.math.round(-height / 2 + offset_y),
-        0,
-    );
-    const model = m.scaling(scale, scale, 1);
-    const vs_scene_params = shd.VsSceneParams{ .mvp = m.mul(model, m.mul(view, persp)) };
+    const mvp = state.camera.view_proj;
+    const vs_scene_params = shd.VsSceneParams{ .mvp = mvp };
     var fs_scene_params = shd.FsSceneParams{
         .value = 1.0,
         .scanline_amount = 0.0,
@@ -393,7 +376,7 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
         .vignette_intensity = 0.5,
         .aberation_amount = 0.0,
     };
-    if (scale > 2) {
+    if (state.camera.zoom() > 2) {
         // Scale is big enough for scanlines
         fs_scene_params.scanline_amount = 1.0;
         fs_scene_params.vignette_amount = 0.6;
@@ -420,7 +403,8 @@ pub fn handleEvent(ev: sapp.Event) void {
             const width = ev.window_width;
             const height = ev.window_height;
             state.window_size = .{ width, height };
-            state.camera.window_size = .{ @intCast(@max(0, width)), @intCast(@max(0, height)) };
+            state.camera.win_size = .{ @intCast(@max(0, width)), @intCast(@max(0, height)) };
+            state.camera.invalidate();
         },
         else => {},
     }
