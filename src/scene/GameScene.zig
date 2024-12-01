@@ -766,12 +766,8 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
                 normal = c_normal;
                 coll_dist = brick_dist;
             }
-            e.type = .none;
 
-            if (e.sprite) |sp| scene.spawnExplosion(e.pos, sp) catch {};
-            audio.play(.{ .clip = .explode });
-            scene.score += 100;
-
+            scene.destroyBrick(e);
             spawnPowerup(scene, e.pos);
         }
         collided = collided or c;
@@ -779,6 +775,33 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
 
     if (collided) return .{ .out = out, .normal = normal };
     return null;
+}
+
+fn destroyBrick(scene: *GameScene, brick: *Entity) void {
+    std.debug.assert(brick.type == .brick);
+    brick.type = .none;
+    audio.play(.{ .clip = .explode });
+    scene.score += 100;
+    if (brick.sprite) |sp| {
+        scene.spawnExplosion(brick.pos, sp) catch {};
+        switch (sp) {
+            .brick_expl => {
+                // Surrounding bricks go boom
+                scene.destroyBricksCircle(brick.pos, 16);
+            },
+            else => {},
+        }
+    }
+}
+
+fn destroyBricksCircle(scene: *GameScene, origin: [2]f32, radius: f32) void {
+    for (scene.entities) |*e| {
+        if (e.type != .brick) continue;
+        const dir = m.vsub(e.pos, origin);
+        if (m.magnitude(dir) <= radius) {
+            scene.destroyBrick(e);
+        }
+    }
 }
 
 fn tickDownTimer(scene: *GameScene, comptime field: []const u8, dt: f32) bool {
