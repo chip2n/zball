@@ -57,6 +57,7 @@ const brick_sprites2 = .{.{ .sprite = .brick2a, .weight = 1, .regions = &brick_e
 const brick_sprites3 = .{.{ .sprite = .brick3a, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites4 = .{.{ .sprite = .brick4a, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites_expl = .{.{ .sprite = .brick_expl, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites_metal = .{.{ .sprite = .brick_metal, .weight = 1, .regions = &brick_explosion_regions }};
 const ball_sprites = .{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
 
 pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
@@ -70,6 +71,7 @@ pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
         .brick4a => &brick_sprites4,
         .brick4b => &brick_sprites4,
         .brick_expl => &brick_sprites_expl,
+        .brick_metal => &brick_sprites_metal,
         .ball_smallest => &ball_sprites,
         .ball_smaller => &ball_sprites,
         .ball_normal => &ball_sprites,
@@ -109,6 +111,7 @@ pub fn brickIdToSprite(id: u8) !sprite.Sprite {
         3 => (&[_]sprite.Sprite{ .brick3a, .brick3b })[rng.intRangeAtMost(usize, 0, 1)],
         4 => (&[_]sprite.Sprite{ .brick4a, .brick4b })[rng.intRangeAtMost(usize, 0, 1)],
         5 => .brick_expl,
+        6 => .brick_metal,
         else => return error.UnknownBrickId,
     };
 }
@@ -124,6 +127,7 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
         .brick4a => 4,
         .brick4b => 4,
         .brick_expl => 5,
+        .brick_metal => 6,
         else => return error.BrickSpriteMissing,
     };
 }

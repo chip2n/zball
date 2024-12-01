@@ -157,7 +157,14 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             });
             defer ui.endWindow();
 
-            const palette = [_]sprite.Sprite{ .brick1a, .brick2a, .brick3a, .brick4a, .brick_expl };
+            const palette = [_]sprite.Sprite{
+                .brick1a,
+                .brick2a,
+                .brick3a,
+                .brick4a,
+                .brick_expl,
+                .brick_metal,
+            };
             for (palette) |s| {
                 if (ui.sprite(.{ .sprite = s })) {
                     scene.brush = s;
@@ -169,7 +176,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         { // Keys
             ui.beginWindow(.{
                 .id = "info",
-                .x = 104,
+                .x = 130,
                 .y = constants.viewport_size[1] - 16,
                 .style = .transparent,
             });
