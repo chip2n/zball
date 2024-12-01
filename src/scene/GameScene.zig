@@ -779,18 +779,40 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
 
 fn destroyBrick(scene: *GameScene, brick: *Entity) void {
     std.debug.assert(brick.type == .brick);
-    brick.type = .none;
-    audio.play(.{ .clip = .explode });
-    scene.score += 100;
-    if (brick.sprite) |sp| {
+    const sp = brick.sprite.?;
+    // TODO Not great to switch on sprite here - rather, we probably want
+    // separate subtypes or properties
+    var destroyed = false;
+    switch (sp) {
+        .brick_expl => {
+            brick.type = .none;
+            // Surrounding bricks go boom
+            scene.destroyBricksCircle(brick.pos, 16);
+            destroyed = true;
+        },
+        .brick_metal => {
+            const rng = game.prng.random();
+            const weak_sprites = [_]sprite.Sprite{
+                .brick_metal_weak,
+                .brick_metal_weak2,
+                .brick_metal_weak3,
+            };
+            const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
+            // Metal bricks requires two hits to break
+            brick.sprite = next_sprite;
+            // TODO play a metal clinking sound
+            audio.play(.{ .clip = .bounce });
+        },
+        else => {
+            destroyed = true;
+        },
+    }
+
+    if (destroyed) {
+        brick.type = .none;
+        audio.play(.{ .clip = .explode });
+        scene.score += 100;
         scene.spawnExplosion(brick.pos, sp) catch {};
-        switch (sp) {
-            .brick_expl => {
-                // Surrounding bricks go boom
-                scene.destroyBricksCircle(brick.pos, 16);
-            },
-            else => {},
-        }
     }
 }
 

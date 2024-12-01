@@ -72,6 +72,9 @@ pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
         .brick4b => &brick_sprites4,
         .brick_expl => &brick_sprites_expl,
         .brick_metal => &brick_sprites_metal,
+        .brick_metal_weak => &brick_sprites_metal,
+        .brick_metal_weak2 => &brick_sprites_metal,
+        .brick_metal_weak3 => &brick_sprites_metal,
         .ball_smallest => &ball_sprites,
         .ball_smaller => &ball_sprites,
         .ball_normal => &ball_sprites,
@@ -128,6 +131,9 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
         .brick4b => 4,
         .brick_expl => 5,
         .brick_metal => 6,
+        .brick_metal_weak => 6,
+        .brick_metal_weak2 => 6,
+        .brick_metal_weak3 => 6,
         else => return error.BrickSpriteMissing,
     };
 }
