@@ -34,11 +34,13 @@ const InputAction = enum {
     editor_draw,
     editor_erase,
     editor_save,
+    editor_load,
 };
 
 const keybindings = .{
     .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{ .back } },
-    .{ .ENTER, &.{ .confirm, .editor_save } },
+    .{ .F1, &.{ .confirm, .editor_save } },
+    .{ .F2, &.{ .confirm, .editor_load } },
     .{ .LEFT, &.{ .left } },
     .{ .RIGHT, &.{ .right } },
     .{ .SPACE, &.{ .shoot } },

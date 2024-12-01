@@ -19,4 +19,4 @@ pub const max_quads = 4096;
 pub const max_verts = max_quads * 6;
 pub const offscreen_sample_count = 1;
 pub const max_textures = 8;
-pub const max_lights = 16;
+pub const max_lights = 256;

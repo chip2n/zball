@@ -29,8 +29,8 @@ uniform texture2D tex;
 uniform sampler smp;
 uniform fs_params {
     vec4 flags;
-    vec4 light_positions[16];
-    vec4 light_colors[16];
+    vec4 light_positions[256];
+    vec4 light_colors[256];
 };
 
 in vec4 color;
@@ -101,8 +101,8 @@ uniform texture2D tex;
 uniform sampler smp;
 uniform fs_params {
     vec4 flags;
-    vec4 light_positions[16];
-    vec4 light_colors[16];
+    vec4 light_positions[256];
+    vec4 light_colors[256];
 };
 
 in vec2 uv;

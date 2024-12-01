@@ -627,23 +627,23 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (e.type == .laser) {
             gfx.addLight(e.pos, 0x99E550);
         }
+        if (e.type == .brick and e.sprite == .brick_expl) {
+            // TODO refactor
+            gfx.addLight(.{ e.pos[0], e.pos[1] }, 0xf2a54c);
+        }
         if (e.sprite) |s| {
             const sp = sprite.get(s);
             const w: f32 = @floatFromInt(sp.bounds.w);
             const h: f32 = @floatFromInt(sp.bounds.h);
-            gfx.render(.{
-                .src = m.irect(sp.bounds),
-                .dst = .{
-                    .x = e.pos[0] - w / 2,
-                    .y = e.pos[1] - h / 2,
-                    .w = w,
-                    .h = h,
-                },
-                .illuminated = switch (e.type) {
-                    .laser => false,
-                    else => true,
-                }
-            });
+            gfx.render(.{ .src = m.irect(sp.bounds), .dst = .{
+                .x = e.pos[0] - w / 2,
+                .y = e.pos[1] - h / 2,
+                .w = w,
+                .h = h,
+            }, .illuminated = switch (e.type) {
+                .laser => false,
+                else => true,
+            } });
         }
     }
 
