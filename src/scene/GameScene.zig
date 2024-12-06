@@ -348,6 +348,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         if (scene.flame_timer <= 0) {
                             ball.pos = coll.out;
                             ball.dir = m.reflect(ball.dir, coll.normal);
+                            // Always play bouncing cound when we "reflect" the ball
+                            audio.play(.{ .clip = .bounce });
                         }
                     }
 
@@ -767,8 +769,10 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
                 coll_dist = brick_dist;
             }
 
-            scene.destroyBrick(e);
-            spawnPowerup(scene, e.pos);
+            const destroyed = scene.destroyBrick(e);
+            if (destroyed) {
+                spawnPowerup(scene, e.pos);
+            }
         }
         collided = collided or c;
     }
@@ -777,7 +781,7 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     return null;
 }
 
-fn destroyBrick(scene: *GameScene, brick: *Entity) void {
+fn destroyBrick(scene: *GameScene, brick: *Entity) bool {
     std.debug.assert(brick.type == .brick);
     const sp = brick.sprite.?;
     // TODO Not great to switch on sprite here - rather, we probably want
@@ -800,8 +804,15 @@ fn destroyBrick(scene: *GameScene, brick: *Entity) void {
             const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
             // Metal bricks requires two hits to break
             brick.sprite = next_sprite;
-            // TODO play a metal clinking sound
-            audio.play(.{ .clip = .bounce });
+            if (scene.flame_timer <= 0) {
+                audio.play(.{ .clip = .clink });
+            }
+        },
+        .brick_metal_weak, .brick_metal_weak2, .brick_metal_weak3 => {
+            destroyed = true;
+            if (scene.flame_timer <= 0) {
+                audio.play(.{ .clip = .clink });
+            }
         },
         else => {
             destroyed = true;
@@ -814,6 +825,8 @@ fn destroyBrick(scene: *GameScene, brick: *Entity) void {
         scene.score += 100;
         scene.spawnExplosion(brick.pos, sp) catch {};
     }
+
+    return destroyed;
 }
 
 fn destroyBricksCircle(scene: *GameScene, origin: [2]f32, radius: f32) void {
@@ -821,7 +834,7 @@ fn destroyBricksCircle(scene: *GameScene, origin: [2]f32, radius: f32) void {
         if (e.type != .brick) continue;
         const dir = m.vsub(e.pos, origin);
         if (m.magnitude(dir) <= radius) {
-            scene.destroyBrick(e);
+            _ = scene.destroyBrick(e);
         }
     }
 }

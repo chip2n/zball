@@ -14,6 +14,7 @@ pub const audio_data = .{
     .powerup = embed("assets/powerup.wav"),
     .death = embed("assets/death.wav"),
     .laser = embed("assets/laser.wav"),
+    .clink = embed("assets/clink.wav"),
 };
 
 const AudioCategory = enum { sfx, bg };
