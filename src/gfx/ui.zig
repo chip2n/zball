@@ -71,7 +71,7 @@ var prev_window_stack: std.ArrayList(u64) = undefined;
 
 const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
-    var char_pressed: u32 = 0;
+    var char_buf: [64]u8 = std.mem.zeroes([64]u8);
     var mouse_pressed: sapp.Mousebutton = .INVALID;
     var mouse_pos: [2]f32 = .{ 0, 0 };
 };
@@ -118,6 +118,7 @@ pub fn begin(v: BeginDesc) void {
 pub fn end() void {
     io.key_pressed = .INVALID;
     io.mouse_pressed = .INVALID;
+    io.char_buf = std.mem.zeroes([64]u8);
     win_id = 0;
 
     { // If any window has been closed during this frame, clear its data
@@ -140,14 +141,16 @@ pub fn end() void {
 pub fn handleEvent(ev: sapp.Event) void {
     switch (ev.type) {
         .CHAR => {
-            io.char_pressed = ev.char_code;
+            if (ev.char_code > std.math.maxInt(u8)) return;
+            if (std.mem.indexOfScalar(u8, &io.char_buf, 0)) |i| {
+                io.char_buf[i] = @intCast(ev.char_code);
+            }
         },
         .KEY_DOWN => {
             io.key_pressed = ev.key_code;
         },
         .KEY_UP => {
             io.key_pressed = .INVALID;
-            io.char_pressed = 0;
         },
         .MOUSE_DOWN => {
             io.mouse_pressed = ev.mouse_button;
@@ -499,6 +502,20 @@ pub fn textInput(v: TextInputDesc) ?[]u8 {
         },
     });
 
+    // Read all user-inputted characters and write them to the text field buffer
+    for (io.char_buf) |ch| {
+        if (ch == 0) break;
+        if (std.mem.indexOfScalar(u8, v.text, 0)) |idx| {
+            if (idx < v.text.len) {
+                switch (ch) {
+                    ' '...'~' => {
+                        v.text[idx] = ch;
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
     switch (io.key_pressed) {
         .BACKSPACE => {
             if (std.mem.indexOfScalar(u8, v.text, 0)) |idx| {
@@ -508,19 +525,7 @@ pub fn textInput(v: TextInputDesc) ?[]u8 {
             }
         },
         .INVALID => {},
-        else => {
-            // const ch = @intFromEnum(io.key_pressed);
-            if (std.mem.indexOfScalar(u8, v.text, 0)) |idx| {
-                if (idx < v.text.len) {
-                    switch (io.char_pressed) {
-                        ' '...'~' => {
-                            v.text[idx] = @intCast(io.char_pressed);
-                        },
-                        else => {},
-                    }
-                }
-            }
-        },
+        else => {},
     }
     const t = std.mem.sliceTo(v.text, 0);
     const tt = TextRenderer.truncateEnd(t, w - 8);

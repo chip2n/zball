@@ -33,7 +33,7 @@ bricks: std.ArrayList(Brick),
 brush: sprite.Sprite = .brick1a,
 show_save_dialog: bool = false,
 show_load_dialog: bool = false,
-dialog_buf: [256]u8 = std.mem.zeroes([256]u8),
+dialog_buf: [128]u8 = std.mem.zeroes([128]u8),
 
 pub fn init(allocator: std.mem.Allocator) !EditorScene {
     var bricks = std.ArrayList(Brick).init(allocator);
