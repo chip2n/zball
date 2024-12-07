@@ -490,7 +490,7 @@ const TextInputDesc = struct {
 
 pub fn textInput(v: TextInputDesc) ?[]u8 {
     var win_data = window_data.getPtr(win_id).?;
-    const w = 128;
+    const w = constants.viewport_size[0] - 48;
     const h = 12;
     win_data.addDrawListEntry(.{
         .ninepatch = .{

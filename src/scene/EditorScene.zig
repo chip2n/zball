@@ -33,15 +33,20 @@ bricks: std.ArrayList(Brick),
 brush: sprite.Sprite = .brick1a,
 show_save_dialog: bool = false,
 show_load_dialog: bool = false,
-dialog_buf: [128]u8 = std.mem.zeroes([128]u8),
+dialog_buf: [128]u8,
 
 pub fn init(allocator: std.mem.Allocator) !EditorScene {
     var bricks = std.ArrayList(Brick).init(allocator);
     errdefer bricks.deinit();
 
+    // Default dialog path is current working directory
+    var dialog_buf: [128]u8 = std.mem.zeroes([128]u8);
+    _ = try std.fs.cwd().realpath(".", &dialog_buf);
+
     return EditorScene{
         .allocator = allocator,
         .bricks = bricks,
+        .dialog_buf = dialog_buf,
     };
 }
 
@@ -88,8 +93,12 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         scene.show_load_dialog = true;
     }
     if (input.pressed(.back)) {
-        scene.show_save_dialog = false;
-        scene.show_load_dialog = false;
+        if (scene.show_save_dialog or scene.show_load_dialog) {
+            scene.show_save_dialog = false;
+            scene.show_load_dialog = false;
+        } else {
+            game.scene_mgr.switchTo(.title);
+        }
     }
 
     { // Background
@@ -218,7 +227,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
                 });
                 defer ui.endWindow();
 
-                // ui.text("Load level", .{});
+                ui.text("Load level", .{});
                 if (ui.textInput(.{ .text = &scene.dialog_buf })) |path| {
                     try scene.loadLevel(path);
                     scene.show_load_dialog = false;
