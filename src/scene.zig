@@ -10,7 +10,7 @@ const TitleScene = @import("scene/TitleScene.zig");
 const GameScene = @import("scene/GameScene.zig");
 const EditorScene = @import("scene/EditorScene.zig");
 
-const transition_duration = 2;
+const transition_duration = 1.5;
 
 const SceneType = std.meta.Tag(Scene);
 
