@@ -43,6 +43,13 @@ const DrawListEntry = union(enum) {
         x: f32,
         y: f32,
     },
+    ninepatch: struct {
+        sprite: Sprite,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    },
 };
 
 var window_data: std.AutoHashMap(u64, WindowData) = undefined;
@@ -64,6 +71,7 @@ var prev_window_stack: std.ArrayList(u64) = undefined;
 
 const io = struct {
     var key_pressed: sapp.Keycode = .INVALID;
+    var char_pressed: u32 = 0;
     var mouse_pressed: sapp.Mousebutton = .INVALID;
     var mouse_pos: [2]f32 = .{ 0, 0 };
 };
@@ -131,8 +139,15 @@ pub fn end() void {
 // TODO maybe feed our own events? mouse pos needs to be scaled...
 pub fn handleEvent(ev: sapp.Event) void {
     switch (ev.type) {
+        .CHAR => {
+            io.char_pressed = ev.char_code;
+        },
         .KEY_DOWN => {
             io.key_pressed = ev.key_code;
+        },
+        .KEY_UP => {
+            io.key_pressed = .INVALID;
+            io.char_pressed = 0;
         },
         .MOUSE_DOWN => {
             io.mouse_pressed = ev.mouse_button;
@@ -195,7 +210,7 @@ pub fn endWindow() void {
     // TODO do we want to render it here? abstract away batch renderer so we
     // store render commands instead?
     const padding: f32 = switch (win_style) {
-        .dialog => 8,
+        .dialog => 6,
         else => 0,
     };
 
@@ -207,7 +222,15 @@ pub fn endWindow() void {
     w += padding * 2;
     var h = win_height + @as(f32, @floatFromInt(dialog.bounds.h - dialog.center.?.h));
     h += padding * 2;
-    const offset = .{ @round(-pivot[0] * w), @round(-pivot[1] * h) };
+    const offset = .{
+        @round(-pivot[0] * w),
+        @round(-pivot[1] * h),
+    };
+
+    const offset_content = .{
+        offset[0] + @as(f32, @floatFromInt(dialog.center.?.x)),
+        offset[1] + @as(f32, @floatFromInt(dialog.center.?.y)),
+    };
 
     switch (win_style) {
         .dialog => {
@@ -244,8 +267,8 @@ pub fn endWindow() void {
                     text_renderer.render(
                         batch,
                         t.s,
-                        t.x + padding + offset[0],
-                        t.y + padding + offset[1],
+                        t.x + padding + offset_content[0],
+                        t.y + padding + offset_content[1],
                         win_z,
                     );
                 },
@@ -258,8 +281,8 @@ pub fn endWindow() void {
                     batch.render(.{
                         .src = m.irect(rail_inactive.bounds),
                         .dst = .{
-                            .x = s.x + padding + offset[0],
-                            .y = s.y + padding + offset[1],
+                            .x = s.x + padding + offset_content[0],
+                            .y = s.y + padding + offset_content[1],
                             .w = win_width,
                             .h = @floatFromInt(rail_inactive.bounds.h),
                         },
@@ -269,8 +292,8 @@ pub fn endWindow() void {
                     batch.render(.{
                         .src = m.irect(rail_active.bounds),
                         .dst = .{
-                            .x = s.x + padding + offset[0],
-                            .y = s.y + padding + offset[1],
+                            .x = s.x + padding + offset_content[0],
+                            .y = s.y + padding + offset_content[1],
                             .w = win_width * s.value,
                             .h = @floatFromInt(rail_active.bounds.h),
                         },
@@ -280,8 +303,8 @@ pub fn endWindow() void {
                     batch.render(.{
                         .src = m.irect(thumb.bounds),
                         .dst = .{
-                            .x = s.x + padding + offset[0] + win_width * s.value - @round(@as(f32, @floatFromInt(thumb.bounds.w)) / 2),
-                            .y = s.y + padding + offset[1] - @floor(@as(f32, @floatFromInt(thumb.bounds.h)) / 2),
+                            .x = s.x + padding + offset_content[0] + win_width * s.value - @round(@as(f32, @floatFromInt(thumb.bounds.w)) / 2),
+                            .y = s.y + padding + offset_content[1] - @floor(@as(f32, @floatFromInt(thumb.bounds.h)) / 2),
                             .w = @floatFromInt(thumb.bounds.w),
                             .h = @floatFromInt(thumb.bounds.h),
                         },
@@ -291,15 +314,30 @@ pub fn endWindow() void {
                 .sprite => |s| {
                     batch.setTexture(tex_spritesheet);
                     const sp = sprites.get(s.sprite);
-
                     batch.render(.{
                         .src = m.irect(sp.bounds),
                         .dst = .{
-                            .x = s.x,
-                            .y = s.y,
+                            .x = s.x + padding + offset_content[0],
+                            .y = s.y + padding + offset_content[1],
                             .w = @floatFromInt(sp.bounds.w),
                             .h = @floatFromInt(sp.bounds.h),
                         },
+                        .z = win_z,
+                    });
+                },
+                .ninepatch => |s| {
+                    batch.setTexture(tex_spritesheet);
+                    const sp = sprites.get(s.sprite);
+                    batch.renderNinePatch(.{
+                        .src = m.irect(sp.bounds),
+                        .center = m.irect(sp.center.?),
+                        .dst = .{
+                            .x = s.x + padding + offset_content[0],
+                            .y = s.y + padding + offset_content[1],
+                            .w = s.w,
+                            .h = s.h,
+                        },
+                        .z = win_z,
                     });
                 },
             }
@@ -353,12 +391,12 @@ pub fn selectionItem(s: []const u8, v: SelectionItemDesc) bool {
     }
 
     if (selected) {
-        win_data.addDrawListEntry(.{ .text = .{ .s = ">", .x = cursor[0], .y = cursor[1] } });
+        win_data.addDrawListEntry(.{ .text = .{ .s = ">", .x = cursor[0] - 2, .y = cursor[1] } });
     }
-    win_data.addDrawListEntry(.{ .text = .{ .s = s, .x = cursor[0] + arrow_w, .y = cursor[1] } });
+    win_data.addDrawListEntry(.{ .text = .{ .s = s, .x = cursor[0] - 2 + arrow_w, .y = cursor[1] } });
 
     cursor[1] += font.ascent + 4;
-    win_height = cursor[1] - origin[1] - 4;
+    win_height += font.ascent + 4;
     focus_prev_id.* = id;
 
     return selected and io.key_pressed == .ENTER;
@@ -440,7 +478,69 @@ pub fn text(s: []const u8, v: TextDesc) void {
     win_data.addDrawListEntry(.{ .text = .{ .s = s, .x = cursor[0], .y = cursor[1] } });
 
     cursor[1] += font.ascent + 4;
-    win_height = cursor[1] - origin[1] - 4;
+    win_height += font.ascent + 4;
+}
+
+const TextInputDesc = struct {
+    text: []u8,
+};
+
+pub fn textInput(v: TextInputDesc) ?[]u8 {
+    var win_data = window_data.getPtr(win_id).?;
+    const w = 128;
+    const h = 12;
+    win_data.addDrawListEntry(.{
+        .ninepatch = .{
+            .sprite = .text_input,
+            .x = cursor[0],
+            .y = cursor[1],
+            .w = w,
+            .h = h,
+        },
+    });
+
+    switch (io.key_pressed) {
+        .BACKSPACE => {
+            if (std.mem.indexOfScalar(u8, v.text, 0)) |idx| {
+                if (idx > 0) v.text[idx - 1] = 0;
+            } else {
+                if (v.text.len > 0) v.text[v.text.len - 1] = 0;
+            }
+        },
+        .INVALID => {},
+        else => {
+            // const ch = @intFromEnum(io.key_pressed);
+            if (std.mem.indexOfScalar(u8, v.text, 0)) |idx| {
+                if (idx < v.text.len) {
+                    switch (io.char_pressed) {
+                        ' '...'~' => {
+                            v.text[idx] = @intCast(io.char_pressed);
+                        },
+                        else => {},
+                    }
+                }
+            }
+        },
+    }
+    const t = std.mem.sliceTo(v.text, 0);
+    const tt = TextRenderer.truncateEnd(t, w - 8);
+    const sz = TextRenderer.measure(tt);
+    if (t.len == tt.len) {
+        // Text is not truncated - align to left
+        win_data.addDrawListEntry(.{ .text = .{ .s = tt, .x = cursor[0] + 4, .y = cursor[1] + 2 } });
+    } else {
+        // Text is truncated - align to right
+        win_data.addDrawListEntry(.{ .text = .{ .s = tt, .x = cursor[0] + w - 4 - sz[0], .y = cursor[1] + 2 } });
+    }
+    win_width = @max(win_width, w);
+    win_height += h;
+    cursor[0] = 0;
+    cursor[1] += h;
+
+    if (io.key_pressed == .ENTER) {
+        return t;
+    }
+    return null;
 }
 
 pub fn sameLine() void {

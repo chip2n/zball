@@ -10,7 +10,7 @@ const IRect = m.IRect;
 const max_quads = constants.max_quads;
 const max_verts = constants.max_verts;
 const max_cmds = max_quads;
-const max_tex = 8;
+const max_batches = 16;
 
 const TextureId = usize;
 
@@ -79,7 +79,7 @@ pub const Batch = struct {
 
 pub const BatchRenderer = struct {
     verts: [max_verts]Vertex = undefined,
-    batches: [max_tex]Batch = undefined,
+    batches: [max_batches]Batch = undefined,
     buf: [max_cmds]RenderCommand = undefined,
     idx: usize = 0,
 

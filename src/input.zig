@@ -39,8 +39,8 @@ const InputAction = enum {
 
 const keybindings = .{
     .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{ .back } },
-    .{ .F1, &.{ .confirm, .editor_save } },
-    .{ .F2, &.{ .confirm, .editor_load } },
+    .{ .F1, &.{ .editor_save } },
+    .{ .F2, &.{ .editor_load } },
     .{ .LEFT, &.{ .left } },
     .{ .RIGHT, &.{ .right } },
     .{ .SPACE, &.{ .shoot } },

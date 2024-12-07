@@ -31,6 +31,9 @@ allocator: std.mem.Allocator,
 
 bricks: std.ArrayList(Brick),
 brush: sprite.Sprite = .brick1a,
+show_save_dialog: bool = false,
+show_load_dialog: bool = false,
+dialog_buf: [256]u8 = std.mem.zeroes([256]u8),
 
 pub fn init(allocator: std.mem.Allocator) !EditorScene {
     var bricks = std.ArrayList(Brick).init(allocator);
@@ -77,12 +80,16 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         }
     }
     if (input.pressed(.editor_save)) {
-        std.log.info("Saving level", .{});
-        try scene.saveLevel();
+        scene.show_save_dialog = true;
+        scene.show_load_dialog = false;
     }
     if (input.pressed(.editor_load)) {
-        std.log.info("Loading level", .{});
-        try scene.loadLevel();
+        scene.show_save_dialog = false;
+        scene.show_load_dialog = true;
+    }
+    if (input.pressed(.back)) {
+        scene.show_save_dialog = false;
+        scene.show_load_dialog = false;
     }
 
     { // Background
@@ -183,6 +190,41 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             defer ui.endWindow();
             ui.text("F1: Save  F2: Load", .{});
         }
+
+        { // Dialogs
+            if (scene.show_save_dialog) {
+                ui.beginWindow(.{
+                    .id = "save",
+                    .x = constants.viewport_size[0] / 2,
+                    .y = constants.viewport_size[1] / 2,
+                    .z = 20,
+                    .pivot = .{ 0.5, 0.5 },
+                });
+                defer ui.endWindow();
+
+                ui.text("Save level", .{});
+                if (ui.textInput(.{ .text = &scene.dialog_buf })) |path| {
+                    try scene.saveLevel(path);
+                    scene.show_save_dialog = false;
+                }
+            }
+            if (scene.show_load_dialog) {
+                ui.beginWindow(.{
+                    .id = "load",
+                    .x = constants.viewport_size[0] / 2,
+                    .y = constants.viewport_size[1] / 2,
+                    .z = 20,
+                    .pivot = .{ 0.5, 0.5 },
+                });
+                defer ui.endWindow();
+
+                // ui.text("Load level", .{});
+                if (ui.textInput(.{ .text = &scene.dialog_buf })) |path| {
+                    try scene.loadLevel(path);
+                    scene.show_load_dialog = false;
+                }
+            }
+        }
     }
 }
 
@@ -221,8 +263,8 @@ fn getBrickPosition(x: usize, y: usize) ?[2]f32 {
     return null;
 }
 
-fn saveLevel(scene: *EditorScene) !void {
-    const file = try std.fs.createFileAbsolute("/tmp/out.lvl", .{});
+fn saveLevel(scene: *EditorScene, path: []const u8) !void {
+    const file = try std.fs.createFileAbsolute(path, .{});
     defer file.close();
 
     var entities = std.ArrayList(LevelEntity).init(scene.allocator);
@@ -240,8 +282,8 @@ fn saveLevel(scene: *EditorScene) !void {
     try level.writeLevel(entities.items, file.writer());
 }
 
-fn loadLevel(scene: *EditorScene) !void {
-    const file = try std.fs.openFileAbsolute("/tmp/out.lvl", .{});
+fn loadLevel(scene: *EditorScene, path: []const u8) !void {
+    const file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
 
     const lvl = try level.readLevel(scene.allocator, file.reader());

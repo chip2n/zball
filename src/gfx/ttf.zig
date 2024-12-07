@@ -42,6 +42,25 @@ pub const TextRenderer = struct {
         return .{ width, height };
     }
 
+    /// Truncate text from the end so that it fits within the provided width.
+    pub fn truncateEnd(text: []const u8, max_width: f32) []const u8 {
+        if (text.len == 0) return text;
+        var width: f32 = 0;
+        var idx: usize = text.len - 1;
+        for (0..text.len) |i| {
+            const ch = text[text.len - 1 - i];
+            const glyph = findGlyph(ch).?;
+            const gw: f32 = @floatFromInt(glyph.advance);
+            width += gw;
+            if (width <= max_width) {
+                idx = text.len - 1 - i;
+            } else {
+                break;
+            }
+        }
+        return text[idx..];
+    }
+
     fn findGlyph(ch: u8) ?font.Glyph {
         // We could make a lookup table for this but we're not going to display
         // much text in this game
