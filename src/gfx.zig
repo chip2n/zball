@@ -53,7 +53,7 @@ const GfxState = struct {
     } = .{},
     spritesheet_texture: Texture = undefined,
     font_texture: Texture = undefined,
-    window_size: [2]i32 = constants.initial_screen_size,
+    window_size: [2]i32 = undefined,
     batch: BatchRenderer = undefined,
     quad_vbuf: sg.Buffer = undefined,
     lights: std.ArrayList(Light) = undefined,
@@ -62,6 +62,8 @@ var state: GfxState = .{};
 
 pub fn init(allocator: std.mem.Allocator) !void {
     std.debug.assert(!state.initialized);
+
+    state.window_size = .{ sapp.width(), sapp.height() };
 
     state.batch = try BatchRenderer.init(allocator);
     errdefer state.batch.deinit();
