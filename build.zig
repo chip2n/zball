@@ -264,7 +264,7 @@ fn buildWeb(
         .use_webgl2 = true,
         .use_emmalloc = true,
         .use_filesystem = false,
-        .extra_args = &.{"-sUSE_OFFSET_CONVERTER=1"},
+        .extra_args = &.{"-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144"},
         .shell_file_path = b.path("shell.html"),
     });
 

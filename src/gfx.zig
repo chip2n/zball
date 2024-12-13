@@ -54,7 +54,7 @@ const GfxState = struct {
     spritesheet_texture: Texture = undefined,
     font_texture: Texture = undefined,
     window_size: [2]i32 = constants.initial_screen_size,
-    batch: BatchRenderer = BatchRenderer.init(),
+    batch: BatchRenderer = undefined,
     quad_vbuf: sg.Buffer = undefined,
     lights: std.ArrayList(Light) = undefined,
 };
@@ -62,6 +62,9 @@ var state: GfxState = .{};
 
 pub fn init(allocator: std.mem.Allocator) !void {
     std.debug.assert(!state.initialized);
+
+    state.batch = try BatchRenderer.init(allocator);
+    errdefer state.batch.deinit();
 
     state.camera = Camera.init(.{
         .win_size = .{
@@ -179,6 +182,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 pub fn deinit() void {
     std.debug.assert(state.initialized);
     ui.deinit();
+    state.batch.deinit();
     state.lights.deinit();
     state.initialized = false;
 }

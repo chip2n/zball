@@ -78,9 +78,10 @@ pub const Batch = struct {
 };
 
 pub const BatchRenderer = struct {
-    verts: [max_verts]Vertex = undefined,
-    batches: [max_batches]Batch = undefined,
-    buf: [max_cmds]RenderCommand = undefined,
+    allocator: std.mem.Allocator,
+    verts: []Vertex = undefined,
+    batches: []Batch = undefined,
+    buf: []RenderCommand = undefined,
     idx: usize = 0,
 
     num_cmds_submitted: usize = 0,
@@ -88,8 +89,19 @@ pub const BatchRenderer = struct {
 
     tex: ?Texture = null,
 
-    pub fn init() BatchRenderer {
-        return .{};
+    pub fn init(allocator: std.mem.Allocator) !BatchRenderer {
+        return .{
+            .allocator = allocator,
+            .verts = try allocator.alloc(Vertex, max_verts),
+            .batches = try allocator.alloc(Batch, max_batches),
+            .buf = try allocator.alloc(RenderCommand, max_cmds),
+        };
+    }
+
+    pub fn deinit(self: *BatchRenderer) void {
+        self.allocator.free(self.verts);
+        self.allocator.free(self.batches);
+        self.allocator.free(self.buf);
     }
 
     pub fn setTexture(self: *BatchRenderer, tex: Texture) void {
