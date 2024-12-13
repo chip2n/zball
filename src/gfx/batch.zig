@@ -499,7 +499,7 @@ pub const BatchRenderer = struct {
         const le = lhs.layer();
         const re = rhs.layer();
         const lt = lhs.tex();
-        const rt = lhs.tex();
+        const rt = rhs.tex();
         const lz = lhs.z_index();
         const rz = rhs.z_index();
 
