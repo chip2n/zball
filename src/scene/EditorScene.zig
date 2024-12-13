@@ -6,6 +6,7 @@ const game = @import("../game.zig");
 const shd = @import("shader");
 const level = @import("../level.zig");
 const m = @import("math");
+const utils = @import("../utils.zig");
 
 const gfx = @import("../gfx.zig");
 const ui = gfx.ui;
@@ -41,7 +42,9 @@ pub fn init(allocator: std.mem.Allocator) !EditorScene {
 
     // Default dialog path is current working directory
     var dialog_buf: [128]u8 = std.mem.zeroes([128]u8);
-    _ = try std.fs.cwd().realpath(".", &dialog_buf);
+    if (!utils.is_web) {
+        _ = try std.fs.cwd().realpath(".", &dialog_buf);
+    }
 
     return EditorScene{
         .allocator = allocator,
