@@ -41,24 +41,24 @@ pub const ExplosionEmitter = particle.Emitter(.{
     .explosiveness = 1,
 });
 
-const brick_explosion_regions = .{
+const brick_explosion_regions = [_]particle.SpriteRegion{
     .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 0.3 },
     .{ .bounds = .{ .x = 1, .y = 1, .w = 1, .h = 1 }, .weight = 1 },
     .{ .bounds = .{ .x = 2, .y = 2, .w = 1, .h = 1 }, .weight = 1 },
     .{ .bounds = .{ .x = 1, .y = 1, .w = 2, .h = 2 }, .weight = 1 },
 };
-const ball_explosion_regions = .{
+const ball_explosion_regions = [_]particle.SpriteRegion{
     .{ .bounds = .{ .x = 0, .y = 0, .w = 1, .h = 1 }, .weight = 1 },
     .{ .bounds = .{ .x = 0, .y = 0, .w = 2, .h = 2 }, .weight = 1 },
 };
 
-const brick_sprites1 = .{.{ .sprite = .brick1a, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites2 = .{.{ .sprite = .brick2a, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites3 = .{.{ .sprite = .brick3a, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites4 = .{.{ .sprite = .brick4a, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites_expl = .{.{ .sprite = .brick_expl, .weight = 1, .regions = &brick_explosion_regions }};
-const brick_sprites_metal = .{.{ .sprite = .brick_metal, .weight = 1, .regions = &brick_explosion_regions }};
-const ball_sprites = .{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
+const brick_sprites1 = [_]particle.SpriteDesc{.{ .sprite = .brick1a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites2 = [_]particle.SpriteDesc{.{ .sprite = .brick2a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites3 = [_]particle.SpriteDesc{.{ .sprite = .brick3a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites4 = [_]particle.SpriteDesc{.{ .sprite = .brick4a, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites_expl = [_]particle.SpriteDesc{.{ .sprite = .brick_expl, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites_metal = [_]particle.SpriteDesc{.{ .sprite = .brick_metal, .weight = 1, .regions = &brick_explosion_regions }};
+const ball_sprites = [_]particle.SpriteDesc{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
 
 pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
     return switch (s) {
@@ -97,7 +97,7 @@ pub const FlameEmitter = particle.Emitter(.{
     .explosiveness = 0,
 });
 
-pub const particleFlameSprites = &.{
+pub const particleFlameSprites = [_]particle.SpriteDesc{
     .{ .sprite = .particle_flame_6, .weight = 0.2 },
     .{ .sprite = .particle_flame_5, .weight = 0.2 },
     .{ .sprite = .particle_flame_4, .weight = 0.4 },

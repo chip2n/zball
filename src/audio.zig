@@ -8,20 +8,25 @@ const sample_buf_length = 4096;
 
 const AudioHandle = usize;
 
-pub const audio_data = .{
+const AudioCategory = enum { sfx, bg };
+
+const AudioClip = enum {
+    bounce,
+    explode,
+    powerup,
+    death,
+    laser,
+    clink,
+};
+
+const clips = std.enums.EnumArray(AudioClip, WavData).init(.{
     .bounce = embed("assets/bounce.wav"),
     .explode = embed("assets/explode.wav"),
     .powerup = embed("assets/powerup.wav"),
     .death = embed("assets/death.wav"),
     .laser = embed("assets/laser.wav"),
     .clink = embed("assets/clink.wav"),
-};
-
-const AudioCategory = enum { sfx, bg };
-
-const AudioClip = std.meta.FieldEnum(@TypeOf(audio_data));
-
-const clips = std.enums.EnumArray(AudioClip, WavData).init(audio_data);
+});
 
 var state = AudioState{};
 

@@ -14,7 +14,7 @@ const slog = sokol.log;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 
-pub const std_options = .{
+pub const std_options = std.Options{
     .log_level = if (builtin.mode == .Debug) .debug else .info,
 };
 

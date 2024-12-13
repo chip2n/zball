@@ -35,10 +35,11 @@ const Particle = struct {
     lifetime: f32 = 0,
 };
 
+pub const SpriteRegion = struct { bounds: IRect, weight: f32 };
 pub const SpriteDesc = struct {
     sprite: Sprite,
     weight: f32,
-    regions: []const struct { bounds: IRect, weight: f32 } = &.{},
+    regions: []const SpriteRegion = &.{},
 };
 
 const EmitterDesc = struct {

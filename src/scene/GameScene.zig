@@ -900,7 +900,7 @@ fn spawnEntity(
             .dir = dir,
             .flame = FlameEmitter.init(.{
                 .rng = game.prng.random(),
-                .sprites = game.particleFlameSprites,
+                .sprites = &game.particleFlameSprites,
             }),
             .sprite = s,
         };

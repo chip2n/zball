@@ -443,22 +443,20 @@ pub const BatchRenderer = struct {
                     { // main background
                         const w = c.center.w;
                         const h = c.center.h;
-                        const src = .{
-                            .x = c.src.x + c.center.x,
-                            .y = c.src.y + c.center.y,
-                            .w = w,
-                            .h = h,
-                        };
-                        const dst = .{
-                            .x = c.dst.x + @as(f32, @floatFromInt(c.center.x)),
-                            .y = c.dst.y + @as(f32, @floatFromInt(c.center.y)),
-                            .w = c.dst.w - @as(f32, @floatFromInt(c.src.w - c.center.w)),
-                            .h = c.dst.h - @as(f32, @floatFromInt(c.src.h - c.center.h)),
-                        };
                         quad(.{
                             .buf = self.verts[i..],
-                            .src = src,
-                            .dst = dst,
+                            .src = .{
+                                .x = c.src.x + c.center.x,
+                                .y = c.src.y + c.center.y,
+                                .w = w,
+                                .h = h,
+                            },
+                            .dst = .{
+                                .x = c.dst.x + @as(f32, @floatFromInt(c.center.x)),
+                                .y = c.dst.y + @as(f32, @floatFromInt(c.center.y)),
+                                .w = c.dst.w - @as(f32, @floatFromInt(c.src.w - c.center.w)),
+                                .h = c.dst.h - @as(f32, @floatFromInt(c.src.h - c.center.h)),
+                            },
                             .z = c.z,
                             .color = color,
                             .tw = tw,

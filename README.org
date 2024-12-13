@@ -3,7 +3,7 @@
 Current Zig compiler (through Nix and zig-overlay):
 
 #+begin_src bash
-nix shell 'github:mitchellh/zig-overlay#master-2024-08-08'
+nix shell 'github:mitchellh/zig-overlay#master-2024-12-05'
 #+end_src
 
 ** Implementation
