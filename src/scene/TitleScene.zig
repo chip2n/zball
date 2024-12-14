@@ -3,7 +3,7 @@ const game = @import("../game.zig");
 const constants = @import("../constants.zig");
 const utils = @import("../utils.zig");
 const settings = @import("../settings.zig");
-const sprite = @import("sprite");
+const sprite = @import("sprites");
 const shd = @import("shader");
 const m = @import("math");
 

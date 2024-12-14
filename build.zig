@@ -39,32 +39,6 @@ pub fn build(b: *Build) !void {
         "--format=sokol_zig",
     });
 
-    { // Build shaders as a shared library so we can hot reload them
-        const lib_shd = b.addSharedLibrary(.{
-            .name = "shd",
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = b.path("tools/shd.zig"),
-        });
-        const mod_sokol = dep_sokol.module("sokol");
-        lib_shd.root_module.addImport("sokol", mod_sokol);
-
-        // zmath
-        const mod_zmath = dep_zmath.module("root");
-        lib_shd.root_module.addImport("zmath", mod_zmath);
-
-        lib_shd.root_module.addAnonymousImport("shd", .{
-            .root_source_file = shader_output,
-            .imports = &.{
-                .{ .name = "sokol", .module = mod_sokol },
-                .{ .name = "zmath", .module = mod_zmath },
-            },
-        });
-        const lib_shd_step = b.step("shd", "Compile shaders as a shared library");
-        const lib_shd_install = b.addInstallArtifact(lib_shd, .{ .dest_dir = .{ .override = .bin } });
-        lib_shd_step.dependOn(&lib_shd_install.step);
-    }
-
     // Font packer
     const tool_fontpack = try buildFontPackTool(b, optimize, dep_stb);
     const tool_fontpack_run = b.addRunArtifact(tool_fontpack);
@@ -83,8 +57,16 @@ pub fn build(b: *Build) !void {
         });
         const art_aseprite = dep_aseprite.artifact("aseprite");
         const result = aseprite.exportAseprite(b, art_aseprite, b.path("assets/sprites.ase"));
-        sprite_data_path = result.img_data;
-        sprite_image_path = result.img_path;
+
+        const sprite_copy = b.addSystemCommand(&.{"cp"});
+        sprite_copy.addFileArg(result.img_data);
+        sprite_copy.addFileArg(result.img_path);
+        sprite_copy.addArg("assets/");
+        const exporter_run_step = b.step("sprite_export", "Run the sprite exporter");
+        exporter_run_step.dependOn(&sprite_copy.step);
+
+        sprite_data_path = b.path("assets/sprites.zig");
+        sprite_image_path = b.path("assets/sprites.png");
     }
 
     const deps = CoreDependencies{
@@ -162,7 +144,7 @@ fn addDeps(
     });
     step.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
     step.root_module.addAnonymousImport("sprites.png", .{ .root_source_file = deps.sprite_image_path });
-    step.root_module.addAnonymousImport("sprite", .{ .root_source_file = deps.sprite_data_path });
+    step.root_module.addAnonymousImport("sprites", .{ .root_source_file = deps.sprite_data_path });
 }
 
 fn addAssets(b: *Build, step: *Build.Step.Compile) !void {

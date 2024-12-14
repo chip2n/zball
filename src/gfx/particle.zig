@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const root = @import("root");
-const sprites = @import("sprite");
+const sprites = @import("sprites");
 const m = @import("math");
 const BatchRenderer = @import("batch.zig").BatchRenderer;
 

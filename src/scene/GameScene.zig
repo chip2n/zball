@@ -1,5 +1,5 @@
 const std = @import("std");
-const sprite = @import("sprite");
+const sprite = @import("sprites");
 const constants = @import("../constants.zig");
 const input = @import("../input.zig");
 const audio = @import("../audio.zig");

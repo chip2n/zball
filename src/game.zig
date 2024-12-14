@@ -6,7 +6,7 @@ const m = @import("math");
 const utils = @import("utils.zig");
 const shd = @import("shader");
 const constants = @import("constants.zig");
-const sprite = @import("sprite");
+const sprite = @import("sprites");
 
 const gfx = @import("gfx.zig");
 const Viewport = gfx.Viewport;

@@ -21,8 +21,8 @@
             .hash = "12200ba39d83227f5de08287b043b011a2eb855cdb077f4b165edce30564ba73400e",
         },
         .aseprite = .{
-            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#0a46cd6383f6dcaf39285b61d889501bc9956e0f",
-            .hash = "1220c9a6d07019bd760d4c8a4e876b9a0e9f92514df9e96298dada01d8c45d689272",
+            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#078f2dfb3b6227cdc5825d4803c4bb6018ab5655",
+            .hash = "1220ba6255c58e5562a40c8e2537bb39e4294abc2dba369b483ae4eb497582012d31",
         }
     },
     .paths = .{
