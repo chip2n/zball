@@ -109,12 +109,12 @@ pub const AudioState = struct {
     num_channels: usize = 2,
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
-    playing: [16]AudioTrack = .{.{}} ** 16,
+    playing: [32]AudioTrack = .{.{}} ** 32,
 
     fn play(self: *Self, v: PlayDesc) void {
         // Check if we've played this clip recently - if we have, ignore it
         for (&self.playing) |p| {
-            if (p.clip == v.clip and p.frame == 0) return;
+            if (p.clip == v.clip and p.frame < 1000) return;
         }
         for (&self.playing) |*p| {
             if (p.clip != null) continue;
@@ -124,8 +124,6 @@ pub const AudioState = struct {
             p.vol = v.vol;
             p.category = v.category;
             break;
-        } else {
-            return;
         }
     }
 };
