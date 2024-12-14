@@ -39,31 +39,42 @@ in vec2 frag_position;
 out vec4 frag_color;
 
 float constant = 2.0;  // Constant factor
-float linear = 0.09;   // Linear attenuation
+float linear = 0.04;   // Linear attenuation
 float quadratic = 0.032;  // Quadratic attenuation
+
+/* Gradient noise from Jorge Jimenez's presentation: */
+/* http://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare */
+float gradient_noise(in vec2 uv)
+{
+	return fract(52.9829189 * fract(dot(uv, vec2(0.06711056, 0.00583715))));
+}
 
 void main() {
     vec4 c = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guessa
 
     if (flags.x > 0) {
-    for (int i = 0; i < light_positions.length(); i++) {
-        vec2 light_pos = light_positions[i].xy;
-        vec3 light_color = light_colors[i].rgb;
-        float distance_to_light = length(light_pos - frag_position);
-        float light_strength = 0.5;
-        float attenuation = 1.0 / (constant + linear * distance_to_light + quadratic * (distance_to_light * distance_to_light));
-        float s = attenuation * light_strength;
-        vec3 light_result = vec3(s, s, s) * light_color;
-        c += vec4(light_result, 0);
+        for (int i = 0; i < light_positions.length(); i++) {
+            vec2 light_pos = light_positions[i].xy;
+            vec3 light_color = light_colors[i].rgb;
+            float distance_to_light = length(light_pos - frag_position);
+            float light_strength = 0.5;
+            float attenuation = 1.0 / (constant + linear * distance_to_light + quadratic * (distance_to_light * distance_to_light));
+            float s = attenuation * light_strength;
+            vec3 light_result = vec3(s, s, s) * light_color;
+            c += vec4(light_result, 0);
 
-        // A little bit extra glow
-        if (distance_to_light < 10) {
-            c += vec4(light_color * 0.03, 0);
-        } else if (distance_to_light < 14) {
-            c += vec4(light_color * 0.015, 0);
+            // A little bit extra glow
+            if (distance_to_light < 10) {
+                c += vec4(light_color * 0.015, 0);
+            } else if (distance_to_light < 14) {
+                // c += vec4(light_color * 0.015, 0);
+            }
         }
     }
-    }
+
+    // This prevents banding for the light effects
+    c += (1.0 / 255.0) * gradient_noise(gl_FragCoord.xy) - (0.5 / 255.0);
+
     frag_color = c;
 }
 @end
