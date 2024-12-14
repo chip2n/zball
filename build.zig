@@ -50,6 +50,7 @@ pub fn build(b: *Build) !void {
 
     var sprite_data_path: std.Build.LazyPath = undefined;
     var sprite_image_path: std.Build.LazyPath = undefined;
+
     { // Aseprite
         const dep_aseprite = b.dependency("aseprite", .{
             .target = b.host,
