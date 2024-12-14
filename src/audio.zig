@@ -231,14 +231,18 @@ pub fn parse(data: []const u8) !WavData {
 
     try reader.skipBytes(chunk.blocSize - (WavFormatChunk.byte_size - 8), .{});
 
-    const data_bloc_id = try reader.readInt(u32, .little);
-    if (data_bloc_id != data_magic) return error.InvalidWav;
-
-    const data_size = try reader.readInt(u32, .little);
-
-    const samples_start = MasterRiffChunk.byte_size + WavFormatChunk.byte_size + 8;
-    const samples = data[samples_start .. samples_start + data_size];
-    return .{ .file_size = file_size, .format = chunk, .data = samples };
+    while (true) {
+        const chunk_id = try reader.readInt(u32, .little);
+        const chunk_size = try reader.readInt(u32, .little);
+        if (chunk_id != data_magic) {
+            // We ignore chunks that are not data chunks
+            try reader.skipBytes(chunk_size, .{});
+            continue;
+        }
+        const samples_start = fbs.pos;
+        const samples = data[samples_start .. samples_start + chunk_size];
+        return .{ .file_size = file_size, .format = chunk, .data = samples };
+    }
 }
 
 pub fn embed(comptime path: []const u8) WavData {
