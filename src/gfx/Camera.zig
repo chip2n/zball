@@ -39,13 +39,14 @@ fn calculateView(width: u32, height: u32) Mat4 {
     const vw: f32 = @floatFromInt(constants.viewport_size[0]);
     const vh: f32 = @floatFromInt(constants.viewport_size[1]);
     const scale = @min(@floor(w / vw), @floor(h / vh));
-    const offset_x = w / 2 - (vw * scale) / 2;
-    const offset_y = h / 2 - (vh * scale) / 2;
-    var view = m.translation(
-        std.math.round(-w / 2 + offset_x),
-        std.math.round(-h / 2 + offset_y),
-        0,
-    );
+
+    // Never place view at an uneven position
+    var offset_x: f32 = @rem(w, 2) / 2;
+    var offset_y: f32 = @rem(h, 2) / 2;
+    offset_x -= (vw * scale) / 2;
+    offset_y -= (vh * scale) / 2;
+
+    var view = m.translation(offset_x, offset_y, 0);
     view = m.mul(m.scaling(scale, scale, 1), view);
     return view;
 }
