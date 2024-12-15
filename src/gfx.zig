@@ -380,14 +380,14 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
         .scanline_amount = 0.0,
         .vignette_amount = 0.4,
         .vignette_intensity = 0.5,
-        .aberation_amount = 0.0,
+        .aberration_amount = 0.0,
     };
     if (state.camera.zoom() > 2) {
         // Scale is big enough for scanlines
         fs_scene_params.scanline_amount = 1.0;
         fs_scene_params.vignette_amount = 0.6;
         fs_scene_params.vignette_intensity = 0.4;
-        fs_scene_params.aberation_amount = 0.3;
+        fs_scene_params.aberration_amount = 0.3;
     }
     // Update uniform transition progress (shader uses it to display part of the
     // screen while a transition is in progress)

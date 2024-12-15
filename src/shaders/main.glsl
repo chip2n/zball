@@ -165,7 +165,7 @@ uniform fs_scene_params {
     float scanline_amount;
     float vignette_amount;
     float vignette_intensity;
-    float aberation_amount;
+    float aberration_amount;
 };
 
 in vec2 frag_pos;
@@ -254,12 +254,11 @@ vec3 sample3(vec2 pos) {
     if (scanline_amount > 0.0) {
         vec3 c1 = sample_line(pos, -1.0);
         vec3 c2 = sample_line(pos, 0.0);
-        vec3 c3 = sample_line(pos, -1.0);
+        vec3 c3 = sample_line(pos, 1.0);
 
-        // TODO glitchy at hires
         float w1 = scanline(pos, -1.0);
         float w2 = scanline(pos, 0.0);
-        float w3 = scanline(pos, 1.0);
+        float w3 = scanline(pos, 1.1);
 
         vec3 scanlines = c1 * w1 + c2 * w2 + c3 * w3;
         color = mix(color, scanlines, scanline_amount);
@@ -276,8 +275,8 @@ float vignette(vec2 uv){
 void main() {
     vec3 color = sample3(uv);
 
-    if (aberation_amount > 0) {
-        float chromatic = aberation_amount;
+    if (aberration_amount > 0) {
+        float chromatic = aberration_amount;
         vec2 chromatic_x = vec2(chromatic,0.0) / resolution.x;
         vec2 chromatic_y = vec2(0.0, chromatic/2.0) / resolution.y;
         float r = sample3(uv - chromatic_x).r;
