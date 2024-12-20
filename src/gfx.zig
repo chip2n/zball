@@ -91,9 +91,9 @@ pub fn init(allocator: std.mem.Allocator) !void {
             },
             .color_count = 1,
         };
-        pip_desc.layout.attrs[shd.ATTR_vs_position].format = .FLOAT3;
-        pip_desc.layout.attrs[shd.ATTR_vs_color0].format = .UBYTE4N;
-        pip_desc.layout.attrs[shd.ATTR_vs_texcoord0].format = .FLOAT2;
+        pip_desc.layout.attrs[shd.ATTR_main_position].format = .FLOAT3;
+        pip_desc.layout.attrs[shd.ATTR_main_color0].format = .UBYTE4N;
+        pip_desc.layout.attrs[shd.ATTR_main_texcoord0].format = .FLOAT2;
         pip_desc.colors[0].blend = .{
             .enabled = true,
             .src_factor_rgb = .SRC_ALPHA,
@@ -117,9 +117,9 @@ pub fn init(allocator: std.mem.Allocator) !void {
             },
             .color_count = 1,
         };
-        pip_desc.layout.attrs[shd.ATTR_vs_shadow_position].format = .FLOAT3;
-        pip_desc.layout.attrs[shd.ATTR_vs_shadow_color0].format = .UBYTE4N;
-        pip_desc.layout.attrs[shd.ATTR_vs_shadow_texcoord0].format = .FLOAT2;
+        pip_desc.layout.attrs[shd.ATTR_shadow_position].format = .FLOAT3;
+        pip_desc.layout.attrs[shd.ATTR_shadow_color0].format = .UBYTE4N;
+        pip_desc.layout.attrs[shd.ATTR_shadow_texcoord0].format = .FLOAT2;
         pip_desc.colors[0].blend = .{
             .enabled = true,
             .src_factor_rgb = .SRC_ALPHA,
@@ -149,8 +149,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .shader = sg.makeShader(shd.sceneShaderDesc(sg.queryBackend())),
         .primitive_type = .TRIANGLE_STRIP,
     };
-    scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_pos].format = .FLOAT2;
-    scene_pip_desc.layout.attrs[shd.ATTR_vs_scene_in_uv].format = .FLOAT2;
+    scene_pip_desc.layout.attrs[shd.ATTR_scene_pos].format = .FLOAT2;
+    scene_pip_desc.layout.attrs[shd.ATTR_scene_in_uv].format = .FLOAT2;
     scene_pip_desc.colors[0].blend = .{
         .enabled = true,
         .src_factor_rgb = .SRC_ALPHA,
@@ -171,7 +171,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     // resource bindings to render the fullscreen quad (composed from the
     // offscreen render target textures
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
-    state.scene.bind.fs.samplers[0] = smp;
+    state.scene.bind.samplers[shd.SMP_smp] = smp;
 
     state.lights = try std.ArrayList(Light).initCapacity(allocator, constants.max_lights);
 
@@ -250,10 +250,10 @@ pub fn renderMain(fb: Framebuffer) void {
             std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
         };
-        bind.fs.images[shd.SLOT_tex] = tex.img;
+        bind.images[shd.IMG_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
@@ -265,13 +265,13 @@ pub fn renderMain(fb: Framebuffer) void {
             std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
         };
-        bind.fs.images[shd.SLOT_tex] = tex.img;
+        bind.images[shd.IMG_tex] = tex.img;
 
         // We render the main layer two times to display a shadow
         // TODO avoid switching pipelines often
         sg.applyPipeline(state.shadow.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
@@ -284,13 +284,13 @@ pub fn renderMain(fb: Framebuffer) void {
             std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
         };
-        bind.fs.images[shd.SLOT_tex] = tex.img;
+        bind.images[shd.IMG_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         if (!illuminated and b.illuminated) {
-            sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         } else {
-            sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params2));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params2));
         }
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
@@ -304,10 +304,10 @@ pub fn renderMain(fb: Framebuffer) void {
             std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
             continue;
         };
-        bind.fs.images[shd.SLOT_tex] = tex.img;
+        bind.images[shd.IMG_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
-        sg.applyUniforms(.VS, shd.SLOT_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(.FS, shd.SLOT_fs_params, sg.asRange(&fs_params));
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
@@ -394,10 +394,10 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
     fs_scene_params.value = transition_progress;
 
     sg.applyPipeline(state.scene.pip);
-    sg.applyUniforms(.VS, shd.SLOT_vs_scene_params, sg.asRange(&vs_scene_params));
-    sg.applyUniforms(.FS, shd.SLOT_fs_scene_params, sg.asRange(&fs_scene_params));
+    sg.applyUniforms(shd.UB_vs_scene_params, sg.asRange(&vs_scene_params));
+    sg.applyUniforms(shd.UB_fs_scene_params, sg.asRange(&fs_scene_params));
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
-    state.scene.bind.fs.images[shd.SLOT_tex] = fb.attachments_desc.colors[0].image;
+    state.scene.bind.images[shd.IMG_tex] = fb.attachments_desc.colors[0].image;
     sg.applyBindings(state.scene.bind);
     sg.draw(0, 4, 1);
 }

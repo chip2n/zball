@@ -4,7 +4,7 @@
 //* main shader
 
 @vs vs
-uniform vs_params {
+layout(binding=0) uniform vs_params {
     mat4 mvp;
 };
 
@@ -25,9 +25,9 @@ void main() {
 @end
 
 @fs fs
-uniform texture2D tex;
-uniform sampler smp;
-uniform fs_params {
+layout(binding=0) uniform texture2D tex;
+layout(binding=1) uniform sampler smp;
+layout(binding=2) uniform fs_params {
     vec4 flags;
     vec4 light_positions[256];
     vec4 light_colors[256];
@@ -87,7 +87,7 @@ void main() {
 
 @vs vs_shadow
 
-uniform vs_params {
+layout(binding=0) uniform vs_params {
     mat4 mvp;
 };
 
@@ -108,9 +108,9 @@ void main() {
 
 // TODO share between shaders
 @fs fs_shadow
-uniform texture2D tex;
-uniform sampler smp;
-uniform fs_params {
+layout(binding=0) uniform texture2D tex;
+layout(binding=1) uniform sampler smp;
+layout(binding=2) uniform fs_params {
     vec4 flags;
     vec4 light_positions[256];
     vec4 light_colors[256];
@@ -139,7 +139,7 @@ void main() {
 @vs vs_scene
 @glsl_options flip_vert_y
 
-uniform vs_scene_params {
+layout(binding=0) uniform vs_scene_params {
     mat4 mvp;
 };
 
@@ -158,9 +158,9 @@ void main() {
 
 @fs fs_scene
 
-uniform texture2D tex;
-uniform sampler smp;
-uniform fs_scene_params {
+layout(binding=0) uniform texture2D tex;
+layout(binding=1) uniform sampler smp;
+layout(binding=2) uniform fs_scene_params {
     float value;
     float scanline_amount;
     float vignette_amount;

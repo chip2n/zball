@@ -53,7 +53,7 @@ pub fn build(b: *Build) !void {
 
     { // Aseprite
         const dep_aseprite = b.dependency("aseprite", .{
-            .target = b.host,
+            .target = b.graph.host,
             .optimize = optimize,
         });
         const art_aseprite = dep_aseprite.artifact("aseprite");
@@ -178,7 +178,7 @@ fn buildFontPackTool(
     const exe = b.addExecutable(.{
         .name = "fontpack",
         .root_source_file = b.path("tools/fontpack.zig"),
-        .target = b.host,
+        .target = b.graph.host,
         .optimize = optimize,
     });
     exe.addIncludePath(dep_stb.path("."));

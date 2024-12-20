@@ -29,7 +29,7 @@ pub fn init(width: u32, height: u32) @This() {
         .usage = .DYNAMIC,
         .size = constants.max_verts * @sizeOf(Vertex),
     });
-    bind.fs.samplers[shd.SLOT_smp] = sg.makeSampler(.{});
+    bind.samplers[shd.SMP_smp] = sg.makeSampler(.{});
 
     return .{
         .attachments_desc = attachments_desc,

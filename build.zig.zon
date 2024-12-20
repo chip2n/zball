@@ -7,12 +7,12 @@
             .hash = "1220144256113210beb90ac4b0d6f469a6da267869d9fcb6c3f49a909d63cd2cd9f6",
         },
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#89c48425f694ed2516566e0e1681adc6ac64a0ef",
-            .hash = "12203c57bd30a5554d1e2545fe9005874150e4ee51bb8381e4dee8a1c8d91df012db",
+            .url = "git+https://github.com/floooh/sokol-zig.git#9d113214f7750f8ab68b465b2605ce308e995fb4",
+            .hash = "1220489430d6287009e225a939fb084ab330d497fc7fdca137d2cc2ef5f0ccf71ff3",
         },
         .sokol_tools = .{
-            .url = "git+https://github.com/floooh/sokol-tools-bin.git#f1af4529746b804d6c79d5a36c333aec489fab27",
-            .hash = "122033a8fe9c0d8a298a3bbf2378e19a1938090b5ab808a03f73aef9ff09d03a9a16",
+            .url = "git+https://github.com/floooh/sokol-tools-bin.git#d80b1d8f20fef813092ba37f26723d3880839651",
+            .hash = "1220f2ae16952843dd25b6bc86b888a3fd8c3f25d34adddfd8d1d2b9f801429e80e4",
         },
         .zmath = .{ .path = "libs/zmath" },
         .zpool = .{ .path = "libs/zpool" },
