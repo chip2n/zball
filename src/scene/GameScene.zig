@@ -49,6 +49,7 @@ const laser_cooldown = 0.2;
 const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 const brick_start_y = constants.brick_start_y;
+const death_delay = 2.5;
 
 pub const EntityType = enum {
     none,
@@ -66,6 +67,7 @@ pub const Entity = struct {
     magnetized: bool = false,
     flame: FlameEmitter = .{},
     explosion: ExplosionEmitter = .{},
+    controlled: bool = true,
 };
 
 const BallState = enum {
@@ -228,6 +230,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
         scene.time += game_dt;
 
+        const old_paddle_pos = scene.paddle_pos;
         { // Move paddle
             const dx = blk: {
                 // Mouse
@@ -361,64 +364,98 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
                     // Has the ball hit the paddle?
                     paddle_check: {
+                        // Paddle bounces are handled as follows:
+                        //
+                        // If the ball hits the top surface of the paddle, we
+                        // bounce the ball in a direction determined by how far
+                        // the ball is from the center paddle. Hitting it in the
+                        // center launches it in a vertical direction, while
+                        // each side gives the ball trajectory a more horizontal
+                        // direction.
+                        //
+                        // If the ball hits the side of the paddle, we reflect
+                        // the ball downwards at a 45 degree angle away from the
+                        // paddle and prevent further collisions to ensure
+                        // there's no weirdness at the level edges. At this
+                        // point, the ball can be "shoved" by moving the paddle
+                        // towards it, but it doesn't trigger further direction
+                        // changes.
+                        //
                         // NOTE: We only check for collision if the ball is heading
                         // downward, because there are situations the ball could be
                         // temporarily inside the paddle (and I don't know a better way
                         // to solve that which look good or feel good gameplay-wise)
                         if (ball.dir[1] < 0) break :paddle_check;
 
-                        var paddle_bounds = scene.paddleBounds();
+                        const paddle_bounds = scene.paddleBounds();
                         const paddle_w = paddle_bounds.w;
                         const paddle_h = paddle_bounds.h;
                         const ball_bounds = Rect{
-                            .x = old_ball_pos[0] - ball_w,
-                            .y = old_ball_pos[1] - ball_h,
+                            .x = old_ball_pos[0] - ball_w / 2,
+                            .y = old_ball_pos[1] - ball_h / 2,
                             .w = ball_w,
                             .h = ball_h,
                         };
 
-                        var collided = false;
+                        // Top surface
 
-                        // After we've moved the paddle, a ball may be inside it. If so,
-                        // consider it collided.
-                        if (paddle_bounds.overlaps(ball_bounds)) {
-                            collided = true;
-                            out = old_ball_pos;
-                        } else {
-                            // TODO reuse
-                            var r = @import("../collision.zig").Rect{
-                                .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
-                                .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
-                            };
-                            r.grow(.{ ball_w / 2, ball_h / 2 });
-                            collided = box_intersection(old_ball_pos, new_ball_pos, r, &out, &normal);
-                        }
-
-                        if (collided) {
+                        // TODO if the ball moves fast, it might go through the
+                        // grace zone. So we should probably consider the old
+                        // position as well somehow
+                        const hit_y = scene.paddle_pos[1] - paddle_h - ball_h / 2;
+                        const grace_x = 2;
+                        const grace_y = 2;
+                        if (new_ball_pos[1] > hit_y and new_ball_pos[1] < hit_y + grace_y and new_ball_pos[0] >= paddle_bounds.x - ball_w / 2 - grace_x and new_ball_pos[0] <= paddle_bounds.x + paddle_bounds.w + ball_w / 2 + grace_x) {
                             ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
                             if (scene.paddle_magnet) {
                                 // Paddle is magnetized - make ball stick!
                                 // TODO sound?
-                                ball.pos = out;
-                                ball.pos[1] = paddle_bounds.y - ball_h / 2;
+                                ball.pos[0] = new_ball_pos[0];
+                                ball.pos[1] = hit_y;
                                 ball.magnetized = true;
                             } else {
                                 // Bounce the ball
                                 audio.play(.{ .clip = .bounce });
-                                ball.pos = out;
+                                // TODO calculate correct out
+                                // ball.pos = out;
+                                ball.pos[0] = new_ball_pos[0];
+                                ball.pos[1] = hit_y;
                             }
+                            break :paddle_check;
                         }
+
+                        if (new_ball_pos[1] > paddle_bounds.y + 2 and paddle_bounds.overlaps(ball_bounds)) {
+                            const paddle_dir = new_ball_pos[0] - old_paddle_pos[0];
+                            if (paddle_dir < 0) {
+                                ball.dir = .{ -1, 1 };
+                                ball.pos[0] = paddle_bounds.x - ball_w / 2;
+                            } else {
+                                ball.dir = .{ 1, 1 };
+                                ball.pos[0] = paddle_bounds.x + paddle_bounds.w + ball_w / 2;
+                            }
+                            m.normalize(&ball.dir);
+                            if (ball.controlled) {
+                                audio.play(.{ .clip = .bounce });
+                                ball.controlled = false;
+                            }
+                            break :paddle_check;
+                        }
+
+                        var r = @import("../collision.zig").Rect{
+                            .min = .{ scene.paddle_pos[0] - paddle_w / 2, scene.paddle_pos[1] - paddle_h },
+                            .max = .{ scene.paddle_pos[0] + paddle_w / 2, scene.paddle_pos[1] },
+                        };
+                        r.grow(.{ ball_w / 2, ball_h / 2 });
                     }
 
                     { // Has the ball hit the ceiling?
-                        const c = line_intersection(
+                        if (line_intersection(
                             old_ball_pos,
                             ball.pos,
                             .{ 0, brick_start_y },
                             .{ vw - ball_w / 2, brick_start_y },
                             &out,
-                        );
-                        if (c) {
+                        )) {
                             audio.play(.{ .clip = .bounce });
                             normal = .{ 0, 1 };
                             ball.pos = out;
@@ -427,14 +464,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     }
 
                     { // Has the ball hit the right wall?
-                        const c = line_intersection(
+                        if (line_intersection(
                             old_ball_pos,
                             ball.pos,
                             .{ vw - ball_w / 2, 0 },
                             .{ vw - ball_w / 2, vh },
                             &out,
-                        );
-                        if (c) {
+                        )) {
                             audio.play(.{ .clip = .bounce });
                             normal = .{ -1, 0 };
                             ball.pos = out;
@@ -443,14 +479,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     }
 
                     { // Has the ball hit the left wall?
-                        const c = line_intersection(
+                        if (line_intersection(
                             old_ball_pos,
                             ball.pos,
                             .{ ball_w / 2, 0 },
                             .{ ball_w / 2, vh },
                             &out,
-                        );
-                        if (c) {
+                        )) {
                             audio.play(.{ .clip = .bounce });
                             normal = .{ -1, 0 };
                             ball.pos = out;
@@ -459,14 +494,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     }
 
                     { // Has a ball hit the floor?
-                        const c = line_intersection(
-                            old_ball_pos,
-                            ball.pos,
-                            .{ 0, vh - ball_h / 2 },
-                            .{ vw, vh - ball_h / 2 },
-                            &out,
-                        );
-                        if (c) {
+                        if (ball.pos[1] > vh - ball_h / 2) {
                             audio.play(.{ .clip = .explode, .vol = 0.5 });
                             _ = scene.spawnExplosion(ball.pos, .ball_normal) catch {};
                             ball.type = .none;
@@ -937,7 +965,7 @@ fn updateIdleBall(scene: *GameScene) void {
 
 fn killPlayer(scene: *GameScene) void {
     audio.play(.{ .clip = .death });
-    scene.death_timer = 2.5;
+    scene.death_timer = death_delay;
 }
 
 fn ballOnPaddlePos(scene: GameScene) [2]f32 {

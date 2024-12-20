@@ -21,20 +21,6 @@ pub const Rect = struct {
     }
 };
 
-// The angle depends on how far the ball is from the center of the paddle
-// fn paddle_reflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir: [2]f32) [2]f32 {
-//     const p = (paddle_pos - ball_pos[0]) / paddle_width;
-//     var new_dir = [_]f32{ -p, -ball_dir[1] };
-//     normalize(&new_dir);
-//     return new_dir;
-// }
-
-// const CollisionInfo = struct {
-//     t: f32,
-//     pos: [2]f32,
-//     normal: [2]f32,
-// };
-
 pub fn box_intersection(p0: [2]f32, p1: [2]f32, box: Rect, out: ?*[2]f32, normal: ?*[2]f32) bool {
     const min = box.min;
     const max = box.max;
