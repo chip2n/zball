@@ -15,12 +15,8 @@ pub fn renderMenu() bool {
     defer ui.endWindow();
 
     var sfx_focused = false;
-    _ = ui.selectionItem("Volume (sfx)", .{ .focused = &sfx_focused });
+    _ = ui.selectionItem("Volume", .{ .focused = &sfx_focused });
     ui.slider(.{ .value = &audio.vol_sfx, .focused = sfx_focused });
-
-    var bg_focused = false;
-    _ = ui.selectionItem("Volume (bg)", .{ .focused = &bg_focused });
-    ui.slider(.{ .value = &audio.vol_bg, .focused = bg_focused });
 
     if (ui.selectionItem("Back", .{})) {
         return true;

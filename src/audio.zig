@@ -84,7 +84,6 @@ pub inline fn play(v: PlayDesc) void {
     state.play(v);
 }
 
-pub var vol_bg: f32 = 0.5;
 pub var vol_sfx: f32 = 0.5;
 
 const AudioTrack = struct {
@@ -92,14 +91,9 @@ const AudioTrack = struct {
     frame: usize = 0,
     loop: bool = false,
     vol: f32 = 1.0,
-    category: AudioCategory = .sfx,
 
     fn volume(track: AudioTrack) f32 {
-        const cat_vol = switch (track.category) {
-            .bg => vol_bg,
-            .sfx => vol_sfx,
-        };
-        return track.vol * cat_vol;
+        return track.vol * vol_sfx;
     }
 };
 
@@ -122,7 +116,6 @@ pub const AudioState = struct {
             p.frame = 0;
             p.loop = v.loop;
             p.vol = v.vol;
-            p.category = v.category;
             break;
         }
     }
