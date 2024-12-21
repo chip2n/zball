@@ -4,6 +4,8 @@
 //* main shader
 
 @vs vs
+@msl_options fixup_clipspace
+
 layout(binding=0) uniform vs_params {
     mat4 mvp;
 };
@@ -86,6 +88,7 @@ void main() {
 // This shader renders everything in a solid shadow color, placing it at an offset to give the illusion of a drop shadow. Fancy!
 
 @vs vs_shadow
+@msl_options fixup_clipspace
 
 layout(binding=0) uniform vs_params {
     mat4 mvp;
@@ -137,6 +140,7 @@ void main() {
 //* scene shader
 
 @vs vs_scene
+@msl_options fixup_clipspace
 @msl_options flip_vert_y
 
 layout(binding=0) uniform vs_scene_params {
