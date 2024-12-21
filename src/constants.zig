@@ -1,7 +1,7 @@
 const m = @import("math");
 
-pub const initial_screen_size = .{ 640, 480 };
 pub const viewport_size: [2]u32 = .{ 320, 240 };
+pub const initial_screen_size = .{ viewport_size[0] * 3, viewport_size[1] * 3 };
 
 // TODO read these from sprites
 pub const brick_w = 17;
