@@ -30,7 +30,17 @@ pub fn build(b: *Build) !void {
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
     // Shader compilation step
-    const shdc = dep_sokol_tools.path("bin/linux/sokol-shdc").getPath(b);
+    const shdc_path = blk: {
+        if (b.graph.host.result.os.tag == .linux) {
+            break :blk "bin/linux/sokol-shdc";
+        } else if (b.graph.host.result.os.tag == .macos) {
+            break :blk "bin/osx_arm64/sokol-shdc";
+        } else if (b.graph.host.result.os.tag == .windows) {
+            break :blk "bin/win32/sokol-shdc";
+        }
+        unreachable;
+    };
+    const shdc = dep_sokol_tools.path(shdc_path).getPath(b);
     var shader_cmd = b.addSystemCommand(&.{shdc});
     shader_cmd.addPrefixedFileArg("--input=", b.path("src/shaders/main.glsl"));
     const shader_output = shader_cmd.addPrefixedOutputFileArg("--output=", "main.glsl.zig");
