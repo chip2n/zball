@@ -205,7 +205,11 @@ vec3 pixel(vec2 uv, vec2 off) {
     vec2 real_uv = uv;
 
     float transition_progress = value;
+#if SOKOL_MSL
     float frag_progress = frag_pos.y / resolution.y;
+#else
+    float frag_progress = 1 - frag_pos.y / resolution.y;
+#endif
 
     // Fragment is outside the transition animation
     if (frag_progress > transition_progress) discard;
