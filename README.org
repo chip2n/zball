@@ -22,9 +22,6 @@ zig build
 zig build -Dtarget=wasm32-emscripten
 #+end_src
 
-** Shader hot reload (linux only)
-
-You can enable shader reloading by setting the `shader-reload` flag to true:
 
 #+begin_src bash
 zig build -Dshader-reload=true
