@@ -150,7 +150,7 @@ fn addDeps(
         .root_source_file = deps.shader_path,
         .imports = &.{
             .{ .name = "sokol", .module = mod_sokol },
-            .{ .name = "zmath", .module = mod_zmath },
+            .{ .name = "math", .module = mod_math },
         },
     });
     step.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });

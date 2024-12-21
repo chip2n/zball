@@ -1,5 +1,5 @@
-@header const zm = @import("zmath")
-@ctype mat4 zm.Mat
+@header const m = @import("math")
+@ctype mat4 m.Mat4
 
 //* main shader
 
