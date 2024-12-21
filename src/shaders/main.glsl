@@ -137,7 +137,6 @@ void main() {
 //* scene shader
 
 @vs vs_scene
-@glsl_options flip_vert_y
 @msl_options flip_vert_y
 
 layout(binding=0) uniform vs_scene_params {
