@@ -52,7 +52,7 @@ fn calculateView(width: u32, height: u32) Mat4 {
 }
 
 fn calculateProj(width: u32, height: u32) Mat4 {
-    return m.orthographicRh(@floatFromInt(width), @floatFromInt(height), 0.1, 10);
+    return m.orthographicLh(@floatFromInt(width), @floatFromInt(height), 0, 10);
 }
 
 pub fn screenToWorld(cam: Camera, p: [2]f32) [2]f32 {

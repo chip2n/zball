@@ -4,6 +4,7 @@ const zm = @import("zmath");
 pub const identity = zm.identity;
 pub const translation = zm.translation;
 pub const orthographicRh = zm.orthographicRh;
+pub const orthographicLh = zm.orthographicLh;
 pub const mul = zm.mul;
 pub const Vec4 = zm.f32x4;
 pub const Mat4 = zm.Mat;

@@ -137,10 +137,10 @@ pub fn init(allocator: std.mem.Allocator) !void {
     state.quad_vbuf = sg.makeBuffer(.{
         .usage = .IMMUTABLE,
         .data = sg.asRange(&[_]f32{
-            0,  0,  0, 0,
-            vw, 0,  1, 0,
-            0,  vh, 0, 1,
-            vw, vh, 1, 1,
+            0,  0,  0, 1,
+            vw, 0,  1, 1,
+            0,  vh, 0, 0,
+            vw, vh, 1, 0,
         }),
     });
 
@@ -216,7 +216,7 @@ pub fn renderMain(fb: Framebuffer) void {
 
     const vw: f32 = @floatFromInt(constants.viewport_size[0]);
     const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-    var mvp = m.orthographicRh(vw, vh, 0.1, 100);
+    var mvp = m.orthographicLh(vw, vh, 0, 100);
     mvp = m.mul(m.translation(-vw / 2, -vh / 2, 0), mvp);
     const vs_params = shd.VsParams{ .mvp = mvp };
 
