@@ -196,19 +196,23 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
                 const w: f32 = @floatFromInt(sp.bounds.w);
                 const h: f32 = @floatFromInt(sp.bounds.h);
                 // TODO not a fan of the entity pivot point differences between editor and game
-                _ = try scene.spawnEntity(
-                    .brick,
-                    .{ fx + w / 2, fy + h / 2 + brick_start_y },
-                    .{ 0, 0 },
-                    s,
-                );
+                _ = try scene.spawnEntity(.{
+                    .type = .brick,
+                    .pos = .{ fx + w / 2, fy + h / 2 + brick_start_y },
+                    .sprite = s,
+                });
             },
         }
     }
 
     // spawn one ball to start
     const initial_ball_pos = scene.ballOnPaddlePos();
-    _ = scene.spawnEntity(.ball, initial_ball_pos, constants.initial_ball_dir, .ball_normal) catch unreachable;
+    _ = try scene.spawnEntity(.{
+        .type = .ball,
+        .pos = initial_ball_pos,
+        .dir = constants.initial_ball_dir,
+        .sprite = .ball_normal,
+    });
 
     return scene;
 }
@@ -277,8 +281,18 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             } else {
                 if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
                     const bounds = scene.paddleBounds();
-                    _ = scene.spawnEntity(.laser, .{ bounds.x + 2, bounds.y }, .{ 0, -1 }, .particle_laser) catch break :shoot;
-                    _ = scene.spawnEntity(.laser, .{ bounds.x + bounds.w - 2, bounds.y }, .{ 0, -1 }, .particle_laser) catch break :shoot;
+                    _ = scene.spawnEntity(.{
+                        .type = .laser,
+                        .pos = .{ bounds.x + 2, bounds.y },
+                        .dir = .{ 0, -1 },
+                        .sprite = .particle_laser,
+                    }) catch break :shoot;
+                    _ = scene.spawnEntity(.{
+                        .type = .laser,
+                        .pos = .{ bounds.x + bounds.w - 2, bounds.y },
+                        .dir = .{ 0, -1 },
+                        .sprite = .particle_laser,
+                    }) catch break :shoot;
                     scene.laser_cooldown_timer = laser_cooldown;
                     audio.play(.{ .clip = .laser });
                 }
@@ -598,7 +612,12 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             if (scene.lives == 0) {
                 game.scene_mgr.switchTo(.title);
             } else {
-                _ = try scene.spawnEntity(.ball, scene.ballOnPaddlePos(), constants.initial_ball_dir, .ball_normal);
+                _ = try scene.spawnEntity(.{
+                    .type = .ball,
+                    .pos = scene.ballOnPaddlePos(),
+                    .dir = constants.initial_ball_dir,
+                    .sprite = .ball_normal,
+                });
                 scene.ball_state = .idle;
                 scene.ball_speed = ball_base_speed;
                 scene.ball_size = .normal;
@@ -932,32 +951,7 @@ fn paused(scene: *GameScene) bool {
     return scene.menu != .none or game.scene_mgr.next != null;
 }
 
-fn spawnEntity(
-    scene: *GameScene,
-    entity_type: EntityType,
-    pos: [2]f32,
-    dir: [2]f32,
-    s: ?sprite.Sprite,
-) !*Entity {
-    for (scene.entities) |*e| {
-        if (e.type != .none) continue;
-        e.* = .{
-            .type = entity_type,
-            .pos = pos,
-            .dir = dir,
-            .flame = FlameEmitter.init(.{
-                .rng = game.prng.random(),
-                .sprites = &game.particleFlameSprites,
-            }),
-            .sprite = s,
-        };
-        return e;
-    } else {
-        return error.MaxEntitiesReached;
-    }
-}
-
-fn spawnEntity2(scene: *GameScene, entity: Entity) !*Entity {
+fn spawnEntity(scene: *GameScene, entity: Entity) !*Entity {
     for (scene.entities) |*e| {
         if (e.type != .none) continue;
         e.* = entity;
@@ -970,7 +964,7 @@ fn spawnEntity2(scene: *GameScene, entity: Entity) !*Entity {
 }
 
 fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
-    const expl = try scene.spawnEntity(.explosion, pos, .{ 0, 0 }, null);
+    const expl = try scene.spawnEntity(.{ .type = .explosion, .pos = pos });
     expl.explosion = ExplosionEmitter.init(.{
         .rng = game.prng.random(),
         .sprites = game.particleExplosionSprites(sp),
@@ -1115,7 +1109,12 @@ fn splitBall(scene: *GameScene, angles: []const f32) void {
         for (angles[1..]) |angle| {
             var d2 = ball.dir;
             m.vrot(&d2, angle);
-            const new_ball = scene.spawnEntity(.ball, ball.pos, d2, ball.sprite.?) catch break;
+            const new_ball = scene.spawnEntity(.{
+                .type = .ball,
+                .pos = ball.pos,
+                .dir = d2,
+                .sprite = ball.sprite.?,
+            }) catch break;
             new_ball.flame.emitting = ball.flame.emitting;
         }
         ball.dir = d1;
@@ -1139,7 +1138,7 @@ fn spawnDrop(scene: *GameScene, pos: [2]f32) void {
 fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
     const rng = game.prng.random();
     const effect = rng.enumValue(PowerupType);
-    _ = scene.spawnEntity2(.{
+    _ = scene.spawnEntity(.{
         .type = .powerup,
         .pos = pos,
         .sprite = powerupSprite(effect),
@@ -1151,7 +1150,7 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
 }
 
 fn spawnCoin(scene: *GameScene, pos: [2]f32) void {
-    _ = scene.spawnEntity2(.{
+    _ = scene.spawnEntity(.{
         .type = .coin,
         .pos = pos,
         .sprite = .coin1,
