@@ -39,9 +39,13 @@ const initial_paddle_pos: [2]f32 = .{
 };
 const max_balls = 32;
 const max_entities = 1024;
-const powerup_freq = 0.8; // TODO 0.1?
-const powerup_spawn_cooldown = 1.0;
-const powerup_fall_speed = 100;
+const coin_freq = 0.4;
+const powerup_freq = 0.1;
+const drop_fall_speed = 100;
+
+/// Prevents two drops being spawned back-to-back in a quick succession
+const drop_spawn_cooldown = 0.5;
+
 const flame_duration = 5;
 const laser_duration = 5;
 const laser_speed = 200;
@@ -51,12 +55,18 @@ const brick_h = constants.brick_h;
 const brick_start_y = constants.brick_start_y;
 const death_delay = 2.5;
 
+comptime {
+    std.debug.assert(coin_freq + powerup_freq <= 1);
+}
+
 pub const EntityType = enum {
     none,
     brick,
     ball,
     laser,
     explosion,
+    powerup,
+    coin,
 };
 
 pub const Entity = struct {
@@ -68,6 +78,11 @@ pub const Entity = struct {
     flame: FlameEmitter = .{},
     explosion: ExplosionEmitter = .{},
     controlled: bool = true,
+    frame: u8 = 0,
+    falling: bool = false,
+    collectible: bool = false,
+    collect_score: u16 = 0,
+    collect_effect: ?PowerupType = null,
 };
 
 const BallState = enum {
@@ -122,8 +137,6 @@ const GameScene = @This();
 
 allocator: std.mem.Allocator,
 
-powerups: [16]Powerup = .{.{}} ** 16,
-
 menu: GameMenu = .none,
 
 time: f32 = 0,
@@ -153,7 +166,7 @@ clear_timer: f32 = 0,
 death_timer: f32 = 0,
 
 // When a powerup spawns, we wait a little bit before spawning the next powerup
-powerup_timer: f32 = 0,
+drop_spawn_timer: f32 = 0,
 
 flame_timer: f32 = 0,
 laser_timer: f32 = 0,
@@ -289,34 +302,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
         }
 
-        // Move powerups
-        for (&scene.powerups) |*p| {
-            if (!p.active) continue;
-            p.pos[1] += game_dt * powerup_fall_speed;
-            if (p.pos[1] > constants.viewport_size[1]) {
-                p.active = false;
-            }
-        }
-
-        { // Has the paddle hit a powerup?
-            const paddle_bounds = scene.paddleBounds();
-            for (&scene.powerups) |*p| {
-                if (!p.active) continue;
-                const sp = powerupSprite(p.type);
-                const powerup_bounds = m.Rect{
-                    // TODO just store bounds? also using hard coded split sprite here
-                    .x = p.pos[0],
-                    .y = p.pos[1],
-                    .w = @floatFromInt(sp.bounds.w),
-                    .h = @floatFromInt(sp.bounds.h),
-                };
-                if (!paddle_bounds.overlaps(powerup_bounds)) continue;
-                p.active = false;
-                audio.play(.{ .clip = .powerup });
-                acquirePowerup(scene, p.type);
-            }
-        }
-
         const ball_sprite = sprite.get(scene.ballSprite());
         const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
         const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
@@ -324,6 +309,42 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         // Update entities
         for (scene.entities) |*e| {
             if (e.type == .none) continue;
+
+            // Handle falling entities
+            blk: {
+                if (e.type == .none) break :blk;
+                if (!e.falling) break :blk;
+                e.pos[1] += game_dt * drop_fall_speed;
+                if (e.pos[1] > constants.viewport_size[1]) {
+                    e.type = .none;
+                    e.frame = 0;
+                }
+            }
+
+            // Handle collectible entities
+            blk: {
+                if (!e.collectible) break :blk;
+                const paddle_bounds = scene.paddleBounds();
+                const sp = sprite.get(e.sprite orelse break :blk);
+                const bounds = m.Rect{
+                    .x = e.pos[0],
+                    .y = e.pos[1],
+                    .w = @floatFromInt(sp.bounds.w),
+                    .h = @floatFromInt(sp.bounds.h),
+                };
+
+                if (paddle_bounds.overlaps(bounds)) {
+                    audio.play(.{ .clip = .powerup });
+                    scene.score += e.collect_score;
+                    e.type = .none;
+                    e.frame = 0;
+
+                    if (e.collect_effect) |effect| {
+                        scene.acquirePowerup(effect);
+                    }
+                }
+            }
+
             switch (e.type) {
                 .none => {},
                 .brick => {},
@@ -538,6 +559,15 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         e.* = .{};
                     }
                 },
+                .powerup => {},
+                .coin => {
+                    defer e.frame = (e.frame + 1) % 64;
+                    if (e.frame >= 32) {
+                        e.sprite = .coin2;
+                    } else {
+                        e.sprite = .coin1;
+                    }
+                },
             }
         }
 
@@ -559,7 +589,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
         _ = scene.tickDownTimer("laser_cooldown_timer", game_dt);
         _ = scene.tickDownTimer("laser_timer", game_dt);
-        _ = scene.tickDownTimer("powerup_timer", dt);
+        _ = scene.tickDownTimer("drop_spawn_timer", dt);
 
         death: {
             if (!scene.tickDownTimer("death_timer", dt)) break :death;
@@ -665,15 +695,23 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             const sp = sprite.get(s);
             const w: f32 = @floatFromInt(sp.bounds.w);
             const h: f32 = @floatFromInt(sp.bounds.h);
-            gfx.render(.{ .src = m.irect(sp.bounds), .dst = .{
-                .x = e.pos[0] - w / 2,
-                .y = e.pos[1] - h / 2,
-                .w = w,
-                .h = h,
-            }, .illuminated = switch (e.type) {
-                .laser => false,
-                else => true,
-            } });
+            gfx.render(.{
+                .src = m.irect(sp.bounds),
+                .dst = .{
+                    .x = e.pos[0] - w / 2,
+                    .y = e.pos[1] - h / 2,
+                    .w = w,
+                    .h = h,
+                },
+                .layer = switch (e.type) {
+                    .coin, .powerup => .particles,
+                    else => .main,
+                },
+                .illuminated = switch (e.type) {
+                    .laser => false,
+                    else => true,
+                },
+            });
         }
     }
 
@@ -711,23 +749,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 .w = right.bounds.w,
                 .h = right.bounds.h,
             },
-        });
-    }
-
-    // Render powerups
-    for (scene.powerups) |p| {
-        if (!p.active) continue;
-        const sp = powerupSprite(p.type);
-        gfx.render(.{
-            .src = m.irect(sp.bounds),
-            .dst = .{
-                .x = p.pos[0],
-                .y = p.pos[1],
-                .w = @floatFromInt(sp.bounds.w),
-                .h = @floatFromInt(sp.bounds.h),
-            },
-            .layer = .main,
-            .z = 5,
         });
     }
 
@@ -798,9 +819,7 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
             }
 
             const destroyed = scene.destroyBrick(e);
-            if (destroyed) {
-                spawnPowerup(scene, e.pos);
-            }
+            if (destroyed) spawnDrop(scene, e.pos);
         }
         collided = collided or c;
     }
@@ -938,6 +957,18 @@ fn spawnEntity(
     }
 }
 
+fn spawnEntity2(scene: *GameScene, entity: Entity) !*Entity {
+    for (scene.entities) |*e| {
+        if (e.type != .none) continue;
+        e.* = entity;
+        // Auto-fill some fields so the caller don't have to remember it
+        e.flame = FlameEmitter.init(.{ .rng = game.prng.random(), .sprites = &game.particleFlameSprites });
+        return e;
+    } else {
+        return error.MaxEntitiesReached;
+    }
+}
+
 fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
     const expl = try scene.spawnEntity(.explosion, pos, .{ 0, 0 }, null);
     expl.explosion = ExplosionEmitter.init(.{
@@ -978,30 +1009,25 @@ fn ballOnPaddlePos(scene: GameScene) [2]f32 {
     };
 }
 
-const Powerup = struct {
-    type: PowerupType = .fork,
-    pos: [2]f32 = .{ 0, 0 },
-    active: bool = false,
-};
-
-fn powerupSprite(p: PowerupType) sprite.SpriteData {
+fn powerupSprite(p: PowerupType) sprite.Sprite {
     return switch (p) {
-        .fork => sprite.sprites.pow_fork,
-        .scatter => sprite.sprites.pow_scatter,
-        .flame => sprite.sprites.pow_flame,
-        .laser => sprite.sprites.pow_laser,
-        .paddle_size_up => sprite.sprites.pow_paddlesizeup,
-        .paddle_size_down => sprite.sprites.pow_paddlesizedown,
-        .ball_speed_up => sprite.sprites.pow_ballspeedup,
-        .ball_speed_down => sprite.sprites.pow_ballspeeddown,
-        .ball_size_up => sprite.sprites.pow_ballsizeup,
-        .ball_size_down => sprite.sprites.pow_ballsizedown,
-        .magnet => sprite.sprites.pow_magnet,
-        .death => sprite.sprites.pow_death,
+        .fork => .pow_fork,
+        .scatter => .pow_scatter,
+        .flame => .pow_flame,
+        .laser => .pow_laser,
+        .paddle_size_up => .pow_paddlesizeup,
+        .paddle_size_down => .pow_paddlesizedown,
+        .ball_speed_up => .pow_ballspeedup,
+        .ball_speed_down => .pow_ballspeeddown,
+        .ball_size_up => .pow_ballsizeup,
+        .ball_size_down => .pow_ballsizedown,
+        .magnet => .pow_magnet,
+        .death => .pow_death,
     };
 }
 
 fn acquirePowerup(scene: *GameScene, p: PowerupType) void {
+    scene.score += 200;
     switch (p) {
         .fork => splitBall(scene, &.{
             -pi / 8.0,
@@ -1096,23 +1122,43 @@ fn splitBall(scene: *GameScene, angles: []const f32) void {
     }
 }
 
-fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
-    if (scene.powerup_timer > 0) return;
+fn spawnDrop(scene: *GameScene, pos: [2]f32) void {
+    if (scene.drop_spawn_timer > 0) return;
 
     const rng = game.prng.random();
-    const value = rng.float(f32);
-    if (value < 1 - powerup_freq) return;
-
-    for (&scene.powerups) |*p| {
-        if (p.active) continue;
-        p.* = .{
-            .type = rng.enumValue(PowerupType),
-            .pos = pos,
-            .active = true,
-        };
-        scene.powerup_timer = powerup_spawn_cooldown;
-        return;
+    const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
+    std.log.info("idx {}", .{idx});
+    switch (idx) {
+        0 => return,
+        1 => scene.spawnPowerup(pos),
+        2 => scene.spawnCoin(pos),
+        else => unreachable,
     }
+}
+
+fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
+    const rng = game.prng.random();
+    const effect = rng.enumValue(PowerupType);
+    _ = scene.spawnEntity2(.{
+        .type = .powerup,
+        .pos = pos,
+        .sprite = powerupSprite(effect),
+        .falling = true,
+        .collectible = true,
+        .collect_score = 200,
+        .collect_effect = effect,
+    }) catch return;
+}
+
+fn spawnCoin(scene: *GameScene, pos: [2]f32) void {
+    _ = scene.spawnEntity2(.{
+        .type = .coin,
+        .pos = pos,
+        .sprite = .coin1,
+        .falling = true,
+        .collectible = true,
+        .collect_score = 100,
+    }) catch return;
 }
 
 fn renderPauseMenu(menu: *GameMenu) bool {
