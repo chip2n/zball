@@ -1126,7 +1126,6 @@ fn spawnDrop(scene: *GameScene, pos: [2]f32) void {
 
     const rng = game.prng.random();
     const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
-    std.log.info("idx {}", .{idx});
     switch (idx) {
         0 => return,
         1 => scene.spawnPowerup(pos),
