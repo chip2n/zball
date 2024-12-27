@@ -345,11 +345,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 if (!e.collectible) break :blk;
                 const paddle_bounds = scene.paddleBounds();
                 const sp = sprite.get(e.sprite orelse break :blk);
+                const sw: f32 = @floatFromInt(sp.bounds.w);
+                const sh: f32 = @floatFromInt(sp.bounds.h);
                 const bounds = m.Rect{
-                    .x = e.pos[0],
-                    .y = e.pos[1],
-                    .w = @floatFromInt(sp.bounds.w),
-                    .h = @floatFromInt(sp.bounds.h),
+                    .x = e.pos[0] - sw / 2,
+                    .y = e.pos[1] - sh / 2,
+                    .w = sw,
+                    .h = sh,
                 };
 
                 if (paddle_bounds.overlaps(bounds)) {
