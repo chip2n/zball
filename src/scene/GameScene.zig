@@ -87,11 +87,6 @@ pub const Entity = struct {
     collect_effect: ?PowerupType = null,
 };
 
-const BallState = enum {
-    alive, // ball is flying around wreaking all sorts of havoc
-    idle, // ball is on paddle and waiting to be shot
-};
-
 const GameMenu = enum { none, pause, settings };
 
 const BallSize = enum { smallest, smaller, normal, larger, largest };
@@ -153,8 +148,6 @@ paddle_magnet: bool = false,
 
 entities: []Entity,
 
-// TODO remove "idle" ball state - use magnetized logic instead
-ball_state: BallState = .idle,
 ball_speed: f32 = ball_base_speed,
 ball_size: BallSize = .normal,
 
@@ -209,7 +202,8 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
 
     // spawn one ball to start
     const initial_ball_pos = scene.ballOnPaddlePos();
-    _ = try scene.spawnBall(initial_ball_pos, constants.initial_ball_dir);
+    const initial_ball = try scene.spawnBall(initial_ball_pos, constants.initial_ball_dir);
+    initial_ball.magnetized = true;
 
     return scene;
 }
@@ -273,46 +267,40 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
         // Handle shoot input
         if (input.down(.shoot)) shoot: {
-            if (scene.ball_state == .idle) {
-                scene.ball_state = .alive;
-            } else {
-                if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
-                    const bounds = scene.paddleBounds();
-                    _ = scene.spawnEntity(.{
-                        .type = .laser,
-                        .pos = .{ bounds.x + 2, bounds.y },
-                        .dir = .{ 0, -1 },
-                        .speed = laser_speed,
-                        .sprite = .particle_laser,
-                        .colliding = true,
-                    }) catch break :shoot;
-                    _ = scene.spawnEntity(.{
-                        .type = .laser,
-                        .pos = .{ bounds.x + bounds.w - 2, bounds.y },
-                        .dir = .{ 0, -1 },
-                        .speed = laser_speed,
-                        .sprite = .particle_laser,
-                        .colliding = true,
-                    }) catch break :shoot;
-                    scene.laser_cooldown_timer = laser_cooldown;
-                    audio.play(.{ .clip = .laser });
-                }
+            if (scene.laser_timer > 0 and scene.laser_cooldown_timer <= 0) {
+                const bounds = scene.paddleBounds();
+                _ = scene.spawnEntity(.{
+                    .type = .laser,
+                    .pos = .{ bounds.x + 2, bounds.y },
+                    .dir = .{ 0, -1 },
+                    .speed = laser_speed,
+                    .sprite = .particle_laser,
+                    .colliding = true,
+                }) catch break :shoot;
+                _ = scene.spawnEntity(.{
+                    .type = .laser,
+                    .pos = .{ bounds.x + bounds.w - 2, bounds.y },
+                    .dir = .{ 0, -1 },
+                    .speed = laser_speed,
+                    .sprite = .particle_laser,
+                    .colliding = true,
+                }) catch break :shoot;
+                scene.laser_cooldown_timer = laser_cooldown;
+                audio.play(.{ .clip = .laser });
+            }
 
-                if (scene.paddle_magnet) {
-                    // When any ball is magnetized, shooting means releasing all
-                    // the balls and deactivating the magnet
-                    var any_ball_magnetized = false;
-                    for (scene.entities) |e| {
-                        if (e.type == .none) continue;
-                        if (!e.magnetized) continue;
-                        any_ball_magnetized = true;
-                    }
-                    if (any_ball_magnetized) {
-                        scene.paddle_magnet = false;
-                        for (scene.entities) |*e| {
-                            e.magnetized = false;
-                        }
-                    }
+            // When any ball is magnetized, shooting means releasing all
+            // the balls and deactivating the magnet
+            var any_ball_magnetized = false;
+            for (scene.entities) |e| {
+                if (e.type == .none) continue;
+                if (!e.magnetized) continue;
+                any_ball_magnetized = true;
+            }
+            if (any_ball_magnetized) {
+                scene.paddle_magnet = false;
+                for (scene.entities) |*e| {
+                    e.magnetized = false;
                 }
             }
         }
@@ -458,114 +446,12 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     }
                 },
                 .ball => {
-                    const ball = e;
-
-                    switch (scene.ball_state) {
-                        .idle => {
-                            scene.updateIdleBall();
-                        },
-                        .alive => {
-                            // if (!ball.magnetized) {
-                            //     ball.pos[0] += ball.dir[0] * scene.ball_speed * game_dt;
-                            //     ball.pos[1] += ball.dir[1] * scene.ball_speed * game_dt;
-                            // }
-                        },
-                    }
-
-                    // var out: [2]f32 = undefined;
-                    // _ = out; // autofix
-                    // var normal: [2]f32 = undefined;
-                    // _ = normal; // autofix
-
-                    // const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-                    // const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-
-                    // Has the ball hit the paddle?
-                    // paddle_check: {
-                    //     // Paddle bounces are handled as follows:
-                    //     //
-                    //     // If the ball hits the top surface of the paddle, we
-                    //     // bounce the ball in a direction determined by how far
-                    //     // the ball is from the center paddle. Hitting it in the
-                    //     // center launches it in a vertical direction, while
-                    //     // each side gives the ball trajectory a more horizontal
-                    //     // direction.
-                    //     //
-                    //     // If the ball hits the side of the paddle, we reflect
-                    //     // the ball downwards at a 45 degree angle away from the
-                    //     // paddle and prevent further collisions to ensure
-                    //     // there's no weirdness at the level edges. At this
-                    //     // point, the ball can be "shoved" by moving the paddle
-                    //     // towards it, but it doesn't trigger further direction
-                    //     // changes.
-                    //     //
-                    //     // NOTE: We only check for collision if the ball is heading
-                    //     // downward, because there are situations the ball could be
-                    //     // temporarily inside the paddle (and I don't know a better way
-                    //     // to solve that which look good or feel good gameplay-wise)
-                    //     if (ball.dir[1] < 0) break :paddle_check;
-
-                    //     const paddle_bounds = scene.paddleBounds();
-                    //     const paddle_w = paddle_bounds.w;
-                    //     const paddle_h = paddle_bounds.h;
-                    //     const ball_bounds = Rect{
-                    //         .x = old_pos[0] - ball_w / 2,
-                    //         .y = old_pos[1] - ball_h / 2,
-                    //         .w = ball_w,
-                    //         .h = ball_h,
-                    //     };
-
-                    //     // Top surface
-
-                    //     // TODO if the ball moves fast, it might go through the
-                    //     // grace zone. So we should probably consider the old
-                    //     // position as well somehow
-                    //     const hit_y = scene.paddle_pos[1] - paddle_h - ball_h / 2;
-                    //     const grace_x = 2;
-                    //     const grace_y = 2;
-                    //     if (ball.pos[1] > hit_y and ball.pos[1] < hit_y + grace_y and ball.pos[0] >= paddle_bounds.x - ball_w / 2 - grace_x and ball.pos[0] <= paddle_bounds.x + paddle_bounds.w + ball_w / 2 + grace_x) {
-                    //         ball.dir = paddleReflect(scene.paddle_pos[0], paddle_w, ball.pos, ball.dir);
-                    //         if (scene.paddle_magnet) {
-                    //             // Paddle is magnetized - make ball stick!
-                    //             // TODO sound?
-                    //             ball.pos[0] = ball.pos[0];
-                    //             ball.pos[1] = hit_y;
-                    //             ball.magnetized = true;
-                    //         } else {
-                    //             // Bounce the ball
-                    //             audio.play(.{ .clip = .bounce });
-                    //             // TODO calculate correct out
-                    //             // ball.pos = out;
-                    //             ball.pos[0] = ball.pos[0];
-                    //             ball.pos[1] = hit_y;
-                    //         }
-                    //         break :paddle_check;
-                    //     }
-
-                    //     if (ball.pos[1] > paddle_bounds.y + 2 and paddle_bounds.overlaps(ball_bounds)) {
-                    //         const paddle_dir = ball.pos[0] - old_paddle_pos[0];
-                    //         if (paddle_dir < 0) {
-                    //             ball.dir = .{ -1, 1 };
-                    //             ball.pos[0] = paddle_bounds.x - ball_w / 2;
-                    //         } else {
-                    //             ball.dir = .{ 1, 1 };
-                    //             ball.pos[0] = paddle_bounds.x + paddle_bounds.w + ball_w / 2;
-                    //         }
-                    //         m.normalize(&ball.dir);
-                    //         if (ball.controlled) {
-                    //             audio.play(.{ .clip = .bounce });
-                    //             ball.controlled = false;
-                    //         }
-                    //         break :paddle_check;
-                    //     }
-                    // }
-
                     // If the ball direction is almost horizontal, adjust it so
                     // that it isn't. If we don't do this, the ball may be stuck
                     // for a very long time.
-                    if (@abs(ball.dir[1]) < 0.10) {
-                        ball.dir[1] = std.math.sign(ball.dir[1]) * 0.10;
-                        m.normalize(&ball.dir);
+                    if (@abs(e.dir[1]) < 0.10) {
+                        e.dir[1] = std.math.sign(e.dir[1]) * 0.10;
+                        m.normalize(&e.dir);
                     }
                 },
             }
@@ -598,8 +484,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             if (scene.lives == 0) {
                 game.scene_mgr.switchTo(.title);
             } else {
-                _ = try scene.spawnBall(scene.ballOnPaddlePos(), constants.initial_ball_dir);
-                scene.ball_state = .idle;
+                const ball = try scene.spawnBall(scene.ballOnPaddlePos(), constants.initial_ball_dir);
+                ball.magnetized = true;
                 scene.ball_speed = ball_base_speed;
                 scene.ball_size = .normal;
                 scene.flame_timer = 0;
@@ -1113,14 +999,6 @@ fn paddleReflect(paddle_pos: f32, paddle_width: f32, ball_pos: [2]f32, ball_dir:
     var new_dir = [_]f32{ -p, -ball_dir[1] };
     m.normalize(&new_dir);
     return new_dir;
-}
-
-fn updateIdleBall(scene: *GameScene) void {
-    // TODO make iterator for this
-    for (scene.entities) |*e| {
-        if (e.type != .ball) continue;
-        e.pos = scene.ballOnPaddlePos();
-    }
 }
 
 fn killPlayer(scene: *GameScene) void {
