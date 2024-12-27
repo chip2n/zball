@@ -367,7 +367,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             blk: {
                 if (!e.colliding) break :blk;
                 // TODO
-                if (scene.collideBricks2(old_pos, e.pos)) |coll| {
+                if (scene.collideBricks(old_pos, e.pos)) |coll| {
                     switch (e.type) {
                         .ball => {
                             if (scene.flame_timer <= 0) {
@@ -791,7 +791,7 @@ fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_padd
     return false;
 }
 
-fn collideBricks2(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
+fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     out: [2]f32,
     normal: [2]f32,
 } {
@@ -841,50 +841,6 @@ fn collideBricks2(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
         std.log.warn("====", .{});
         return .{ .out = out, .normal = normal };
     }
-    return null;
-}
-
-fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
-    out: [2]f32,
-    normal: [2]f32,
-} {
-    var out: [2]f32 = undefined;
-    var normal: [2]f32 = undefined;
-
-    const ball_sprite = sprite.get(scene.ballSprite());
-    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
-    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
-
-    var collided = false;
-    var coll_dist = std.math.floatMax(f32);
-
-    for (scene.entities) |*e| {
-        if (e.type != .brick) continue;
-
-        var r = @import("../collision.zig").Rect{
-            .min = .{ e.pos[0] - brick_w / 2, e.pos[1] - brick_h / 2 },
-            .max = .{ e.pos[0] + brick_w / 2, e.pos[1] + brick_h / 2 },
-        };
-        r.grow(.{ ball_w / 2, ball_h / 2 });
-        var c_normal: [2]f32 = undefined;
-        const c = box_intersection(old_pos, new_pos, r, &out, &c_normal);
-        if (c) {
-            // TODO brick_w/brick_h nonsense
-
-            // always use the normal of the closest brick for ball reflection
-            const brick_dist = m.magnitude(m.vsub(e.pos, new_pos));
-            if (brick_dist < coll_dist) {
-                normal = c_normal;
-                coll_dist = brick_dist;
-            }
-
-            const destroyed = scene.destroyBrick(e);
-            if (destroyed) spawnDrop(scene, e.pos);
-        }
-        collided = collided or c;
-    }
-
-    if (collided) return .{ .out = out, .normal = normal };
     return null;
 }
 
