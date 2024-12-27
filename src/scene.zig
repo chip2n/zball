@@ -73,6 +73,7 @@ pub const SceneManager = struct {
             next.deinit();
         }
         mgr.next = mgr.createScene(scene_type);
+        mgr.level_idx = 0;
     }
 
     /// Update the transition state
