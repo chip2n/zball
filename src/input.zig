@@ -16,15 +16,6 @@ const KeyTable = std.EnumMap(InputAction, struct {
     down: bool = false,
 });
 
-const State = struct {
-    keys: KeyTable = KeyTable.initFull(.{}),
-
-    /// Mouse position in unscaled pixels
-    mouse_pos: [2]f32 = .{ 0, 0 },
-    mouse_delta: [2]f32 = .{ 0, 0 },
-};
-var state: State = .{};
-
 const InputAction = enum {
     left,
     right,
@@ -36,6 +27,15 @@ const InputAction = enum {
     editor_save,
     editor_load,
 };
+
+const State = struct {
+    keys: KeyTable = KeyTable.initFull(.{}),
+
+    /// Mouse position in unscaled pixels
+    mouse_pos: [2]f32 = .{ 0, 0 },
+    mouse_delta: [2]f32 = .{ 0, 0 },
+};
+var state: State = .{};
 
 const keybindings = .{
     .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{ .back } },
