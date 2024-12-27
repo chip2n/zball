@@ -85,6 +85,19 @@ pub const Entity = struct {
     collectible: bool = false,
     collect_score: u16 = 0,
     collect_effect: ?PowerupType = null,
+
+    pub fn bounds(e: Entity) ?Rect {
+        const sprite_id = e.sprite orelse return null;
+        const sp = sprite.get(sprite_id);
+        const w: f32 = @floatFromInt(sp.bounds.w);
+        const h: f32 = @floatFromInt(sp.bounds.h);
+        return Rect{
+            .x = e.pos[0] - w / 2,
+            .y = e.pos[1] - h / 2,
+            .w = w,
+            .h = h,
+        };
+    }
 };
 
 const GameMenu = enum { none, pause, settings };
@@ -332,15 +345,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 // TODO also related to collisions
                 if (!e.collectible) break :blk;
                 const paddle_bounds = scene.paddleBounds();
-                const sp = sprite.get(e.sprite orelse break :blk);
-                const sw: f32 = @floatFromInt(sp.bounds.w);
-                const sh: f32 = @floatFromInt(sp.bounds.h);
-                const bounds = m.Rect{
-                    .x = e.pos[0] - sw / 2,
-                    .y = e.pos[1] - sh / 2,
-                    .w = sw,
-                    .h = sh,
-                };
+                const bounds = e.bounds() orelse break :blk;
 
                 if (paddle_bounds.overlaps(bounds)) {
                     audio.play(.{ .clip = .powerup });
@@ -367,7 +372,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             blk: {
                 if (!e.colliding) break :blk;
                 // TODO
-                if (scene.collideBricks(old_pos, e.pos)) |coll| {
+                if (scene.collideBricks(e, old_pos, e.pos)) |coll| {
                     switch (e.type) {
                         .ball => {
                             if (scene.flame_timer <= 0) {
@@ -579,16 +584,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         }
         if (e.sprite) |s| {
             const sp = sprite.get(s);
-            const w: f32 = @floatFromInt(sp.bounds.w);
-            const h: f32 = @floatFromInt(sp.bounds.h);
+            const dst = e.bounds().?;
             gfx.render(.{
                 .src = m.irect(sp.bounds),
-                .dst = .{
-                    .x = e.pos[0] - w / 2,
-                    .y = e.pos[1] - h / 2,
-                    .w = w,
-                    .h = h,
-                },
+                .dst = dst,
                 .layer = switch (e.type) {
                     .coin, .powerup => .particles,
                     else => .main,
@@ -791,20 +790,12 @@ fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_padd
     return false;
 }
 
-fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
+fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     out: [2]f32,
     normal: [2]f32,
 } {
     const delta = m.vsub(new_pos, old_pos);
-    const ball_sprite = sprite.get(scene.ballSprite());
-    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
-    const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
-    const ball_bounds = Rect{
-        .x = old_pos[0] - ball_w / 2,
-        .y = old_pos[1] - ball_h / 2,
-        .w = ball_w,
-        .h = ball_h,
-    };
+    const ball_bounds = ball.bounds() orelse return null;
 
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
@@ -813,12 +804,7 @@ fn collideBricks(scene: *GameScene, old_pos: [2]f32, new_pos: [2]f32) ?struct {
     for (scene.entities) |*e| {
         if (e.type != .brick) continue;
 
-        const brick_bounds = Rect{
-            .x = e.pos[0] - brick_w / 2,
-            .y = e.pos[1] - brick_h / 2,
-            .w = brick_w,
-            .h = brick_h,
-        };
+        const brick_bounds = e.bounds() orelse continue;
         const coll = @import("../collision2.zig");
         const result = coll.collide(brick_bounds, .{ 0, 0 }, ball_bounds, delta) orelse continue;
         collided = true;
