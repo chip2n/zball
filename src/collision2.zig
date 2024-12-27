@@ -1,3 +1,4 @@
+const std = @import("std");
 const m = @import("math");
 const Rect = m.Rect;
 
@@ -23,6 +24,12 @@ pub fn collide(a: Rect, da: [2]f32, b: Rect, db: [2]f32) ?CollisionInfo {
     };
     const origin = .{ b.x + b.w / 2, b.y + b.h / 2 };
     const delta: [2]f32 = .{ db[0] - da[0], db[1] - da[1] };
+    if (m.magnitude(delta) == 0) {
+        // None of the boxes are moving, or they are moving at the same
+        // speed. For our purposes, we can ignore this case and consider them
+        // not colliding.
+        return null;
+    }
     var dir = delta;
     m.normalize(&dir);
 
@@ -43,6 +50,8 @@ const BoxRayIntersectResult = struct {
 };
 
 fn boxRayIntersect(origin: [2]f32, dir: [2]f32, box: Rect) ?BoxRayIntersectResult {
+    std.debug.assert(m.magnitude(dir) != 0);
+
     const dirfrac = .{ 1 / dir[0], 1 / dir[1] };
     const lb = .{ box.x, box.y };
     const rt = .{ box.x + box.w, box.y + box.h };
