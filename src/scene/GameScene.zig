@@ -399,9 +399,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 _ = scene.collidePaddle(e, old_pos, e.pos, old_paddle_pos);
 
                 // If entity outside level bounds, always kill
-                // TODO also consider x
-                const vw: f32 = @floatFromInt(constants.viewport_size[1]);
-                if (e.pos[1] > vw or e.pos[1] < 0) {
+                const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+                const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+                if (e.pos[0] < 0 or e.pos[0] > vw or e.pos[1] > vh or e.pos[1] < 0) {
                     switch (e.type) {
                         .ball => {
                             audio.play(.{ .clip = .explode, .vol = 0.5 });
