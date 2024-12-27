@@ -267,7 +267,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             for (scene.entities) |*e| {
                 if (e.type == .none) continue;
                 if (!e.magnetized) continue;
-                e.pos[0] += dx;
+                e.pos[0] += scene.paddle_pos[0] - old_paddle_pos[0];
             }
         }
 
@@ -383,7 +383,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                             if (scene.flame_timer <= 0) {
                                 e.pos = coll.out;
                                 e.dir = m.reflect(e.dir, coll.normal);
-                                // Always play bouncing cound when we "reflect" the ball
+                                // Always play bouncing sound when we "reflect" the ball
                                 audio.play(.{ .clip = .bounce });
                             }
                         },
