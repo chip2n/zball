@@ -1,6 +1,14 @@
 @header const m = @import("math")
 @ctype mat4 m.Mat4
 
+@block utils
+/* Gradient noise from Jorge Jimenez's presentation: */
+/* http://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare */
+float gradientNoise(vec2 uv) {
+	return fract(52.9829189 * fract(dot(uv, vec2(0.06711056, 0.00583715))));
+}
+@end
+
 //* main shader
 
 @vs vs
@@ -27,6 +35,8 @@ void main() {
 @end
 
 @fs fs
+@include_block utils
+
 layout(binding=0) uniform texture2D tex;
 layout(binding=1) uniform sampler smp;
 layout(binding=2) uniform fs_params {
@@ -43,13 +53,6 @@ out vec4 frag_color;
 float constant = 2.0;  // Constant factor
 float linear = 0.04;   // Linear attenuation
 float quadratic = 0.032;  // Quadratic attenuation
-
-/* Gradient noise from Jorge Jimenez's presentation: */
-/* http://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare */
-float gradient_noise(in vec2 uv)
-{
-	return fract(52.9829189 * fract(dot(uv, vec2(0.06711056, 0.00583715))));
-}
 
 void main() {
     vec4 c = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guessa
@@ -75,7 +78,7 @@ void main() {
     }
 
     // This prevents banding for the light effects
-    c += (1.0 / 255.0) * gradient_noise(gl_FragCoord.xy) - (0.5 / 255.0);
+    c += (1.0 / 255.0) * gradientNoise(gl_FragCoord.xy) - (0.5 / 255.0);
 
     frag_color = c;
 }
@@ -161,6 +164,7 @@ void main() {
 @end
 
 @fs fs_scene
+@include_block utils
 
 layout(binding=0) uniform texture2D tex;
 layout(binding=1) uniform sampler smp;
@@ -295,6 +299,9 @@ void main() {
 
     color *= 1 + scanline_amount * 0.6;
     if(vignette_amount > 0.0) color *= vignette(uv);
+
+    // Prevent banding in gradients
+    color += (1.0 / 255.0) * gradientNoise(gl_FragCoord.xy) - (0.5 / 255.0);
 
     frag_color = vec4(color, 1);
 }
