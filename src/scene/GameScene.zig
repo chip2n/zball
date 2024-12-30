@@ -24,8 +24,8 @@ const TextRenderer = gfx.ttf.TextRenderer;
 
 const m = @import("math");
 const Rect = m.Rect;
-const box_intersection = @import("../collision.zig").box_intersection;
-const line_intersection = @import("../collision.zig").line_intersection;
+const collide = @import("../collision.zig").collide;
+const lineIntersection = @import("../collision.zig").lineIntersection;
 const pi = std.math.pi;
 
 // TODO move to constants?
@@ -34,8 +34,8 @@ const ball_base_speed: f32 = 200;
 const ball_speed_min: f32 = 100;
 const ball_speed_max: f32 = 300;
 const initial_paddle_pos: [2]f32 = .{
-    constants.viewport_size[0] / 2,
-    constants.viewport_size[1] - 4,
+    @as(f32, @floatFromInt(constants.viewport_size[0])) / 2,
+    @as(f32, @floatFromInt(constants.viewport_size[1])) - 8.5,
 };
 const max_balls = 32;
 const max_entities = 1024;
@@ -371,7 +371,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             // Resolve collisions
             blk: {
                 if (!e.colliding) break :blk;
-                // TODO
                 if (scene.collideBricks(e, old_pos, e.pos)) |coll| {
                     switch (e.type) {
                         .ball => {
@@ -674,37 +673,27 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_normal: *[2]f32) bool {
     const sp = sprite.get(entity.sprite orelse return false);
     const ew: f32 = @floatFromInt(sp.bounds.w);
-    const eh: f32 = @floatFromInt(sp.bounds.h);
-    _ = eh; // autofix
 
     const vw: f32 = @floatFromInt(constants.viewport_size[0]);
     const vh: f32 = @floatFromInt(constants.viewport_size[1]);
 
     // Ceiling
-    if (line_intersection(p1, p2, .{ 0, brick_start_y }, .{ vw, brick_start_y }, out_pos)) {
+    if (lineIntersection(p1, p2, .{ 0, brick_start_y }, .{ vw, brick_start_y }, out_pos)) {
         out_normal.* = .{ 0, 1 };
         return true;
     }
 
     // Right wall
-    if (line_intersection(p1, p2, .{ vw - ew / 2, 0 }, .{ vw - ew / 2, vh }, out_pos)) {
+    if (lineIntersection(p1, p2, .{ vw - ew / 2, 0 }, .{ vw - ew / 2, vh }, out_pos)) {
         out_normal.* = .{ -1, 0 };
         return true;
     }
 
     // Left wall
-    if (line_intersection(p1, p2, .{ ew / 2, 0 }, .{ ew / 2, vh }, out_pos)) {
+    if (lineIntersection(p1, p2, .{ ew / 2, 0 }, .{ ew / 2, vh }, out_pos)) {
         out_normal.* = .{ 1, 0 };
         return true;
     }
-
-    // Floor
-    // TODO out kinda wronk
-    // if (p2[1] > vh - eh / 2) {
-    //     out_pos.* = p2;
-    //     out_normal.* = .{ 0, -1 };
-    //     return true;
-    // }
 
     return false;
 }
@@ -726,38 +715,31 @@ fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, 
 // towards it, but it doesn't trigger further direction
 // changes.
 fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_paddle_pos: [2]f32) bool {
-    _ = p2; // autofix
-
-    // NOTE: We only check for collision if the ball is heading
-    // downward, because there are situations the ball could be
-    // temporarily inside the paddle (and I don't know a better way
-    // to solve that which look good or feel good gameplay-wise)
-    if (e.dir[1] < 0) return false;
-
-    const sp = sprite.get(e.sprite orelse return false);
-    const ew: f32 = @floatFromInt(sp.bounds.w);
-    const eh: f32 = @floatFromInt(sp.bounds.h);
     const paddle_bounds = scene.paddleBounds();
-    const paddle_w = paddle_bounds.w;
-    const paddle_h = paddle_bounds.h;
-    const ball_bounds = Rect{
-        .x = p1[0] - ew / 2,
-        .y = p1[1] - eh / 2,
-        .w = ew,
-        .h = eh,
+    const entity_bounds = e.bounds() orelse return false;
+
+    var old_entity_bounds = entity_bounds;
+    old_entity_bounds.x = p1[0] - entity_bounds.w / 2;
+    old_entity_bounds.y = p1[1] - entity_bounds.h / 2;
+    var old_paddle_bounds = paddle_bounds;
+    old_paddle_bounds.x = old_paddle_pos[0] - paddle_bounds.w / 2;
+    old_paddle_bounds.y = old_paddle_pos[1] - paddle_bounds.h / 2;
+
+    const entity_delta = m.vsub(p2, p1);
+    const paddle_delta = m.vsub(scene.paddle_pos, old_paddle_pos);
+
+    std.debug.assert(entity_bounds.x == old_entity_bounds.x + entity_delta[0]);
+    std.debug.assert(entity_bounds.y == old_entity_bounds.y + entity_delta[1]);
+    std.debug.assert(paddle_bounds.x == old_paddle_bounds.x + paddle_delta[0]);
+    std.debug.assert(paddle_bounds.y == old_paddle_bounds.y + paddle_delta[1]);
+
+    const result = collide(old_paddle_bounds, paddle_delta, old_entity_bounds, entity_delta) orelse {
+        std.debug.assert(old_paddle_bounds.overlaps(old_entity_bounds) or !paddle_bounds.overlaps(entity_bounds));
+        return false;
     };
-
-    // Top surface
-
-    // TODO if the ball moves fast, it might go through the
-    // grace zone. So we should probably consider the old
-    // position as well somehow
-    const hit_y = scene.paddle_pos[1] - paddle_h - eh / 2;
-    const grace_x = 2;
-    const grace_y = 2;
-    if (e.pos[1] > hit_y and e.pos[1] < hit_y + grace_y and e.pos[0] >= paddle_bounds.x - ew / 2 - grace_x and e.pos[0] <= paddle_bounds.x + paddle_bounds.w + ew / 2 + grace_x) {
-        e.pos[1] = hit_y;
-        e.dir = paddleReflect(scene.paddle_pos[0], paddle_w, e.pos, e.dir);
+    if (result.normal[1] == 1) {
+        e.pos = .{ result.pos[0] + entity_bounds.w / 2, result.pos[1] + entity_bounds.h / 2 };
+        e.dir = paddleReflect(scene.paddle_pos[0], paddle_bounds.w, e.pos, e.dir);
         // TODO ugly here
         if (scene.paddle_magnet) {
             // Paddle is magnetized - make ball stick!
@@ -770,15 +752,21 @@ fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_padd
         return true;
     }
 
-    if (e.pos[1] > paddle_bounds.y + 2 and paddle_bounds.overlaps(ball_bounds)) {
-        const paddle_dir = e.pos[0] - old_paddle_pos[0];
-        if (paddle_dir < 0) {
-            e.pos[0] = paddle_bounds.x - ew / 2;
-            e.dir = .{ -1, 1 };
-        } else {
-            e.pos[0] = paddle_bounds.x + paddle_bounds.w + ew / 2;
-            e.dir = .{ 1, 1 };
+    if (result.normal[0] == -1) {
+        e.pos[0] = paddle_bounds.x - entity_bounds.w / 2;
+        e.dir = .{ -1, 1 };
+        m.normalize(&e.dir);
+        if (e.controlled) {
+            // TODO ugly here
+            audio.play(.{ .clip = .bounce });
+            e.controlled = false;
         }
+        return true;
+    }
+
+    if (result.normal[0] == 1) {
+        e.pos[0] = paddle_bounds.x + paddle_bounds.w + entity_bounds.w / 2;
+        e.dir = .{ 1, 1 };
         m.normalize(&e.dir);
         if (e.controlled) {
             // TODO ugly here
@@ -797,6 +785,10 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
     const delta = m.vsub(new_pos, old_pos);
     const ball_bounds = ball.bounds() orelse return null;
 
+    var old_ball_bounds = ball_bounds;
+    old_ball_bounds.x = old_pos[0];
+    old_ball_bounds.y = old_pos[1];
+
     var out: [2]f32 = undefined;
     var normal: [2]f32 = undefined;
     var collided = false;
@@ -805,8 +797,7 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
         if (e.type != .brick) continue;
 
         const brick_bounds = e.bounds() orelse continue;
-        const coll = @import("../collision2.zig");
-        const result = coll.collide(brick_bounds, .{ 0, 0 }, ball_bounds, delta) orelse continue;
+        const result = collide(brick_bounds, .{ 0, 0 }, old_ball_bounds, delta) orelse continue;
         collided = true;
 
         // TODO brick_w/brick_h nonsense
@@ -814,7 +805,6 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
         // always use the normal of the closest brick for ball reflection
         const brick_dist = m.magnitude(m.vsub(e.pos, result.pos));
         if (brick_dist < coll_dist) {
-            std.log.warn("=== {d:2}x{d:2}", .{ result.normal[0], result.normal[1] });
             out = result.pos;
             normal = result.normal;
             coll_dist = brick_dist;
@@ -823,10 +813,7 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
         const destroyed = scene.destroyBrick(e);
         if (destroyed) spawnDrop(scene, e.pos);
     }
-    if (collided) {
-        std.log.warn("====", .{});
-        return .{ .out = out, .normal = normal };
-    }
+    if (collided) return .{ .out = out, .normal = normal };
     return null;
 }
 
@@ -925,7 +912,7 @@ fn paddleBounds(scene: GameScene) Rect {
     const h: f32 = 7;
     return m.Rect{
         .x = scene.paddle_pos[0] - w / 2,
-        .y = scene.paddle_pos[1] - h,
+        .y = scene.paddle_pos[1] - h / 2,
         .w = w,
         .h = h,
     };
@@ -954,7 +941,7 @@ fn ballOnPaddlePos(scene: GameScene) [2]f32 {
     const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
     return .{
         scene.paddle_pos[0],
-        scene.paddle_pos[1] - paddle_bounds.h - ball_h / 2,
+        scene.paddle_pos[1] - paddle_bounds.h / 2 - ball_h / 2,
     };
 }
 

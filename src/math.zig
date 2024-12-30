@@ -45,6 +45,13 @@ fn GenRect(comptime T: type) type {
             if (py < self.y or py > self.y + self.h) return false;
             return true;
         }
+
+        pub fn grow(self: *Self, delta: [2]f32) void {
+            self.x -= delta[0] / 2;
+            self.y -= delta[1] / 2;
+            self.w += delta[0];
+            self.h += delta[1];
+        }
     };
 }
 
