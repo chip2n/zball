@@ -15,7 +15,7 @@ pub const Rect = GenRect(f32);
 pub const IRect = GenRect(u32);
 
 fn GenRect(comptime T: type) type {
-    return packed struct {
+    return struct {
         const Self = @This();
 
         x: T,
