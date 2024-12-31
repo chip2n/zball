@@ -706,12 +706,13 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 }
 
-// fn handleCollision(e1: Entity, e2: Entity) CollisionInfo {
-// }
-
 fn collectEntity(scene: *GameScene, e: *Entity) void {
     std.debug.assert(e.collectible);
-    audio.play(.{ .clip = .powerup });
+
+    switch (e.type) {
+        .coin => audio.play(.{ .clip = .coin }),
+        else => audio.play(.{ .clip = .powerup }),
+    }
     scene.score += e.collect_score;
     e.type = .none;
     e.frame = 0;
