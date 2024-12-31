@@ -25,6 +25,7 @@ const TextRenderer = gfx.ttf.TextRenderer;
 const m = @import("math");
 const Rect = m.Rect;
 const collide = @import("../collision.zig").collide;
+const CollisionInfo = @import("../collision.zig").CollisionInfo;
 const lineIntersection = @import("../collision.zig").lineIntersection;
 const pi = std.math.pi;
 
@@ -41,7 +42,6 @@ const max_balls = 32;
 const max_entities = 1024;
 const coin_freq = 0.4;
 const powerup_freq = 0.1;
-const drop_fall_speed = 100;
 
 /// Prevents two drops being spawned back-to-back in a quick succession
 const drop_spawn_cooldown = 0.5;
@@ -54,6 +54,7 @@ const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 const brick_start_y = constants.brick_start_y;
 const death_delay = 2.5;
+const gravity = 200;
 
 comptime {
     std.debug.assert(coin_freq + powerup_freq <= 1);
@@ -74,14 +75,14 @@ pub const Entity = struct {
     pos: [2]f32 = .{ 0, 0 },
     dir: [2]f32 = .{ 0, 0 },
     speed: f32 = 0,
-    colliding: bool = false,
+    collision_layers: CollisionLayers = .{},
     sprite: ?sprite.Sprite = null,
     magnetized: bool = false,
     flame: FlameEmitter = .{},
     explosion: ExplosionEmitter = .{},
     controlled: bool = true,
     frame: u8 = 0,
-    falling: bool = false,
+    gravity: bool = false,
     collectible: bool = false,
     collect_score: u16 = 0,
     collect_effect: ?PowerupType = null,
@@ -98,6 +99,12 @@ pub const Entity = struct {
             .h = h,
         };
     }
+};
+
+const CollisionLayers = packed struct {
+    level: bool = false,
+    bricks: bool = false,
+    paddle: bool = false,
 };
 
 const GameMenu = enum { none, pause, settings };
@@ -177,7 +184,7 @@ death_timer: f32 = 0,
 drop_spawn_timer: f32 = 0,
 
 flame_timer: f32 = 0,
-laser_timer: f32 = 0,
+laser_timer: f32 = 999,
 laser_cooldown_timer: f32 = 0,
 
 pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
@@ -288,7 +295,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     .dir = .{ 0, -1 },
                     .speed = laser_speed,
                     .sprite = .particle_laser,
-                    .colliding = true,
+                    .collision_layers = .{
+                        .bricks = true,
+                    },
                 }) catch break :shoot;
                 _ = scene.spawnEntity(.{
                     .type = .laser,
@@ -296,7 +305,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                     .dir = .{ 0, -1 },
                     .speed = laser_speed,
                     .sprite = .particle_laser,
-                    .colliding = true,
+                    .collision_layers = .{
+                        .bricks = true,
+                    },
                 }) catch break :shoot;
                 scene.laser_cooldown_timer = laser_cooldown;
                 audio.play(.{ .clip = .laser });
@@ -322,6 +333,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         for (scene.entities) |*e| {
             if (e.type == .none) continue;
 
+            const old_pos = e.pos;
+
             // Sync global ball flags with entity flags
             blk: {
                 if (e.type != .ball) break :blk;
@@ -329,38 +342,22 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 e.sprite = scene.ballSprite();
             }
 
-            // Handle falling entities
+            // Handle entities affected by gravity
             blk: {
                 if (e.type == .none) break :blk;
-                if (!e.falling) break :blk;
-                e.pos[1] += game_dt * drop_fall_speed;
+                if (!e.gravity) break :blk;
+                var vel = m.vmul(e.dir, e.speed);
+                vel[1] += game_dt * gravity;
+                e.dir = vel;
+                m.normalize(&e.dir);
+                e.speed = m.magnitude(vel);
                 if (e.pos[1] > constants.viewport_size[1]) {
                     e.type = .none;
                     e.frame = 0;
                 }
             }
 
-            // Handle collectible entities
-            blk: {
-                // TODO also related to collisions
-                if (!e.collectible) break :blk;
-                const paddle_bounds = scene.paddleBounds();
-                const bounds = e.bounds() orelse break :blk;
-
-                if (paddle_bounds.overlaps(bounds)) {
-                    audio.play(.{ .clip = .powerup });
-                    scene.score += e.collect_score;
-                    e.type = .none;
-                    e.frame = 0;
-
-                    if (e.collect_effect) |effect| {
-                        scene.acquirePowerup(effect);
-                    }
-                }
-            }
-
             // Handle moving entities
-            const old_pos = e.pos;
             blk: {
                 if (e.dir[0] == 0 and e.dir[1] == 0) break :blk;
                 if (e.magnetized) break :blk;
@@ -369,13 +366,12 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             }
 
             // Resolve collisions
-            blk: {
-                if (!e.colliding) break :blk;
+            if (e.collision_layers.bricks) {
                 if (scene.collideBricks(e, old_pos, e.pos)) |coll| {
                     switch (e.type) {
                         .ball => {
                             if (scene.flame_timer <= 0) {
-                                e.pos = coll.out;
+                                e.pos = coll.pos;
                                 e.dir = m.reflect(e.dir, coll.normal);
                                 // Always play bouncing sound when we "reflect" the ball
                                 audio.play(.{ .clip = .bounce });
@@ -387,45 +383,85 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                         else => {},
                     }
                 }
-                var out: [2]f32 = undefined;
-                var normal: [2]f32 = undefined;
+            }
+
+            var out: [2]f32 = undefined;
+            var normal: [2]f32 = undefined;
+            if (e.collision_layers.level) {
                 if (collideLevelBounds(e.*, old_pos, e.pos, &out, &normal)) {
+                    e.pos = out;
+                    e.dir = m.reflect(e.dir, normal);
                     switch (e.type) {
                         .ball => {
                             audio.play(.{ .clip = .bounce });
-                            e.pos = out;
-                            e.dir = m.reflect(e.dir, normal);
                         },
                         else => {},
                     }
                 }
+            }
 
-                _ = scene.collidePaddle(e, old_pos, e.pos, old_paddle_pos);
-
-                // If entity outside level bounds, always kill
-                const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-                const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-                if (e.pos[0] < 0 or e.pos[0] > vw or e.pos[1] > vh or e.pos[1] < 0) {
-                    switch (e.type) {
-                        .ball => {
-                            audio.play(.{ .clip = .explode, .vol = 0.5 });
-                            _ = scene.spawnExplosion(e.pos, .ball_normal) catch {};
-                            e.type = .none;
-                            e.flame.emitting = false;
-
-                            // If the ball was the final ball, start a death timer
-                            for (scene.entities) |entity| {
-                                if (entity.type != .ball) continue;
-                                if (entity.type != .none) break;
+            if (e.collision_layers.paddle) {
+                if (scene.collidePaddle(e, old_pos, e.pos, old_paddle_pos)) |coll| pcoll: {
+                    if (e.collectible) {
+                        scene.collectEntity(e);
+                    } else {
+                        const paddle_bounds = scene.paddleBounds();
+                        const entity_bounds = e.bounds() orelse break :pcoll;
+                        if (coll.normal[1] == 1) {
+                            e.pos = .{ coll.pos[0] + entity_bounds.w / 2, coll.pos[1] + entity_bounds.h / 2 };
+                            e.dir = paddleReflect(scene.paddle_pos[0], paddle_bounds.w, e.pos, e.dir);
+                            if (scene.paddle_magnet) {
+                                // Paddle is magnetized - make ball stick!
+                                // TODO sound?
+                                e.magnetized = true;
                             } else {
-                                scene.killPlayer();
+                                // Bounce the ball
+                                audio.play(.{ .clip = .bounce });
                             }
-                        },
-                        .laser => {
-                            e.type = .none;
-                        },
-                        else => {},
+                        } else if (coll.normal[0] == -1) {
+                            e.pos[0] = paddle_bounds.x - entity_bounds.w / 2;
+                            e.dir = .{ -1, 1 };
+                            m.normalize(&e.dir);
+                            if (e.controlled) {
+                                audio.play(.{ .clip = .bounce });
+                                e.controlled = false;
+                            }
+                        } else if (coll.normal[0] == 1) {
+                            e.pos[0] = paddle_bounds.x + paddle_bounds.w + entity_bounds.w / 2;
+                            e.dir = .{ 1, 1 };
+                            m.normalize(&e.dir);
+                            if (e.controlled) {
+                                audio.play(.{ .clip = .bounce });
+                                e.controlled = false;
+                            }
+                        }
                     }
+                }
+            }
+
+            // If entity outside level bounds, always kill
+            const vw: f32 = @floatFromInt(constants.viewport_size[0]);
+            const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+            if (e.pos[0] < 0 or e.pos[0] > vw or e.pos[1] > vh or e.pos[1] < 0) {
+                switch (e.type) {
+                    .ball => {
+                        audio.play(.{ .clip = .explode, .vol = 0.5 });
+                        _ = scene.spawnExplosion(e.pos, .ball_normal) catch {};
+                        e.type = .none;
+                        e.flame.emitting = false;
+
+                        // If the ball was the final ball, start a death timer
+                        for (scene.entities) |entity| {
+                            if (entity.type != .ball) continue;
+                            if (entity.type != .none) break;
+                        } else {
+                            scene.killPlayer();
+                        }
+                    },
+                    .laser => {
+                        e.type = .none;
+                    },
+                    else => {},
                 }
             }
 
@@ -670,6 +706,21 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 }
 
+// fn handleCollision(e1: Entity, e2: Entity) CollisionInfo {
+// }
+
+fn collectEntity(scene: *GameScene, e: *Entity) void {
+    std.debug.assert(e.collectible);
+    audio.play(.{ .clip = .powerup });
+    scene.score += e.collect_score;
+    e.type = .none;
+    e.frame = 0;
+
+    if (e.collect_effect) |effect| {
+        scene.acquirePowerup(effect);
+    }
+}
+
 fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_normal: *[2]f32) bool {
     const sp = sprite.get(entity.sprite orelse return false);
     const ew: f32 = @floatFromInt(sp.bounds.w);
@@ -700,23 +751,19 @@ fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, 
 
 // Paddle bounces are handled as follows:
 //
-// If the ball hits the top surface of the paddle, we
-// bounce the ball in a direction determined by how far
-// the ball is from the center paddle. Hitting it in the
-// center launches it in a vertical direction, while
-// each side gives the ball trajectory a more horizontal
-// direction.
+// If the ball hits the top surface of the paddle, we bounce the ball in a
+// direction determined by how far the ball is from the center paddle. Hitting
+// it in the center launches it in a vertical direction, while each side gives
+// the ball trajectory a more horizontal direction.
 //
-// If the ball hits the side of the paddle, we reflect
-// the ball downwards at a 45 degree angle away from the
-// paddle and prevent further collisions to ensure
-// there's no weirdness at the level edges. At this
-// point, the ball can be "shoved" by moving the paddle
-// towards it, but it doesn't trigger further direction
-// changes.
-fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_paddle_pos: [2]f32) bool {
+// If the ball hits the side of the paddle, we reflect the ball downwards at a
+// 45 degree angle away from the paddle and prevent further collisions to ensure
+// there's no weirdness at the level edges. At this point, the ball can be
+// "shoved" by moving the paddle towards it, but it doesn't trigger further
+// direction changes.
+fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_paddle_pos: [2]f32) ?CollisionInfo {
     const paddle_bounds = scene.paddleBounds();
-    const entity_bounds = e.bounds() orelse return false;
+    const entity_bounds = e.bounds() orelse return null;
 
     var old_entity_bounds = entity_bounds;
     old_entity_bounds.x = p1[0] - entity_bounds.w / 2;
@@ -735,53 +782,12 @@ fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_padd
 
     const result = collide(old_paddle_bounds, paddle_delta, old_entity_bounds, entity_delta) orelse {
         std.debug.assert(old_paddle_bounds.overlaps(old_entity_bounds) or !paddle_bounds.overlaps(entity_bounds));
-        return false;
+        return null;
     };
-    if (result.normal[1] == 1) {
-        e.pos = .{ result.pos[0] + entity_bounds.w / 2, result.pos[1] + entity_bounds.h / 2 };
-        e.dir = paddleReflect(scene.paddle_pos[0], paddle_bounds.w, e.pos, e.dir);
-        // TODO ugly here
-        if (scene.paddle_magnet) {
-            // Paddle is magnetized - make ball stick!
-            // TODO sound?
-            e.magnetized = true;
-        } else {
-            // Bounce the ball
-            audio.play(.{ .clip = .bounce });
-        }
-        return true;
-    }
-
-    if (result.normal[0] == -1) {
-        e.pos[0] = paddle_bounds.x - entity_bounds.w / 2;
-        e.dir = .{ -1, 1 };
-        m.normalize(&e.dir);
-        if (e.controlled) {
-            // TODO ugly here
-            audio.play(.{ .clip = .bounce });
-            e.controlled = false;
-        }
-        return true;
-    }
-
-    if (result.normal[0] == 1) {
-        e.pos[0] = paddle_bounds.x + paddle_bounds.w + entity_bounds.w / 2;
-        e.dir = .{ 1, 1 };
-        m.normalize(&e.dir);
-        if (e.controlled) {
-            // TODO ugly here
-            audio.play(.{ .clip = .bounce });
-            e.controlled = false;
-        }
-        return true;
-    }
-    return false;
+    return result;
 }
 
-fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_pos: [2]f32) ?struct {
-    out: [2]f32,
-    normal: [2]f32,
-} {
+fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_pos: [2]f32) ?CollisionInfo {
     const delta = m.vsub(new_pos, old_pos);
     const ball_bounds = ball.bounds() orelse return null;
 
@@ -811,9 +817,9 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
         }
 
         const destroyed = scene.destroyBrick(e);
-        if (destroyed) spawnDrop(scene, e.pos);
+        if (destroyed) spawnDrop(scene, e.pos, ball.dir);
     }
-    if (collided) return .{ .out = out, .normal = normal };
+    if (collided) return .{ .pos = out, .normal = normal };
     return null;
 }
 
@@ -1079,41 +1085,56 @@ fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
     expl.explosion.emitting = true;
 }
 
-fn spawnDrop(scene: *GameScene, pos: [2]f32) void {
+fn spawnDrop(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
     if (scene.drop_spawn_timer > 0) return;
 
     const rng = game.prng.random();
     const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
     switch (idx) {
         0 => return,
-        1 => scene.spawnPowerup(pos),
-        2 => scene.spawnCoin(pos),
+        1 => scene.spawnPowerup(pos, dir),
+        2 => scene.spawnCoin(pos, dir),
         else => unreachable,
     }
 }
 
-fn spawnPowerup(scene: *GameScene, pos: [2]f32) void {
+fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
     const rng = game.prng.random();
     const effect = rng.enumValue(PowerupType);
+    const speed = 50 + rng.float(f32) * 100; // TODO depend on ball speed?
     _ = scene.spawnEntity(.{
         .type = .powerup,
         .pos = pos,
+        .dir = dir,
+        .speed = speed,
         .sprite = powerupSprite(effect),
-        .falling = true,
+        .gravity = true,
         .collectible = true,
         .collect_score = 200,
         .collect_effect = effect,
+        .collision_layers = .{
+            .level = true,
+            .paddle = true,
+        },
     }) catch return;
 }
 
-fn spawnCoin(scene: *GameScene, pos: [2]f32) void {
+fn spawnCoin(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
+    const rng = game.prng.random();
+    const speed = 50 + rng.float(f32) * 100; // TODO depend on ball speed?
     _ = scene.spawnEntity(.{
         .type = .coin,
         .pos = pos,
+        .dir = dir,
+        .speed = speed,
         .sprite = .coin1,
-        .falling = true,
+        .gravity = true,
         .collectible = true,
         .collect_score = 100,
+        .collision_layers = .{
+            .level = true,
+            .paddle = true,
+        },
     }) catch return;
 }
 
@@ -1122,7 +1143,11 @@ fn spawnBall(scene: *GameScene, pos: [2]f32, dir: [2]f32) !*Entity {
         .type = .ball,
         .pos = pos,
         .dir = dir,
-        .colliding = true,
+        .collision_layers = .{
+            .level = true,
+            .bricks = true,
+            .paddle = true,
+        },
         .speed = scene.ball_speed,
         .sprite = .ball_normal,
     });
