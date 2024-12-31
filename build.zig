@@ -49,6 +49,14 @@ pub fn build(b: *Build) !void {
         "--format=sokol_zig",
     });
 
+    // NOTE: On MacOS, shdc executable does not have executable permissions,
+    // probably due to this issue: https://github.com/ziglang/zig/issues/21044
+    if (b.graph.host.result.os.tag == .macos) {
+        var shdc_perm_workaround = b.addSystemCommand(&.{"chmod", "+x"});
+        shdc_perm_workaround.addFileArg(dep_sokol_tools.path(shdc_path));
+        shader_cmd.step.dependOn(&shdc_perm_workaround.step);
+    }
+
     // Font packer
     const tool_fontpack = try buildFontPackTool(b, optimize, dep_stb);
     const tool_fontpack_run = b.addRunArtifact(tool_fontpack);
