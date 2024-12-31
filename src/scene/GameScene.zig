@@ -555,7 +555,6 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 game.scene_mgr.level_idx += 1;
                 game.scene_mgr.switchTo(.game);
             } else {
-                game.scene_mgr.level_idx = 0;
                 game.scene_mgr.switchTo(.title);
             }
             return;
