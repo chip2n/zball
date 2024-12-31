@@ -212,8 +212,14 @@ fn buildNative(
     deps: CoreDependencies,
     install: bool,
 ) !*Build.Step.Compile {
+    const name = switch (target.result.os.tag) {
+        .linux => "game-linux",
+        .macos => "game-macos",
+        .windows => "game-win",
+        else => unreachable,
+    };
     const exe = b.addExecutable(.{
-        .name = "game",
+        .name = name,
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
