@@ -15,12 +15,14 @@ jobs:
           version: 1.0
       - uses: mlugg/setup-zig@v1
       - run: zig build -Doptimize=ReleaseSafe
+      - run: zig build -Dtarget=x86_64-windows -Doptimize=ReleaseSafe
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            zig-out/bin/game
+            zig-out/bin/game-linux
+            zig-out/bin/game-win.exe
 
   build-mac:
     runs-on: macos-latest
@@ -36,7 +38,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            zig-out/bin/game
+            zig-out/bin/game-macos
 
   build-web:
     runs-on: ubuntu-latest
