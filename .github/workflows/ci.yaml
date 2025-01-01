@@ -1,7 +1,7 @@
 name: Build game binaries
 on: push
 jobs:
-  build-linux:
+  build-linux-win-web:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -11,10 +11,11 @@ jobs:
       - name: Install dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: libxi-dev libxcursor-dev libglfw3-dev libasound2-dev
+          packages: build-essential libxi-dev libxcursor-dev libglfw3-dev libasound2-dev
           version: 1.0
       - uses: mlugg/setup-zig@v1
       - run: zig build -Doptimize=ReleaseSafe
+      - run: zig build -Dtarget=wasm32-emscripten -Doptimize=ReleaseSafe
       - run: zig build -Dtarget=x86_64-windows -Doptimize=ReleaseSafe
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -23,7 +24,11 @@ jobs:
           files: |
             zig-out/bin/game-linux
             zig-out/bin/game-win.exe
+            zig-out/web/game.js
+            zig-out/web/game.wasm
 
+  # NOTE: Theoretically we could cross-compile to mac, but I didn't manage to
+  # get the sysroot set up properly...
   build-mac:
     runs-on: macos-latest
     permissions:
@@ -39,25 +44,3 @@ jobs:
         with:
           files: |
             zig-out/bin/game-macos
-
-  build-web:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1
-      - name: Install dependencies
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: build-essential
-          version: 1.0
-      - run: zig build -Dtarget=wasm32-emscripten -Doptimize=ReleaseSafe
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            zig-out/web/game.js
-            zig-out/web/game.wasm
