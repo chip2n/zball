@@ -254,6 +254,7 @@ pub fn endWindow() void {
                     .w = w,
                     .h = h,
                 },
+                .layer = .ui,
                 .z = win_z,
             });
         },
@@ -289,6 +290,7 @@ pub fn endWindow() void {
                             .w = win_width,
                             .h = @floatFromInt(rail_inactive.bounds.h),
                         },
+                        .layer = .ui,
                         .z = win_z,
                     });
                     // active rail
@@ -300,6 +302,7 @@ pub fn endWindow() void {
                             .w = win_width * s.value,
                             .h = @floatFromInt(rail_active.bounds.h),
                         },
+                        .layer = .ui,
                         .z = win_z,
                     });
                     // thumb
@@ -311,6 +314,7 @@ pub fn endWindow() void {
                             .w = @floatFromInt(thumb.bounds.w),
                             .h = @floatFromInt(thumb.bounds.h),
                         },
+                        .layer = .ui,
                         .z = win_z,
                     });
                 },
@@ -325,6 +329,7 @@ pub fn endWindow() void {
                             .w = @floatFromInt(sp.bounds.w),
                             .h = @floatFromInt(sp.bounds.h),
                         },
+                        .layer = .ui,
                         .z = win_z,
                     });
                 },
@@ -340,6 +345,7 @@ pub fn endWindow() void {
                             .w = s.w,
                             .h = s.h,
                         },
+                        .layer = .ui,
                         .z = win_z,
                     });
                 },

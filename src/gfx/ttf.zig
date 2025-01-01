@@ -21,6 +21,7 @@ pub const TextRenderer = struct {
             batch.render(.{
                 .src = .{ .x = glyph.x, .y = glyph.y, .w = glyph.w, .h = glyph.h },
                 .dst = .{ .x = self.cursor_x + x, .y = y + font.ascent + baseline_offset, .w = gw, .h = gh },
+                .layer = .ui,
                 .z = z,
             });
             self.cursor_x += @floatFromInt(glyph.advance);

@@ -311,6 +311,21 @@ pub fn renderMain(fb: Framebuffer) void {
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
+
+    // Render ui
+    for (result.batches) |b| {
+        if (b.layer != .ui) continue;
+        const tex = texture.get(b.tex) catch |err| {
+            std.log.warn("Could not render texture {}: {}", .{ b.tex, err });
+            continue;
+        };
+        bind.images[shd.IMG_tex] = tex.img;
+        sg.applyPipeline(state.offscreen.pip);
+        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
+        sg.applyBindings(bind);
+        sg.draw(@intCast(b.offset), @intCast(b.len), 1);
+    }
 }
 
 pub fn screenToWorld(pos: [2]f32) [2]f32 {
