@@ -92,31 +92,3 @@ test "boxRayIntersect (corner hit)" {
     try std.testing.expect(result != null);
     try std.testing.expectEqualSlices(f32, &result.?.normal, &.{ -1, 0 });
 }
-
-pub fn lineIntersection(
-    p0: [2]f32,
-    p1: [2]f32,
-    p2: [2]f32,
-    p3: [2]f32,
-    out: ?*[2]f32,
-) bool {
-    const s1_x = p1[0] - p0[0];
-    const s1_y = p1[1] - p0[1];
-    const s2_x = p3[0] - p2[0];
-    const s2_y = p3[1] - p2[1];
-
-    const s = (-s1_y * (p0[0] - p2[0]) + s1_x * (p0[1] - p2[1])) / (-s2_x * s1_y + s1_x * s2_y);
-    const t = (s2_x * (p0[1] - p2[1]) - s2_y * (p0[0] - p2[0])) / (-s2_x * s1_y + s1_x * s2_y);
-
-    // NOTE: strictly less/greater than to avoid collision when p0 is on the
-    // p2->p3 line (we move the ball to that position during a bounce)
-    if (s > 0 and s < 1 and t > 0 and t < 1) {
-        if (out) |o| {
-            o.*[0] = p0[0] + (t * s1_x);
-            o.*[1] = p0[1] + (t * s1_y);
-        }
-        return true;
-    }
-
-    return false;
-}

@@ -294,6 +294,6 @@ pub const sprites: std.enums.EnumFieldStruct(Sprite, SpriteData, null) = .{
     },
     .coin2 = SpriteData{
         .name = "coin2",
-        .bounds = .{ .x = 205, .y = 123, .w = 4, .h = 8 },
+        .bounds = .{ .x = 203, .y = 123, .w = 8, .h = 8 },
     },
 };

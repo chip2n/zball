@@ -26,7 +26,6 @@ const m = @import("math");
 const Rect = m.Rect;
 const collide = @import("../collision.zig").collide;
 const CollisionInfo = @import("../collision.zig").CollisionInfo;
-const lineIntersection = @import("../collision.zig").lineIntersection;
 const pi = std.math.pi;
 
 // TODO move to constants?
@@ -458,9 +457,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                             scene.killPlayer();
                         }
                     },
-                    .laser => {
-                        e.type = .none;
-                    },
+                    .laser => e.type = .none,
+                    .coin => e.type = .none,
+                    .powerup => e.type = .none,
                     else => {},
                 }
             }
@@ -722,27 +721,32 @@ fn collectEntity(scene: *GameScene, e: *Entity) void {
 }
 
 fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_normal: *[2]f32) bool {
-    const sp = sprite.get(entity.sprite orelse return false);
-    const ew: f32 = @floatFromInt(sp.bounds.w);
+    const bounds = entity.bounds() orelse return false;
 
     const vw: f32 = @floatFromInt(constants.viewport_size[0]);
     const vh: f32 = @floatFromInt(constants.viewport_size[1]);
 
-    // Ceiling
-    if (lineIntersection(p1, p2, .{ 0, brick_start_y }, .{ vw, brick_start_y }, out_pos)) {
-        out_normal.* = .{ 0, 1 };
+    const delta = [2]f32{ p2[0] - p1[0], p2[1] - p1[1] };
+
+    // Top wall
+    const top_wall = Rect{.x = 0, .y = brick_start_y, .w = vw, .h = 2};
+    if (collide(top_wall, .{ 0, 0 }, bounds, delta)) |coll| {
+        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
+        out_normal.* = coll.normal;
         return true;
     }
 
-    // Right wall
-    if (lineIntersection(p1, p2, .{ vw - ew / 2, 0 }, .{ vw - ew / 2, vh }, out_pos)) {
-        out_normal.* = .{ -1, 0 };
+    const right_wall = Rect{ .x = vw - 2, .y = 0, .w = 2, .h = vh };
+    if (collide(right_wall, .{ 0, 0 }, bounds, delta)) |coll| {
+        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
+        out_normal.* = coll.normal;
         return true;
     }
 
-    // Left wall
-    if (lineIntersection(p1, p2, .{ ew / 2, 0 }, .{ ew / 2, vh }, out_pos)) {
-        out_normal.* = .{ 1, 0 };
+    const left_wall = Rect{ .x = 0, .y = 0, .w = 2, .h = vh };
+    if (collide(left_wall, .{ 0, 0 }, bounds, delta)) |coll| {
+        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
+        out_normal.* = coll.normal;
         return true;
     }
 
@@ -774,11 +778,6 @@ fn collidePaddle(scene: *GameScene, e: *Entity, p1: [2]f32, p2: [2]f32, old_padd
 
     const entity_delta = m.vsub(p2, p1);
     const paddle_delta = m.vsub(scene.paddle_pos, old_paddle_pos);
-
-    std.debug.assert(entity_bounds.x == old_entity_bounds.x + entity_delta[0]);
-    std.debug.assert(entity_bounds.y == old_entity_bounds.y + entity_delta[1]);
-    std.debug.assert(paddle_bounds.x == old_paddle_bounds.x + paddle_delta[0]);
-    std.debug.assert(paddle_bounds.y == old_paddle_bounds.y + paddle_delta[1]);
 
     const result = collide(old_paddle_bounds, paddle_delta, old_entity_bounds, entity_delta) orelse {
         std.debug.assert(old_paddle_bounds.overlaps(old_entity_bounds) or !paddle_bounds.overlaps(entity_bounds));
