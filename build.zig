@@ -100,11 +100,9 @@ pub fn build(b: *Build) !void {
 
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        const lib = try buildWeb(b, target, optimize, dep_emsdk, deps);
-        try addAssets(b, lib);
+        _ = try buildWeb(b, target, optimize, dep_emsdk, deps);
     } else {
-        const exe = try buildNative(b, target, optimize, deps, true);
-        try addAssets(b, exe);
+        _ = try buildNative(b, target, optimize, deps, true);
 
         const check_exe = try buildNative(b, target, optimize, deps, false);
         // Used with ZLS for better analysis of comptime shenanigans
@@ -226,6 +224,7 @@ fn buildNative(
     });
 
     addDeps(b, exe, deps);
+    try addAssets(b, exe);
 
     if (install) {
         b.installArtifact(exe);
@@ -258,6 +257,7 @@ fn buildWeb(
     });
 
     addDeps(b, lib, deps);
+    try addAssets(b, lib);
 
     const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
     lib.addSystemIncludePath(emsdk_sysroot);
