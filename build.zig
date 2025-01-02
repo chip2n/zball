@@ -255,6 +255,7 @@ fn buildWeb(
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
     });
+    lib.linkLibC();
 
     addDeps(b, lib, deps);
     try addAssets(b, lib);
