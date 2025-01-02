@@ -864,7 +864,33 @@ fn destroyBrick(scene: *GameScene, brick: *Entity) bool {
     if (destroyed) {
         brick.type = .none;
         audio.play(.{ .clip = .explode });
-        scene.score += 100;
+
+        var points: f32 = 100;
+        var mult: f32 = 1.0;
+
+        // Fast balls give more points
+        if (scene.ball_speed > ball_base_speed) {
+            const current_extra_speed = scene.ball_speed - ball_base_speed;
+            const max_extra_speed = ball_speed_max - ball_base_speed;
+            const bonus = @round(50 * (current_extra_speed / max_extra_speed));
+            points += bonus;
+        }
+
+        // Smaller paddle give more points
+        switch (scene.paddle_size) {
+            .smallest => mult = 1.5,
+            .smaller => mult = 1.25,
+            else => {},
+        }
+
+        // Smaller balls give more points
+        switch (scene.ball_size) {
+            .smallest => mult = 1.5,
+            .smaller => mult = 1.25,
+            else => {},
+        }
+
+        scene.score += @as(u32, @intFromFloat(@round(points * mult)));
         scene.spawnExplosion(brick.pos, sp) catch {};
     }
 
