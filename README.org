@@ -1,31 +1,14 @@
-* sokol-breakout
-
-Current Zig compiler (through Nix and zig-overlay):
-
-#+begin_src bash
-nix shell 'github:mitchellh/zig-overlay#master-2024-12-05'
-#+end_src
-
-** Implementation
-
-Matrices are row-major.
+* zball
+[[https://github.com/chip2n/sokol-breakout/actions/workflows/ci.yaml/badge.svg]]
 
 ** Building for desktop
 
 #+begin_src bash
-zig build
+zig build -Doptimize=ReleaseSafe
 #+end_src
 
 ** Building for web
 
 #+begin_src bash
-zig build -Dtarget=wasm32-emscripten
+zig build -Dtarget=wasm32-emscripten -Doptimize=ReleaseSafe
 #+end_src
-
-
-#+begin_src bash
-zig build -Dshader-reload=true
-#+end_src
-
-Every time you want to reload the shader, rebuild it with ~zig build shd~. The
-project uses ~inotify~ to detect when the resulting ~libshd.so~ is modified.
