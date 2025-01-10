@@ -116,23 +116,29 @@ pub const BrickId = enum(u8) {
     metal = 6,
     hidden = 7,
 
-    pub fn parse(id: u8) !BrickId {
-        return std.meta.intToEnum(BrickId, id);
+    pub fn parse(n: u8) !BrickId {
+        return std.meta.intToEnum(BrickId, n);
+    }
+
+    // Some bricks have variations, so we return a slice of possible sprites
+    pub fn sprites(id: BrickId) []const sprite.Sprite {
+        return switch (id) {
+            .grey => &[_]sprite.Sprite{ .brick1a, .brick1b },
+            .red => &[_]sprite.Sprite{ .brick2a, .brick2b },
+            .green => &[_]sprite.Sprite{ .brick3a, .brick3b },
+            .blue => &[_]sprite.Sprite{ .brick4a, .brick4b },
+            .explode => &[_]sprite.Sprite{ .brick_expl },
+            .metal => &[_]sprite.Sprite{ .brick_metal },
+            .hidden => &[_]sprite.Sprite{ .brick_hidden },
+        };
     }
 };
 
 pub fn brickIdToSprite(id: BrickId) sprite.Sprite {
     // Randomize a variant for this brick
     const rng = prng.random();
-    return switch (id) {
-        .grey => (&[_]sprite.Sprite{ .brick1a, .brick1b })[rng.intRangeAtMost(usize, 0, 1)],
-        .red => (&[_]sprite.Sprite{ .brick2a, .brick2b })[rng.intRangeAtMost(usize, 0, 1)],
-        .green => (&[_]sprite.Sprite{ .brick3a, .brick3b })[rng.intRangeAtMost(usize, 0, 1)],
-        .blue => (&[_]sprite.Sprite{ .brick4a, .brick4b })[rng.intRangeAtMost(usize, 0, 1)],
-        .explode => .brick_expl,
-        .metal => .brick_metal,
-        .hidden => .brick_hidden,
-    };
+    const variations = id.sprites();
+    return variations[rng.intRangeLessThan(usize, 0, variations.len)];
 }
 
 pub fn spriteToBrickId(sp: sprite.Sprite) !BrickId {
