@@ -163,6 +163,15 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         }
     }
 
+    const brick_ids = comptime std.enums.values(game.BrickId);
+    var palette: [brick_ids.len]sprite.Sprite = undefined;
+    var palette_width: usize = 0;
+    inline for (brick_ids, 0..) |id, i| {
+        const sp = id.sprites()[0];
+        palette[i] = sp;
+        palette_width += sprite.get(sp).bounds.w;
+    }
+
     {
         ui.begin(.{});
         defer ui.end();
@@ -176,15 +185,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             });
             defer ui.endWindow();
 
-            const palette = [_]sprite.Sprite{
-                .brick1a,
-                .brick2a,
-                .brick3a,
-                .brick4a,
-                .brick_expl,
-                .brick_metal,
-                .brick_hidden,
-            };
             for (palette) |s| {
                 if (ui.sprite(.{ .sprite = s })) {
                     scene.brush = s;
@@ -196,7 +196,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         { // Keys
             ui.beginWindow(.{
                 .id = "info",
-                .x = 130,
+                .x = @floatFromInt(palette_width + 16),
                 .y = constants.viewport_size[1] - 16,
                 .style = .transparent,
             });
