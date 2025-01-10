@@ -26,7 +26,7 @@ pub fn init(width: u32, height: u32) @This() {
     var bind = sg.Bindings{};
     // TODO max_verts is actually max verts PER frame buffer, but we're making two of those...
     bind.vertex_buffers[0] = sg.makeBuffer(.{
-        .usage = .DYNAMIC,
+        .usage = .STREAM,
         .size = constants.max_verts * @sizeOf(Vertex),
     });
     bind.samplers[shd.SMP_smp] = sg.makeSampler(.{});
