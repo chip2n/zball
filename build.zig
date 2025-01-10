@@ -21,10 +21,7 @@ pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const dep_sokol = b.dependency("sokol", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    const dep_sokol = b.dependency("sokol", .{ .target = target, .optimize = optimize });
     const dep_sokol_tools = b.dependency("sokol_tools", .{ .target = target, .optimize = optimize });
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
     const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
@@ -52,7 +49,7 @@ pub fn build(b: *Build) !void {
     // NOTE: On MacOS, shdc executable does not have executable permissions,
     // probably due to this issue: https://github.com/ziglang/zig/issues/21044
     if (b.graph.host.result.os.tag == .macos) {
-        var shdc_perm_workaround = b.addSystemCommand(&.{"chmod", "+x"});
+        var shdc_perm_workaround = b.addSystemCommand(&.{ "chmod", "+x" });
         shdc_perm_workaround.addFileArg(dep_sokol_tools.path(shdc_path));
         shader_cmd.step.dependOn(&shdc_perm_workaround.step);
     }
@@ -272,7 +269,7 @@ fn buildWeb(
         .use_webgl2 = true,
         .use_emmalloc = true,
         .use_filesystem = false,
-        .extra_args = &.{"-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144"},
+        .extra_args = &.{ "-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144" },
         .shell_file_path = b.path("shell.html"),
     });
 
