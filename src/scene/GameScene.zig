@@ -14,7 +14,7 @@ const level = @import("../level.zig");
 const Level = level.Level;
 
 const game = @import("../game.zig");
-const Brick = game.Brick;
+const BrickId = game.BrickId;
 const ExplosionEmitter = game.ExplosionEmitter;
 const FlameEmitter = game.FlameEmitter;
 
@@ -85,6 +85,10 @@ pub const Entity = struct {
     collectible: bool = false,
     collect_score: u16 = 0,
     collect_effect: ?PowerupType = null,
+
+    rendered: bool = true,
+    brick_id: ?BrickId = null,
+    lives: u8 = 1,
 
     pub fn bounds(e: Entity) ?Rect {
         const sprite_id = e.sprite orelse return null;
@@ -202,19 +206,20 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
     for (lvl.entities) |e| {
         switch (e.type) {
             .brick => {
-                const s: sprite.Sprite = try game.brickIdToSprite(e.sprite);
+                const id = try BrickId.parse(e.sprite);
+                var entity = brickEntity(id);
 
                 const fx: f32 = @floatFromInt(e.x);
                 const fy: f32 = @floatFromInt(e.y);
+
+                const s: sprite.Sprite = entity.sprite orelse return error.BrickSpriteMissing;
                 const sp = sprite.get(s);
                 const w: f32 = @floatFromInt(sp.bounds.w);
                 const h: f32 = @floatFromInt(sp.bounds.h);
+
                 // TODO not a fan of the entity pivot point differences between editor and game
-                _ = try scene.spawnEntity(.{
-                    .type = .brick,
-                    .pos = .{ fx + w / 2, fy + h / 2 + brick_start_y },
-                    .sprite = s,
-                });
+                entity.pos = .{ fx + w / 2, fy + h / 2 + brick_start_y };
+                _ = try scene.spawnEntity(entity);
             },
         }
     }
@@ -538,7 +543,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             if (scene.clear_timer == 0) {
                 for (scene.entities) |e| {
                     if (e.type != .brick) continue;
-                    if (e.type != .none) break :clear;
+                    // NOTE: It's fine to leave hidden bricks (but the drawback
+                    // is the player gets a lower score by leaving them)
+                    if (e.brick_id == .hidden) continue;
+                    if (e.type != .none and e.brick_id != .hidden) break :clear;
                 }
                 scene.clear_timer = clear_delay;
                 break :clear;
@@ -603,6 +611,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     // Render entities
     for (scene.entities) |e| {
         if (e.type == .none) continue;
+        if (!e.rendered) continue;
         if (e.type == .ball) {
             if (e.flame.emitting) {
                 gfx.addLight(e.pos, 0xf2a54c);
@@ -704,6 +713,24 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
     }
 }
 
+/// Create an entity from a brick ID.
+fn brickEntity(id: BrickId) Entity {
+    const s: sprite.Sprite = game.brickIdToSprite(id);
+    var entity = Entity{ .type = .brick, .sprite = s, .brick_id = id };
+    switch (id) {
+        .grey, .red, .green, .blue => {},
+        .explode => {},
+        .metal => {
+            entity.lives = 2;
+        },
+        .hidden => {
+            entity.rendered = false;
+            entity.lives = 2;
+        },
+    }
+    return entity;
+}
+
 fn collectEntity(scene: *GameScene, e: *Entity) void {
     std.debug.assert(e.collectible);
 
@@ -729,7 +756,7 @@ fn collideLevelBounds(entity: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, 
     const delta = [2]f32{ p2[0] - p1[0], p2[1] - p1[1] };
 
     // Top wall
-    const top_wall = Rect{.x = 0, .y = brick_start_y, .w = vw, .h = 2};
+    const top_wall = Rect{ .x = 0, .y = brick_start_y, .w = vw, .h = 2 };
     if (collide(top_wall, .{ 0, 0 }, bounds, delta)) |coll| {
         out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
         out_normal.* = coll.normal;
@@ -824,43 +851,45 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
 
 fn destroyBrick(scene: *GameScene, brick: *Entity) bool {
     std.debug.assert(brick.type == .brick);
-    const sp = brick.sprite.?;
-    // TODO Not great to switch on sprite here - rather, we probably want
-    // separate subtypes or properties
-    var destroyed = false;
-    switch (sp) {
-        .brick_expl => {
-            brick.type = .none;
-            // Surrounding bricks go boom
-            scene.destroyBricksCircle(brick.pos, 16);
-            destroyed = true;
-        },
-        .brick_metal => {
-            const rng = game.prng.random();
-            const weak_sprites = [_]sprite.Sprite{
-                .brick_metal_weak,
-                .brick_metal_weak2,
-                .brick_metal_weak3,
-            };
-            const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
-            // Metal bricks requires two hits to break
-            brick.sprite = next_sprite;
-            if (scene.flame_timer <= 0) {
+    brick.lives -= 1;
+    switch (brick.brick_id.?) {
+        .grey, .red, .green, .blue => {
+            if (brick.lives > 0) {
                 audio.play(.{ .clip = .clink });
             }
         },
-        .brick_metal_weak, .brick_metal_weak2, .brick_metal_weak3 => {
-            destroyed = true;
-            if (scene.flame_timer <= 0) {
-                audio.play(.{ .clip = .clink });
+        .metal => {
+            if (brick.lives > 0) {
+                const rng = game.prng.random();
+                const weak_sprites = [_]sprite.Sprite{
+                    .brick_metal_weak,
+                    .brick_metal_weak2,
+                    .brick_metal_weak3,
+                };
+                const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
+                // Metal bricks requires two hits to break
+                brick.sprite = next_sprite;
+                if (scene.flame_timer <= 0) {
+                    audio.play(.{ .clip = .clink });
+                }
             }
         },
-        else => {
-            destroyed = true;
+        .explode => {
+            if (brick.lives == 0) {
+                brick.type = .none;
+                // Surrounding bricks go boom
+                scene.destroyBricksCircle(brick.pos, 16);
+            }
+        },
+        .hidden => {
+            brick.rendered = true;
+            if (brick.lives > 0) {
+                audio.play(.{ .clip = .reveal });
+            }
         },
     }
 
-    if (destroyed) {
+    if (brick.lives == 0) {
         brick.type = .none;
         audio.play(.{ .clip = .explode });
 
@@ -890,10 +919,12 @@ fn destroyBrick(scene: *GameScene, brick: *Entity) bool {
         }
 
         scene.score += @as(u32, @intFromFloat(@round(points * mult)));
+
+        const sp = brick.sprite.?;
         scene.spawnExplosion(brick.pos, sp) catch {};
     }
 
-    return destroyed;
+    return brick.lives == 0;
 }
 
 fn destroyBricksCircle(scene: *GameScene, origin: [2]f32, radius: f32) void {

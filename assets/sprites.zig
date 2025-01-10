@@ -67,6 +67,7 @@ pub const Sprite = enum {
     text_input,
     coin1,
     coin2,
+    brick_hidden,
 };
 pub const sprites: std.enums.EnumFieldStruct(Sprite, SpriteData, null) = .{
     .dialog = SpriteData{
@@ -295,5 +296,9 @@ pub const sprites: std.enums.EnumFieldStruct(Sprite, SpriteData, null) = .{
     .coin2 = SpriteData{
         .name = "coin2",
         .bounds = .{ .x = 203, .y = 123, .w = 8, .h = 8 },
+    },
+    .brick_hidden = SpriteData{
+        .name = "brick_hidden",
+        .bounds = .{ .x = 234, .y = 159, .w = 17, .h = 10 },
     },
 };

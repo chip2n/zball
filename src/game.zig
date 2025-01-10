@@ -58,6 +58,7 @@ const brick_sprites3 = [_]particle.SpriteDesc{.{ .sprite = .brick3a, .weight = 1
 const brick_sprites4 = [_]particle.SpriteDesc{.{ .sprite = .brick4a, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites_expl = [_]particle.SpriteDesc{.{ .sprite = .brick_expl, .weight = 1, .regions = &brick_explosion_regions }};
 const brick_sprites_metal = [_]particle.SpriteDesc{.{ .sprite = .brick_metal, .weight = 1, .regions = &brick_explosion_regions }};
+const brick_sprites_hidden = [_]particle.SpriteDesc{.{ .sprite = .brick_hidden, .weight = 1, .regions = &brick_explosion_regions }};
 const ball_sprites = [_]particle.SpriteDesc{.{ .sprite = .ball_normal, .weight = 1, .regions = &ball_explosion_regions }};
 
 pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
@@ -75,6 +76,7 @@ pub fn particleExplosionSprites(s: sprite.Sprite) []const particle.SpriteDesc {
         .brick_metal_weak => &brick_sprites_metal,
         .brick_metal_weak2 => &brick_sprites_metal,
         .brick_metal_weak3 => &brick_sprites_metal,
+        .brick_hidden => &brick_sprites_hidden,
         .ball_smallest => &ball_sprites,
         .ball_smaller => &ball_sprites,
         .ball_normal => &ball_sprites,
@@ -105,35 +107,50 @@ pub const particleFlameSprites = [_]particle.SpriteDesc{
     .{ .sprite = .particle_flame_2, .weight = 0.5 },
 };
 
-pub fn brickIdToSprite(id: u8) !sprite.Sprite {
+pub const BrickId = enum(u8) {
+    grey = 1,
+    red = 2,
+    green = 3,
+    blue = 4,
+    explode = 5,
+    metal = 6,
+    hidden = 7,
+
+    pub fn parse(id: u8) !BrickId {
+        return std.meta.intToEnum(BrickId, id);
+    }
+};
+
+pub fn brickIdToSprite(id: BrickId) sprite.Sprite {
     // Randomize a variant for this brick
     const rng = prng.random();
     return switch (id) {
-        1 => (&[_]sprite.Sprite{ .brick1a, .brick1b })[rng.intRangeAtMost(usize, 0, 1)],
-        2 => (&[_]sprite.Sprite{ .brick2a, .brick2b })[rng.intRangeAtMost(usize, 0, 1)],
-        3 => (&[_]sprite.Sprite{ .brick3a, .brick3b })[rng.intRangeAtMost(usize, 0, 1)],
-        4 => (&[_]sprite.Sprite{ .brick4a, .brick4b })[rng.intRangeAtMost(usize, 0, 1)],
-        5 => .brick_expl,
-        6 => .brick_metal,
-        else => return error.UnknownBrickId,
+        .grey => (&[_]sprite.Sprite{ .brick1a, .brick1b })[rng.intRangeAtMost(usize, 0, 1)],
+        .red => (&[_]sprite.Sprite{ .brick2a, .brick2b })[rng.intRangeAtMost(usize, 0, 1)],
+        .green => (&[_]sprite.Sprite{ .brick3a, .brick3b })[rng.intRangeAtMost(usize, 0, 1)],
+        .blue => (&[_]sprite.Sprite{ .brick4a, .brick4b })[rng.intRangeAtMost(usize, 0, 1)],
+        .explode => .brick_expl,
+        .metal => .brick_metal,
+        .hidden => .brick_hidden,
     };
 }
 
-pub fn spriteToBrickId(sp: sprite.Sprite) !u8 {
+pub fn spriteToBrickId(sp: sprite.Sprite) !BrickId {
     return switch (sp) {
-        .brick1a => 1,
-        .brick1b => 1,
-        .brick2a => 2,
-        .brick2b => 2,
-        .brick3a => 3,
-        .brick3b => 3,
-        .brick4a => 4,
-        .brick4b => 4,
-        .brick_expl => 5,
-        .brick_metal => 6,
-        .brick_metal_weak => 6,
-        .brick_metal_weak2 => 6,
-        .brick_metal_weak3 => 6,
+        .brick1a => .grey,
+        .brick1b => .grey,
+        .brick2a => .red,
+        .brick2b => .red,
+        .brick3a => .green,
+        .brick3b => .green,
+        .brick4a => .blue,
+        .brick4b => .blue,
+        .brick_expl => .explode,
+        .brick_metal => .metal,
+        .brick_metal_weak => .metal,
+        .brick_metal_weak2 => .metal,
+        .brick_metal_weak3 => .metal,
+        .brick_hidden => .hidden,
         else => return error.BrickSpriteMissing,
     };
 }

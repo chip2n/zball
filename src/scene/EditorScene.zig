@@ -183,6 +183,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
                 .brick4a,
                 .brick_expl,
                 .brick_metal,
+                .brick_hidden,
             };
             for (palette) |s| {
                 if (ui.sprite(.{ .sprite = s })) {
@@ -284,11 +285,12 @@ fn saveLevel(scene: *EditorScene, path: []const u8) !void {
 
     for (scene.bricks.items) |b| {
         if (b.sprite == .brick0) continue;
+        const id = try game.spriteToBrickId(b.sprite);
         try entities.append(.{
             .type = .brick,
             .x = @intFromFloat(b.pos[0]),
             .y = @intFromFloat(b.pos[1]),
-            .sprite = try game.spriteToBrickId(b.sprite),
+            .sprite = @intFromEnum(id),
         });
     }
     try level.writeLevel(entities.items, file.writer());
@@ -304,9 +306,10 @@ fn loadLevel(scene: *EditorScene, path: []const u8) !void {
     scene.bricks.clearAndFree();
 
     for (lvl.entities) |e| {
+        const id = try game.BrickId.parse(e.sprite);
         try scene.bricks.append(.{
             .pos = .{ @floatFromInt(e.x), @floatFromInt(e.y) },
-            .sprite = try game.brickIdToSprite(e.sprite),
+            .sprite = game.brickIdToSprite(id),
         });
     }
 }

@@ -18,6 +18,7 @@ const AudioClip = enum {
     laser,
     clink,
     coin,
+    reveal,
 };
 
 const clips = std.enums.EnumArray(AudioClip, WavData).init(.{
@@ -28,6 +29,7 @@ const clips = std.enums.EnumArray(AudioClip, WavData).init(.{
     .laser = embed("assets/laser.wav"),
     .clink = embed("assets/clink.wav"),
     .coin = embed("assets/coin.wav"),
+    .reveal = embed("assets/reveal.wav"),
 });
 
 var state = AudioState{};
