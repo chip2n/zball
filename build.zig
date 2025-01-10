@@ -95,27 +95,68 @@ pub fn build(b: *Build) !void {
         .sprite_image_path = sprite_image_path,
     };
 
+    const main_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    addDeps(b, main_mod, deps);
+    try addAssets(b, main_mod);
+
     if (target.result.isWasm()) {
         const dep_emsdk = b.dependency("emsdk", .{});
-        _ = try buildWeb(b, target, optimize, dep_emsdk, deps);
-    } else {
-        _ = try buildNative(b, target, optimize, deps, true);
+        const lib = b.addStaticLibrary(.{
+            .name = "game",
+            .root_module = main_mod,
+        });
+        lib.linkLibC();
 
-        const check_exe = try buildNative(b, target, optimize, deps, false);
-        // Used with ZLS for better analysis of comptime shenanigans
-        const check = b.step("check", "Check if game compiles");
-        check.dependOn(&check_exe.step);
-        try addAssets(b, check_exe);
+        const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
+        lib.addSystemIncludePath(emsdk_sysroot);
 
-        // Tests
-        const tests = b.addTest(.{
-            .root_source_file = b.path("src/test.zig"),
+        const emsdk = deps.sokol.builder.dependency("emsdk", .{});
+        const link_step = try sokol.emLinkStep(b, .{
+            .lib_main = lib,
             .target = target,
             .optimize = optimize,
+            .emsdk = emsdk,
+            .use_webgl2 = true,
+            .use_emmalloc = true,
+            .use_filesystem = false,
+            .extra_args = &.{ "-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144" },
+            .shell_file_path = b.path("shell.html"),
         });
 
-        addDeps(b, tests, deps);
-        try addAssets(b, tests);
+        const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
+        run.step.dependOn(&link_step.step);
+        b.step("run", "Run the game").dependOn(&run.step);
+    } else {
+        const name = switch (target.result.os.tag) {
+            .linux => "game-linux",
+            .macos => "game-macos",
+            .windows => "game-win",
+            else => unreachable,
+        };
+        const exe = b.addExecutable(.{ .name = name, .root_module = main_mod });
+        b.installArtifact(exe);
+
+        // Check step
+        const check_exe = b.addExecutable(.{ .name = name, .root_module = main_mod });
+        const check = b.step("check", "Check if game compiles");
+        check.dependOn(&check_exe.step);
+
+        // Run step
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.setCwd(b.path("zig-out/bin/"));
+        run_cmd.step.dependOn(b.getInstallStep());
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
+        const run_step = b.step("run", "Run the game");
+        run_step.dependOn(&run_cmd.step);
+
+        // Tests
+        const tests = b.addTest(.{ .root_module = main_mod });
         const run_tests = b.addRunArtifact(tests);
         const test_step = b.step("test", "Run tests");
         test_step.dependOn(&run_tests.step);
@@ -124,12 +165,12 @@ pub fn build(b: *Build) !void {
 
 fn addDeps(
     b: *Build,
-    step: *Build.Step.Compile,
+    step: *Build.Module,
     deps: CoreDependencies,
 ) void {
     // sokol
     const mod_sokol = deps.sokol.module("sokol");
-    step.root_module.addImport("sokol", mod_sokol);
+    step.addImport("sokol", mod_sokol);
 
     // stb
     step.addIncludePath(deps.stb.path("."));
@@ -137,7 +178,7 @@ fn addDeps(
 
     // zmath
     const mod_zmath = deps.zmath.module("root");
-    step.root_module.addImport("zmath", mod_zmath);
+    step.addImport("zmath", mod_zmath);
 
     // math
     const mod_math = b.addModule("math", .{
@@ -146,22 +187,22 @@ fn addDeps(
             .{ .name = "zmath", .module = mod_zmath },
         },
     });
-    step.root_module.addImport("math", mod_math);
+    step.addImport("math", mod_math);
 
     // tools
-    step.root_module.addAnonymousImport("shader", .{
+    step.addAnonymousImport("shader", .{
         .root_source_file = deps.shader_path,
         .imports = &.{
             .{ .name = "sokol", .module = mod_sokol },
             .{ .name = "math", .module = mod_math },
         },
     });
-    step.root_module.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
-    step.root_module.addAnonymousImport("sprites.png", .{ .root_source_file = deps.sprite_image_path });
-    step.root_module.addAnonymousImport("sprites", .{ .root_source_file = deps.sprite_data_path });
+    step.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
+    step.addAnonymousImport("sprites.png", .{ .root_source_file = deps.sprite_image_path });
+    step.addAnonymousImport("sprites", .{ .root_source_file = deps.sprite_data_path });
 }
 
-fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
+fn addAssets(b: *Build, step: *Build.Module) !void {
     var dir = try std.fs.cwd().openDir("assets", .{ .iterate = true });
     defer dir.close();
 
@@ -170,7 +211,7 @@ fn addAssets(b: *Build, step: *Build.Step.Compile) !void {
         if (f.kind != .file) continue;
         if (!shouldIncludeAsset(f.name)) continue;
         const name = b.pathJoin(&.{ "assets", f.name });
-        step.root_module.addAnonymousImport(name, .{ .root_source_file = b.path(name) });
+        step.addAnonymousImport(name, .{ .root_source_file = b.path(name) });
     }
 }
 
@@ -198,86 +239,6 @@ fn buildFontPackTool(
     exe.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });
     exe.linkLibC();
     return exe;
-}
-
-fn buildNative(
-    b: *Build,
-    target: Build.ResolvedTarget,
-    optimize: OptimizeMode,
-    deps: CoreDependencies,
-    install: bool,
-) !*Build.Step.Compile {
-    const name = switch (target.result.os.tag) {
-        .linux => "game-linux",
-        .macos => "game-macos",
-        .windows => "game-win",
-        else => unreachable,
-    };
-    const exe = b.addExecutable(.{
-        .name = name,
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    addDeps(b, exe, deps);
-    try addAssets(b, exe);
-
-    if (install) {
-        b.installArtifact(exe);
-
-        const run_cmd = b.addRunArtifact(exe);
-        run_cmd.setCwd(b.path("zig-out/bin/"));
-        run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
-        const run_step = b.step("run", "Run the game");
-        run_step.dependOn(&run_cmd.step);
-    }
-
-    return exe;
-}
-
-fn buildWeb(
-    b: *Build,
-    target: Build.ResolvedTarget,
-    optimize: OptimizeMode,
-    dep_emsdk: *Build.Dependency,
-    deps: CoreDependencies,
-) !*Build.Step.Compile {
-    const lib = b.addStaticLibrary(.{
-        .name = "game",
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("src/main.zig"),
-    });
-    lib.linkLibC();
-
-    addDeps(b, lib, deps);
-    try addAssets(b, lib);
-
-    const emsdk_sysroot = emSdkLazyPath(b, dep_emsdk, &.{ "upstream", "emscripten", "cache", "sysroot", "include" });
-    lib.addSystemIncludePath(emsdk_sysroot);
-
-    const emsdk = deps.sokol.builder.dependency("emsdk", .{});
-    const link_step = try sokol.emLinkStep(b, .{
-        .lib_main = lib,
-        .target = target,
-        .optimize = optimize,
-        .emsdk = emsdk,
-        .use_webgl2 = true,
-        .use_emmalloc = true,
-        .use_filesystem = false,
-        .extra_args = &.{ "-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144" },
-        .shell_file_path = b.path("shell.html"),
-    });
-
-    const run = sokol.emRunStep(b, .{ .name = "game", .emsdk = emsdk });
-    run.step.dependOn(&link_step.step);
-    b.step("run", "Run the game").dependOn(&run.step);
-
-    return lib;
 }
 
 fn emSdkLazyPath(b: *Build, emsdk: *Build.Dependency, subPaths: []const []const u8) Build.LazyPath {
