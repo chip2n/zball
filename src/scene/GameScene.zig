@@ -543,9 +543,9 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             if (scene.clear_timer == 0) {
                 for (scene.entities) |e| {
                     if (e.type != .brick) continue;
-                    // NOTE: It's fine to leave hidden bricks (but the drawback
-                    // is the player gets a lower score by leaving them)
-                    if (e.brick_id == .hidden) continue;
+                    // NOTE: It's fine to leave unrevealed hidden bricks (but
+                    // the drawback is the player gets a lower score)
+                    if (e.brick_id == .hidden and !e.rendered) continue;
                     if (e.type != .none and e.brick_id != .hidden) break :clear;
                 }
                 scene.clear_timer = clear_delay;
