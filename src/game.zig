@@ -23,6 +23,7 @@ const Level = level.Level;
 const level_files = .{
     "assets/level1.lvl",
     "assets/level2.lvl",
+    "assets/level3.lvl",
 };
 
 const brick_w = constants.brick_w;
