@@ -446,7 +446,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             // If entity outside level bounds, always kill
             const vw: f32 = @floatFromInt(constants.viewport_size[0]);
             const vh: f32 = @floatFromInt(constants.viewport_size[1]);
-            if (e.pos[0] < 0 or e.pos[0] > vw or e.pos[1] > vh or e.pos[1] < 0) {
+            if (e.pos[0] < -16 or e.pos[0] > vw + 16 or e.pos[1] > vh + 16 or e.pos[1] < -16) {
                 switch (e.type) {
                     .ball => {
                         audio.play(.{ .clip = .explode, .vol = 0.5 });
