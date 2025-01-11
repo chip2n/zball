@@ -29,7 +29,12 @@ pub fn init(width: u32, height: u32) @This() {
         .usage = .STREAM,
         .size = constants.max_verts * @sizeOf(Vertex),
     });
-    bind.samplers[shd.SMP_smp] = sg.makeSampler(.{});
+    bind.samplers[shd.SMP_smp] = sg.makeSampler(.{
+        .min_filter = .NEAREST,
+        .mag_filter = .NEAREST,
+        .wrap_u = .CLAMP_TO_EDGE,
+        .wrap_v = .CLAMP_TO_EDGE,
+    });
 
     return .{
         .attachments_desc = attachments_desc,

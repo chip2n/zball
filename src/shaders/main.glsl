@@ -240,9 +240,11 @@ vec3 pixel(vec2 uv, vec2 off) {
 }
 
 vec3 sample_line(vec2 pos, float off) {
-    vec3 b = pixel(pos, vec2(-1.0, off));
+    // NOTE: 0.99 should really be 1, but for some reason I get some artifacts
+    // at pixel boundaries when I use it...
+    vec3 b = pixel(pos, vec2(-0.99, off));
     vec3 c = pixel(pos, vec2(0.0, off));
-    vec3 d = pixel(pos, vec2(1.0, off));
+    vec3 d = pixel(pos, vec2(0.99, off));
     float dst = dist(pos).x;
 
     float scale = -2;
