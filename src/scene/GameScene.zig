@@ -53,7 +53,8 @@ const brick_w = constants.brick_w;
 const brick_h = constants.brick_h;
 const brick_start_y = constants.brick_start_y;
 const death_delay = 2.5;
-const gravity = 200;
+const gravity = 400;
+const terminal_velocity = 300;
 
 comptime {
     std.debug.assert(coin_freq + powerup_freq <= 1);
@@ -352,6 +353,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
                 if (!e.gravity) break :blk;
                 var vel = m.vmul(e.dir, e.speed);
                 vel[1] += game_dt * gravity;
+                vel[1] = @min(vel[1], terminal_velocity);
                 e.dir = vel;
                 m.normalize(&e.dir);
                 e.speed = m.magnitude(vel);
@@ -1157,11 +1159,19 @@ fn spawnDrop(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
 fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
     const rng = game.prng.random();
     const effect = rng.enumValue(PowerupType);
-    const speed = 50 + rng.float(f32) * 100; // TODO depend on ball speed?
+
+    // Speed of spawned powerup is randomized, but scales with ball speed
+    const speed = (scene.ball_speed / 2) + rng.float(f32) * 50;
+
+    // Horizontal direction is randomized a bit
+    var new_dir = dir;
+    new_dir[0] += 0.7 * (rng.float(f32) - 0.5);
+    m.normalize(&new_dir);
+
     _ = scene.spawnEntity(.{
         .type = .powerup,
         .pos = pos,
-        .dir = dir,
+        .dir = new_dir,
         .speed = speed,
         .sprite = powerupSprite(effect),
         .gravity = true,
@@ -1177,11 +1187,20 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
 
 fn spawnCoin(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
     const rng = game.prng.random();
-    const speed = 50 + rng.float(f32) * 100; // TODO depend on ball speed?
+
+    // Speed of spawned coin is randomized, but scales with ball speed
+    // Slightly faster than powerups (they "weigh" less)
+    const speed = (2 * scene.ball_speed / 3) + rng.float(f32) * 50;
+
+    // Horizontal direction is randomized a bit
+    var new_dir = dir;
+    new_dir[0] += 0.7 * (rng.float(f32) - 0.5);
+
+    m.normalize(&new_dir);
     _ = scene.spawnEntity(.{
         .type = .coin,
         .pos = pos,
-        .dir = dir,
+        .dir = new_dir,
         .speed = speed,
         .sprite = .coin1,
         .gravity = true,
