@@ -1189,8 +1189,7 @@ fn spawnCoin(scene: *GameScene, pos: [2]f32, speed: f32, dir: [2]f32) void {
     const rng = game.prng.random();
 
     // Speed of spawned coin is randomized, but scales with speed of colliding entity
-    // Slightly faster than powerups (they "weigh" less)
-    const new_speed = (2 * speed / 3) + rng.float(f32) * 50;
+    const new_speed = (speed / 2) + rng.float(f32) * 50;
 
     // Horizontal direction is randomized a bit
     var new_dir = dir;
