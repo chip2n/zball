@@ -845,7 +845,7 @@ fn collideBricks(scene: *GameScene, ball: *const Entity, old_pos: [2]f32, new_po
         }
 
         const destroyed = scene.destroyBrick(e);
-        if (destroyed) spawnDrop(scene, e.pos, ball.dir);
+        if (destroyed) spawnDrop(scene, e.pos, ball.speed, ball.dir);
     }
     if (collided) return .{ .pos = out, .normal = normal };
     return null;
@@ -1143,25 +1143,25 @@ fn spawnExplosion(scene: *GameScene, pos: [2]f32, sp: sprite.Sprite) !void {
     expl.explosion.emitting = true;
 }
 
-fn spawnDrop(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
+fn spawnDrop(scene: *GameScene, pos: [2]f32, speed: f32, dir: [2]f32) void {
     if (scene.drop_spawn_timer > 0) return;
 
     const rng = game.prng.random();
     const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
     switch (idx) {
         0 => return,
-        1 => scene.spawnPowerup(pos, dir),
-        2 => scene.spawnCoin(pos, dir),
+        1 => scene.spawnPowerup(pos, speed, dir),
+        2 => scene.spawnCoin(pos, speed, dir),
         else => unreachable,
     }
 }
 
-fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
+fn spawnPowerup(scene: *GameScene, pos: [2]f32, speed: f32, dir: [2]f32) void {
     const rng = game.prng.random();
     const effect = rng.enumValue(PowerupType);
 
-    // Speed of spawned powerup is randomized, but scales with ball speed
-    const speed = (scene.ball_speed / 2) + rng.float(f32) * 50;
+    // Speed of spawned powerup is randomized, but scales with speed of colliding entity
+    const new_speed = (speed / 2) + rng.float(f32) * 50;
 
     // Horizontal direction is randomized a bit
     var new_dir = dir;
@@ -1172,7 +1172,7 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
         .type = .powerup,
         .pos = pos,
         .dir = new_dir,
-        .speed = speed,
+        .speed = new_speed,
         .sprite = powerupSprite(effect),
         .gravity = true,
         .collectible = true,
@@ -1185,12 +1185,12 @@ fn spawnPowerup(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
     }) catch return;
 }
 
-fn spawnCoin(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
+fn spawnCoin(scene: *GameScene, pos: [2]f32, speed: f32, dir: [2]f32) void {
     const rng = game.prng.random();
 
-    // Speed of spawned coin is randomized, but scales with ball speed
+    // Speed of spawned coin is randomized, but scales with speed of colliding entity
     // Slightly faster than powerups (they "weigh" less)
-    const speed = (2 * scene.ball_speed / 3) + rng.float(f32) * 50;
+    const new_speed = (2 * speed / 3) + rng.float(f32) * 50;
 
     // Horizontal direction is randomized a bit
     var new_dir = dir;
@@ -1201,7 +1201,7 @@ fn spawnCoin(scene: *GameScene, pos: [2]f32, dir: [2]f32) void {
         .type = .coin,
         .pos = pos,
         .dir = new_dir,
-        .speed = speed,
+        .speed = new_speed,
         .sprite = .coin1,
         .gravity = true,
         .collectible = true,
