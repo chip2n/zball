@@ -1,16 +1,15 @@
-const input = @import("../input.zig");
 const zball = @import("../zball.zig");
-const constants = @import("../constants.zig");
+const input = @import("../input.zig");
 const utils = @import("../utils.zig");
 const settings = @import("../settings.zig");
 const sprite = @import("sprites");
 const shd = @import("shader");
 const m = @import("math");
-
 const gfx = @import("../gfx.zig");
+const sokol = @import("sokol");
+
 const ui = gfx.ui;
 
-const sokol = @import("sokol");
 const sapp = sokol.app;
 const sg = sokol.gfx;
 
@@ -38,8 +37,8 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         .dst = .{
             .x = 0,
             .y = 0,
-            .w = constants.viewport_size[0],
-            .h = constants.viewport_size[1],
+            .w = zball.viewport_size[0],
+            .h = zball.viewport_size[1],
         },
     });
 
@@ -50,7 +49,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         ui.beginWindow(.{
             .id = "footer",
             .x = 8,
-            .y = constants.viewport_size[1],
+            .y = zball.viewport_size[1],
             .z = 10,
             .pivot = .{ 0, 1 },
             .style = .transparent,
@@ -62,8 +61,8 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     { // Main menu
         ui.beginWindow(.{
             .id = "main",
-            .x = constants.viewport_size[0] / 2,
-            .y = constants.viewport_size[1] / 2 + 24,
+            .x = zball.viewport_size[0] / 2,
+            .y = zball.viewport_size[1] / 2 + 24,
             .z = 10,
             .pivot = .{ 0.5, 0.5 },
             .style = .transparent,

@@ -1,6 +1,5 @@
 const std = @import("std");
 const sprite = @import("sprites");
-const constants = @import("../constants.zig");
 const input = @import("../input.zig");
 const zball = @import("../zball.zig");
 const shd = @import("shader");
@@ -16,8 +15,8 @@ const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sapp = sokol.app;
 
-const brick_w = constants.brick_w;
-const brick_h = constants.brick_h;
+const brick_w = zball.brick_w;
+const brick_h = zball.brick_h;
 
 const EditorScene = @This();
 
@@ -112,15 +111,15 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             .dst = .{
                 .x = 0,
                 .y = 0,
-                .w = constants.viewport_size[0],
-                .h = constants.viewport_size[1],
+                .w = zball.viewport_size[0],
+                .h = zball.viewport_size[1],
             },
             .layer = .background,
         });
     }
 
     // Render "grid"
-    const base_offset_x = (constants.viewport_size[0] - 18 * brick_w) / 2;
+    const base_offset_x = (zball.viewport_size[0] - 18 * brick_w) / 2;
     const base_offset_y = base_offset_x; // for symmetry
     for (0..20) |y| {
         const count: usize = if (y % 2 == 0) 19 else 18; // staggered
@@ -180,7 +179,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             ui.beginWindow(.{
                 .id = "palette",
                 .x = 8,
-                .y = constants.viewport_size[1] - 18,
+                .y = zball.viewport_size[1] - 18,
                 .style = .transparent,
             });
             defer ui.endWindow();
@@ -197,7 +196,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             ui.beginWindow(.{
                 .id = "info",
                 .x = @floatFromInt(palette_width + 16),
-                .y = constants.viewport_size[1] - 16,
+                .y = zball.viewport_size[1] - 16,
                 .style = .transparent,
             });
             defer ui.endWindow();
@@ -208,8 +207,8 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             if (scene.show_save_dialog) {
                 ui.beginWindow(.{
                     .id = "save",
-                    .x = constants.viewport_size[0] / 2,
-                    .y = constants.viewport_size[1] / 2,
+                    .x = zball.viewport_size[0] / 2,
+                    .y = zball.viewport_size[1] / 2,
                     .z = 20,
                     .pivot = .{ 0.5, 0.5 },
                 });
@@ -224,8 +223,8 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             if (scene.show_load_dialog) {
                 ui.beginWindow(.{
                     .id = "load",
-                    .x = constants.viewport_size[0] / 2,
-                    .y = constants.viewport_size[1] / 2,
+                    .x = zball.viewport_size[0] / 2,
+                    .y = zball.viewport_size[1] / 2,
                     .z = 20,
                     .pivot = .{ 0.5, 0.5 },
                 });
@@ -252,7 +251,7 @@ fn getBrickAt(scene: *EditorScene, x: usize, y: usize) ?*Brick {
 }
 
 fn getBrickPosition(x: usize, y: usize) ?[2]f32 {
-    const base_offset_x = (constants.viewport_size[0] - 18 * brick_w) / 2;
+    const base_offset_x = (zball.viewport_size[0] - 18 * brick_w) / 2;
     const base_offset_y = base_offset_x; // for symmetry
     for (0..20) |j| {
         const count: usize = if (j % 2 == 0) 19 else 18; // staggered

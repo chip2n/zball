@@ -1,6 +1,5 @@
 const std = @import("std");
 const sprite = @import("sprites");
-const constants = @import("constants.zig");
 const audio = @import("audio.zig");
 const utils = @import("utils.zig");
 const zball = @import("zball.zig");
@@ -20,11 +19,11 @@ const Rect = m.Rect;
 const pi = std.math.pi;
 
 const initial_paddle_pos: [2]f32 = .{
-    @as(f32, @floatFromInt(constants.viewport_size[0])) / 2,
-    @as(f32, @floatFromInt(constants.viewport_size[1])) - 8.5,
+    @as(f32, @floatFromInt(zball.viewport_size[0])) / 2,
+    @as(f32, @floatFromInt(zball.viewport_size[1])) - 8.5,
 };
 
-const brick_start_y = constants.brick_start_y;
+const brick_start_y = zball.brick_start_y;
 const death_delay = 2.5;
 
 const Game = @This();
@@ -42,7 +41,7 @@ paddle_magnet: bool = false,
 
 entities: []Entity,
 
-ball_speed: f32 = constants.ball_base_speed,
+ball_speed: f32 = zball.ball_base_speed,
 ball_size: BallSize = .normal,
 
 // When player dies, we start this timer. When it reaches zero, we start a new
@@ -152,7 +151,7 @@ const PowerupType = enum {
 };
 
 pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
-    const entities = try allocator.alloc(Entity, constants.max_entities);
+    const entities = try allocator.alloc(Entity, zball.max_entities);
     errdefer allocator.free(entities);
 
     var g = Game{
@@ -188,7 +187,7 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
 
     // spawn one ball to start
     const initial_ball_pos = g.ballOnPaddlePos();
-    const initial_ball = try g.spawnBall(initial_ball_pos, constants.initial_ball_dir);
+    const initial_ball = try g.spawnBall(initial_ball_pos, zball.initial_ball_dir);
     initial_ball.magnetized = true;
 
     return g;
@@ -220,11 +219,11 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             if (input.down(.right)) {
                 paddle_dx += 1;
             }
-            break :blk paddle_dx * constants.paddle_speed * dt;
+            break :blk paddle_dx * zball.paddle_speed * dt;
         };
 
         const bounds = g.paddleBounds();
-        g.paddle_pos[0] = std.math.clamp(g.paddle_pos[0] + dx, bounds.w / 2, constants.viewport_size[0] - bounds.w / 2);
+        g.paddle_pos[0] = std.math.clamp(g.paddle_pos[0] + dx, bounds.w / 2, zball.viewport_size[0] - bounds.w / 2);
         for (g.entities) |*e| {
             if (e.type == .none) continue;
             if (!e.magnetized) continue;
@@ -240,7 +239,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                 .type = .laser,
                 .pos = .{ bounds.x + 2, bounds.y },
                 .dir = .{ 0, -1 },
-                .speed = constants.laser_speed,
+                .speed = zball.laser_speed,
                 .sprite = .particle_laser,
                 .collision_layers = .{
                     .bricks = true,
@@ -250,13 +249,13 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                 .type = .laser,
                 .pos = .{ bounds.x + bounds.w - 2, bounds.y },
                 .dir = .{ 0, -1 },
-                .speed = constants.laser_speed,
+                .speed = zball.laser_speed,
                 .sprite = .particle_laser,
                 .collision_layers = .{
                     .bricks = true,
                 },
             }) catch break :shoot;
-            g.laser_cooldown_timer = constants.laser_cooldown;
+            g.laser_cooldown_timer = zball.laser_cooldown;
             g.play(.{ .clip = .laser });
         }
 
@@ -294,12 +293,12 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             if (e.type == .none) break :blk;
             if (!e.gravity) break :blk;
             var vel = m.vmul(e.dir, e.speed);
-            vel[1] += dt * constants.gravity;
-            vel[1] = @min(vel[1], constants.terminal_velocity);
+            vel[1] += dt * zball.gravity;
+            vel[1] = @min(vel[1], zball.terminal_velocity);
             e.dir = vel;
             m.normalize(&e.dir);
             e.speed = m.magnitude(vel);
-            if (e.pos[1] > constants.viewport_size[1]) {
+            if (e.pos[1] > zball.viewport_size[1]) {
                 e.type = .none;
                 e.frame = 0;
             }
@@ -388,8 +387,8 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         }
 
         // If entity outside level bounds, always kill
-        const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-        const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+        const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+        const vh: f32 = @floatFromInt(zball.viewport_size[1]);
         if (e.pos[0] < -16 or e.pos[0] > vw + 16 or e.pos[1] > vh + 16 or e.pos[1] < -16) {
             switch (e.type) {
                 .ball => {
@@ -471,9 +470,9 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         if (g.lives == 0) {
             return;
         } else {
-            const ball = try g.spawnBall(g.ballOnPaddlePos(), constants.initial_ball_dir);
+            const ball = try g.spawnBall(g.ballOnPaddlePos(), zball.initial_ball_dir);
             ball.magnetized = true;
-            g.ball_speed = constants.ball_base_speed;
+            g.ball_speed = zball.ball_base_speed;
             g.ball_size = .normal;
             g.flame_timer = 0;
         }
@@ -547,7 +546,7 @@ fn spawnDrop(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
     if (g.drop_spawn_timer > 0) return;
 
     const rng = g.prng.random();
-    const idx = rng.weightedIndex(f32, &.{ 1 - constants.powerup_freq - constants.coin_freq, constants.powerup_freq, constants.coin_freq });
+    const idx = rng.weightedIndex(f32, &.{ 1 - zball.powerup_freq - zball.coin_freq, zball.powerup_freq, zball.coin_freq });
     switch (idx) {
         0 => return,
         1 => g.spawnPowerup(pos, speed, dir),
@@ -693,8 +692,8 @@ fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_n
     bounds.x = p1[0] - bounds.w / 2;
     bounds.y = p1[1] - bounds.h / 2;
 
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+    const vh: f32 = @floatFromInt(zball.viewport_size[1]);
 
     const delta = [2]f32{ p2[0] - p1[0], p2[1] - p1[1] };
 
@@ -864,9 +863,9 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
         var mult: f32 = 1.0;
 
         // Fast balls give more points
-        if (g.ball_speed > constants.ball_base_speed) {
-            const current_extra_speed = g.ball_speed - constants.ball_base_speed;
-            const max_extra_speed = constants.ball_speed_max - constants.ball_base_speed;
+        if (g.ball_speed > zball.ball_base_speed) {
+            const current_extra_speed = g.ball_speed - zball.ball_base_speed;
+            const max_extra_speed = zball.ball_speed_max - zball.ball_base_speed;
             const bonus = @round(50 * (current_extra_speed / max_extra_speed));
             points += bonus;
         }
@@ -918,14 +917,14 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
             5 * pi / 4.0,
         }),
         .flame => {
-            g.flame_timer = constants.flame_duration;
+            g.flame_timer = zball.flame_duration;
             for (g.entities) |*e| {
                 if (e.type != .ball) continue;
                 e.flame.emitting = true;
             }
         },
         .laser => {
-            g.laser_timer = constants.laser_duration;
+            g.laser_timer = zball.laser_duration;
         },
         .paddle_size_up => {
             const sizes = std.enums.values(PaddleSize);
@@ -941,10 +940,10 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
             }
         },
         .ball_speed_up => {
-            g.ball_speed = @min(constants.ball_speed_max, g.ball_speed + 50);
+            g.ball_speed = @min(zball.ball_speed_max, g.ball_speed + 50);
         },
         .ball_speed_down => {
-            g.ball_speed = @max(constants.ball_speed_min, g.ball_speed - 50);
+            g.ball_speed = @max(zball.ball_speed_min, g.ball_speed - 50);
         },
         .ball_size_up => {
             const sizes = std.enums.values(BallSize);
@@ -981,7 +980,7 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
 }
 
 fn splitBall(g: *Game, angles: []const f32) void {
-    var active_balls = std.BoundedArray(usize, constants.max_balls){ .len = 0 };
+    var active_balls = std.BoundedArray(usize, zball.max_balls){ .len = 0 };
     for (g.entities, 0..) |e, i| {
         if (e.type != .ball) continue;
         active_balls.append(i) catch continue;

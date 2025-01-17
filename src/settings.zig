@@ -1,4 +1,4 @@
-const constants = @import("constants.zig");
+const zball = @import("zball.zig");
 const audio = @import("audio.zig");
 
 const gfx = @import("gfx.zig");
@@ -7,8 +7,8 @@ const ui = gfx.ui;
 pub fn renderMenu() bool {
     ui.beginWindow(.{
         .id = "settings",
-        .x = constants.viewport_size[0] / 2,
-        .y = constants.viewport_size[1] / 2,
+        .x = zball.viewport_size[0] / 2,
+        .y = zball.viewport_size[1] / 2,
         .z = 20,
         .pivot = .{ 0.5, 0.5 },
     });

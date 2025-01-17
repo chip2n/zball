@@ -1,5 +1,5 @@
 const std = @import("std");
-const constants = @import("../constants.zig");
+const zball = @import("../zball.zig");
 const m = @import("math");
 const Mat4 = m.Mat4;
 
@@ -36,8 +36,8 @@ pub fn invalidate(cam: *Camera) void {
 fn calculateView(width: u32, height: u32) Mat4 {
     const w: f32 = @floatFromInt(width);
     const h: f32 = @floatFromInt(height);
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+    const vh: f32 = @floatFromInt(zball.viewport_size[1]);
     const scale = @min(@floor(w / vw), @floor(h / vh));
 
     // Never place view at an uneven position
@@ -65,7 +65,7 @@ pub fn screenToWorld(cam: Camera, p: [2]f32) [2]f32 {
 pub fn zoom(cam: Camera) f32 {
     const w: f32 = @floatFromInt(cam.win_size[0]);
     const h: f32 = @floatFromInt(cam.win_size[1]);
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+    const vh: f32 = @floatFromInt(zball.viewport_size[1]);
     return @min(@floor(w / vw), @floor(h / vh));
 }

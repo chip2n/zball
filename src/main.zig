@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const constants = @import("constants.zig");
 const input = @import("input.zig");
 const utils = @import("utils.zig");
 const zball = @import("zball.zig");
@@ -29,8 +28,8 @@ pub fn main() !void {
         .frame_cb = sokolFrame,
         .cleanup_cb = sokolCleanup,
         .event_cb = sokolEvent,
-        .width = constants.initial_screen_size[0],
-        .height = constants.initial_screen_size[1],
+        .width = zball.initial_screen_size[0],
+        .height = zball.initial_screen_size[1],
         .icon = .{ .sokol_default = true },
         .window_title = "ZBall",
         .logger = .{ .func = slog.func },

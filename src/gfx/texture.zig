@@ -1,15 +1,13 @@
 const std = @import("std");
-const constants = @import("../constants.zig");
+const zball = @import("../zball.zig");
 const sokol = @import("sokol");
 const sg = sokol.gfx;
-
-const max_textures = constants.max_textures;
 
 const c = @cImport({
     @cInclude("stb_image.h");
 });
 
-var textures: [max_textures]TextureData = .{.{}} ** max_textures;
+var textures: [zball.max_textures]TextureData = .{.{}} ** zball.max_textures;
 
 pub const Texture = usize;
 

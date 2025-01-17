@@ -1,7 +1,7 @@
 const std = @import("std");
 const root = @import("root");
 const font = @import("font");
-const constants = @import("../constants.zig");
+const zball = @import("../zball.zig");
 const input = @import("../input.zig");
 const m = @import("math");
 const sprites = @import("sprites");
@@ -241,7 +241,7 @@ pub fn endWindow() void {
             const overlay = sprites.get(.overlay);
             batch.render(.{
                 .src = m.irect(overlay.bounds),
-                .dst = .{ .x = 0, .y = 0, .w = constants.viewport_size[0], .h = constants.viewport_size[1] },
+                .dst = .{ .x = 0, .y = 0, .w = zball.viewport_size[0], .h = zball.viewport_size[1] },
                 .z = win_z - 0.1,
             });
 
@@ -492,7 +492,7 @@ const TextInputDesc = struct {
 
 pub fn textInput(v: TextInputDesc) ?[]u8 {
     var win_data = window_data.getPtr(win_id).?;
-    const w = constants.viewport_size[0] - 48;
+    const w = zball.viewport_size[0] - 48;
     const h = 12;
     win_data.addDrawListEntry(.{
         .ninepatch = .{

@@ -1,4 +1,4 @@
-const constants = @import("../constants.zig");
+const zball = @import("../zball.zig");
 const Vertex = @import("../gfx.zig").Vertex;
 const sokol = @import("sokol");
 const sg = sokol.gfx;
@@ -14,7 +14,7 @@ pub fn init(width: u32, height: u32) @This() {
         .render_target = true,
         .width = @intCast(width),
         .height = @intCast(height),
-        .sample_count = constants.offscreen_sample_count,
+        .sample_count = zball.offscreen_sample_count,
     };
     var depth_img_desc = color_img_desc;
     depth_img_desc.pixel_format = .DEPTH;
@@ -27,7 +27,7 @@ pub fn init(width: u32, height: u32) @This() {
     // TODO max_verts is actually max verts PER frame buffer, but we're making two of those...
     bind.vertex_buffers[0] = sg.makeBuffer(.{
         .usage = .STREAM,
-        .size = constants.max_verts * @sizeOf(Vertex),
+        .size = zball.max_verts * @sizeOf(Vertex),
     });
     bind.samplers[shd.SMP_smp] = sg.makeSampler(.{
         .min_filter = .NEAREST,

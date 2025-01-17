@@ -9,18 +9,18 @@ pub const Framebuffer = @import("gfx/Framebuffer.zig");
 pub const TextRenderer = ttf.TextRenderer;
 
 const std = @import("std");
-
+const zball = @import("zball.zig");
 const sokol = @import("sokol");
+const shd = @import("shader");
+const m = @import("math");
+const font = @import("font");
+
 const sg = sokol.gfx;
 const sapp = sokol.app;
 const sglue = sokol.glue;
 
-const shd = @import("shader");
-const constants = @import("constants.zig");
-const m = @import("math");
 const spritesheet = @embedFile("sprites.png");
 const Texture = texture.Texture;
-const font = @import("font");
 
 // TODO move?
 pub const Vertex = extern struct {
@@ -83,7 +83,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
         var pip_desc: sg.PipelineDesc = .{
             .shader = sg.makeShader(shd.mainShaderDesc(sg.queryBackend())),
             .cull_mode = .BACK,
-            .sample_count = constants.offscreen_sample_count,
+            .sample_count = zball.offscreen_sample_count,
             .depth = .{
                 .pixel_format = .DEPTH,
                 .compare = .LESS_EQUAL,
@@ -109,7 +109,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
         var pip_desc: sg.PipelineDesc = .{
             .shader = sg.makeShader(shd.shadowShaderDesc(sg.queryBackend())),
             .cull_mode = .BACK,
-            .sample_count = constants.offscreen_sample_count,
+            .sample_count = zball.offscreen_sample_count,
             .depth = .{
                 .pixel_format = .DEPTH,
                 .compare = .LESS_EQUAL,
@@ -132,8 +132,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
     }
 
     // a vertex buffer to render a fullscreen quad
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+    const vh: f32 = @floatFromInt(zball.viewport_size[1]);
     state.quad_vbuf = sg.makeBuffer(.{
         .usage = .IMMUTABLE,
         .data = sg.asRange(&[_]f32{
@@ -173,7 +173,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
     state.scene.bind.samplers[shd.SMP_smp] = smp;
 
-    state.lights = try std.ArrayList(Light).initCapacity(allocator, constants.max_lights);
+    state.lights = try std.ArrayList(Light).initCapacity(allocator, zball.max_lights);
 
     try ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
     errdefer ui.deinit();
@@ -190,7 +190,7 @@ pub fn deinit() void {
 }
 
 pub fn addLight(pos: [2]f32, color: u32) void {
-    if (state.lights.items.len >= constants.max_lights) return;
+    if (state.lights.items.len >= zball.max_lights) return;
     state.lights.appendAssumeCapacity(.{ .pos = pos, .color = color });
 }
 
@@ -214,14 +214,14 @@ pub fn renderMain(fb: Framebuffer) void {
     var bind = fb.bind;
     sg.updateBuffer(bind.vertex_buffers[0], sg.asRange(result.verts));
 
-    const vw: f32 = @floatFromInt(constants.viewport_size[0]);
-    const vh: f32 = @floatFromInt(constants.viewport_size[1]);
+    const vw: f32 = @floatFromInt(zball.viewport_size[0]);
+    const vh: f32 = @floatFromInt(zball.viewport_size[1]);
     var mvp = m.orthographicLh(vw, vh, 0, 100);
     mvp = m.mul(m.translation(-vw / 2, -vh / 2, 0), mvp);
     const vs_params = shd.VsParams{ .mvp = mvp };
 
-    var light_positions = std.mem.zeroes([constants.max_lights][4]f32);
-    var light_colors = std.mem.zeroes([constants.max_lights][4]f32);
+    var light_positions = std.mem.zeroes([zball.max_lights][4]f32);
+    var light_colors = std.mem.zeroes([zball.max_lights][4]f32);
     for (state.lights.items, 0..) |l, i| {
         const r: f32 = @floatFromInt((l.color >> 16) & 0xFF);
         const g: f32 = @floatFromInt((l.color >> 8) & 0xFF);
@@ -367,7 +367,7 @@ pub inline fn renderNinePatch(opts: BatchRenderer.RenderNinePatchOptions) void {
 
 // TODO return a handler?
 pub fn createFramebuffer() Framebuffer {
-    return Framebuffer.init(@intCast(constants.viewport_size[0]), @intCast(constants.viewport_size[1]));
+    return Framebuffer.init(@intCast(zball.viewport_size[0]), @intCast(zball.viewport_size[1]));
 }
 
 pub fn beginFrame() void {

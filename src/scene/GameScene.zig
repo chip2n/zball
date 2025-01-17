@@ -1,6 +1,5 @@
 const std = @import("std");
 const sprite = @import("sprites");
-const constants = @import("../constants.zig");
 const input = @import("../input.zig");
 const utils = @import("../utils.zig");
 const audio = @import("../audio.zig");
@@ -113,8 +112,8 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
             .dst = .{
                 .x = 0,
                 .y = 0,
-                .w = constants.viewport_size[0],
-                .h = constants.viewport_size[1],
+                .w = zball.viewport_size[0],
+                .h = zball.viewport_size[1],
             },
             .layer = .background,
         });
@@ -256,8 +255,8 @@ fn paused(scene: *GameScene) bool {
 fn renderPauseMenu(menu: *GameMenu) bool {
     ui.beginWindow(.{
         .id = "pause",
-        .x = constants.viewport_size[0] / 2,
-        .y = constants.viewport_size[1] / 2,
+        .x = zball.viewport_size[0] / 2,
+        .y = zball.viewport_size[1] / 2,
         .pivot = .{ 0.5, 0.5 },
         .style = if (menu.* == .settings) .hidden else .dialog,
     });

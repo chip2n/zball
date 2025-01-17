@@ -1,15 +1,12 @@
 const std = @import("std");
+const zball = @import("../zball.zig");
 const root = @import("root");
 const texture = @import("texture.zig");
-const constants = @import("../constants.zig");
 const Texture = texture.Texture;
 const m = @import("math");
 const Rect = m.Rect;
 const IRect = m.IRect;
 
-const max_quads = constants.max_quads;
-const max_verts = constants.max_verts;
-const max_cmds = max_quads;
 const max_batches = 16;
 
 const TextureId = usize;
@@ -92,9 +89,9 @@ pub const BatchRenderer = struct {
     pub fn init(allocator: std.mem.Allocator) !BatchRenderer {
         return .{
             .allocator = allocator,
-            .verts = try allocator.alloc(Vertex, max_verts),
+            .verts = try allocator.alloc(Vertex, zball.max_verts),
             .batches = try allocator.alloc(Batch, max_batches),
-            .buf = try allocator.alloc(RenderCommand, max_cmds),
+            .buf = try allocator.alloc(RenderCommand, zball.max_quads),
         };
     }
 
@@ -106,17 +103,6 @@ pub const BatchRenderer = struct {
 
     pub fn setTexture(self: *BatchRenderer, tex: Texture) void {
         self.tex = tex;
-        // const tw: f32 = @floatFromInt(tex.desc.width);
-        // const th: f32 = @floatFromInt(tex.desc.height);
-        // self.buf[self.idx] = .{
-        //     .switch_tex = .{
-        //         .tex = tex.id,
-        //         .tw = tw,
-        //         .th = th,
-        //     },
-        // };
-        // self.idx += 1;
-        // std.debug.assert(self.idx < self.buf.len);
     }
 
     pub const RenderOptions = struct {
