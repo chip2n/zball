@@ -1,6 +1,8 @@
 * zball
 [[https://github.com/chip2n/sokol-breakout/actions/workflows/ci.yaml/badge.svg]]
 
+A Breakout-clone written in Zig.
+
 ** Building for desktop
 
 #+begin_src bash
