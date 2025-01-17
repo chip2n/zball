@@ -194,11 +194,10 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     fb_current = gfx.createFramebuffer();
     fb_transition = gfx.createFramebuffer();
-    scene_mgr = SceneManager.init(allocator, levels.items);
 
     const seed: u64 = @bitCast(std.time.milliTimestamp());
     std.log.info("Seed: {}", .{seed});
-    prng = std.Random.DefaultPrng.init(seed);
+    scene_mgr = SceneManager.init(allocator, levels.items, seed);
 }
 
 pub fn deinit() void {

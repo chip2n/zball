@@ -54,6 +54,7 @@ comptime {
 const Game = @This();
 
 allocator: std.mem.Allocator,
+prng: std.Random.DefaultPrng,
 
 time: f32 = 0,
 lives: u8 = 3,
@@ -174,12 +175,13 @@ const PowerupType = enum {
     death,
 };
 
-pub fn init(allocator: std.mem.Allocator, lvl: Level) !Game {
+pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
     const entities = try allocator.alloc(Entity, max_entities);
     errdefer allocator.free(entities);
 
     var g = Game{
         .allocator = allocator,
+        .prng = std.Random.DefaultPrng.init(seed),
         .entities = entities,
     };
 
@@ -226,7 +228,6 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
     g.audio_clips.clear();
 
     const mouse_delta = input.mouse_delta;
-
     const old_paddle_pos = g.paddle_pos;
 
     { // Move paddle
@@ -550,7 +551,7 @@ fn spawnEntity(g: *Game, entity: Entity) !*Entity {
         if (e.type != .none) continue;
         e.* = entity;
         // Auto-fill some fields so the caller don't have to remember it
-        e.flame = FlameEmitter.init(.{ .rng = zball.prng.random(), .sprites = &zball.particleFlameSprites });
+        e.flame = FlameEmitter.init(.{ .rng = g.prng.random(), .sprites = &zball.particleFlameSprites });
         return e;
     } else {
         return error.MaxEntitiesReached;
@@ -560,7 +561,7 @@ fn spawnEntity(g: *Game, entity: Entity) !*Entity {
 fn spawnExplosion(g: *Game, pos: [2]f32, sp: sprite.Sprite) !void {
     const expl = try g.spawnEntity(.{ .type = .explosion, .pos = pos });
     expl.explosion = ExplosionEmitter.init(.{
-        .rng = zball.prng.random(),
+        .rng = g.prng.random(),
         .sprites = zball.particleExplosionSprites(sp),
     });
     expl.explosion.emitting = true;
@@ -569,7 +570,7 @@ fn spawnExplosion(g: *Game, pos: [2]f32, sp: sprite.Sprite) !void {
 fn spawnDrop(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
     if (g.drop_spawn_timer > 0) return;
 
-    const rng = zball.prng.random();
+    const rng = g.prng.random();
     const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
     switch (idx) {
         0 => return,
@@ -580,7 +581,7 @@ fn spawnDrop(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
 }
 
 fn spawnPowerup(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
-    const rng = zball.prng.random();
+    const rng = g.prng.random();
     const effect = rng.enumValue(PowerupType);
 
     // Speed of spawned powerup is randomized, but scales with speed of colliding entity
@@ -609,7 +610,7 @@ fn spawnPowerup(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
 }
 
 fn spawnCoin(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
-    const rng = zball.prng.random();
+    const rng = g.prng.random();
 
     // Speed of spawned coin is randomized, but scales with speed of colliding entity
     const new_speed = (speed / 2) + rng.float(f32) * 50;
@@ -712,36 +713,48 @@ fn ballSprite(g: Game) sprite.Sprite {
 }
 
 fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_normal: *[2]f32) bool {
-    const bounds = e.bounds() orelse return false;
+    var bounds = e.bounds() orelse return false;
+    bounds.x = p1[0] - bounds.w / 2;
+    bounds.y = p1[1] - bounds.h / 2;
 
     const vw: f32 = @floatFromInt(constants.viewport_size[0]);
     const vh: f32 = @floatFromInt(constants.viewport_size[1]);
 
     const delta = [2]f32{ p2[0] - p1[0], p2[1] - p1[1] };
 
-    // Top wall
+    var curr_dist = m.magnitude(delta);
+    var collided = false;
     const top_wall = Rect{ .x = 0, .y = brick_start_y, .w = vw, .h = 2 };
     if (collide(top_wall, .{ 0, 0 }, bounds, delta)) |coll| {
         out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
         out_normal.* = coll.normal;
-        return true;
+        curr_dist = m.magnitude(m.vsub(out_pos.*, p1));
+        collided = true;
     }
 
     const right_wall = Rect{ .x = vw - 2, .y = 0, .w = 2, .h = vh };
     if (collide(right_wall, .{ 0, 0 }, bounds, delta)) |coll| {
         out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
-        out_normal.* = coll.normal;
-        return true;
+        const dist = m.magnitude(m.vsub(out_pos.*, p1));
+        if (dist < curr_dist) {
+            curr_dist = dist;
+            out_normal.* = coll.normal;
+        }
+        collided = true;
     }
 
     const left_wall = Rect{ .x = 0, .y = 0, .w = 2, .h = vh };
     if (collide(left_wall, .{ 0, 0 }, bounds, delta)) |coll| {
         out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
-        out_normal.* = coll.normal;
-        return true;
+        const dist = m.magnitude(m.vsub(out_pos.*, p1));
+        if (dist < curr_dist) {
+            curr_dist = dist;
+            out_normal.* = coll.normal;
+        }
+        collided = true;
     }
 
-    return false;
+    return collided;
 }
 
 // Paddle bounces are handled as follows:
@@ -838,7 +851,7 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
         },
         .metal => {
             if (brick.lives > 0) {
-                const rng = zball.prng.random();
+                const rng = g.prng.random();
                 const weak_sprites = [_]sprite.Sprite{
                     .brick_metal_weak,
                     .brick_metal_weak2,

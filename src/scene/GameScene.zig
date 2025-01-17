@@ -29,10 +29,10 @@ clear_timer: f32 = 0,
 
 const GameMenu = enum { none, pause, settings };
 
-pub fn init(allocator: std.mem.Allocator, lvl: Level) !GameScene {
+pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !GameScene {
     return GameScene{
         .allocator = allocator,
-        .game_state = try Game.init(allocator, lvl),
+        .game_state = try Game.init(allocator, lvl, seed),
     };
 }
 
