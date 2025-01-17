@@ -48,10 +48,8 @@ pub const laser_cooldown = 0.2;
 pub const gravity = 400;
 pub const terminal_velocity = 300;
 
-// TODO read these from sprites
 pub const brick_w = 17;
 pub const brick_h = 10;
-
 pub const brick_start_y = 8;
 
 pub const initial_ball_dir: [2]f32 = blk: {
@@ -257,12 +255,6 @@ pub fn frame(now: f64) !void {
 
     // Render the current scene, as well as the next scene if we're transitioning
     try scene_mgr.current.frame(dt);
-
-    // TODO render FPS when player presses a button
-    // gfx.setTexture(gfx.fontTexture());
-    // var buf: [64]u8 = undefined;
-    // const text = try std.fmt.bufPrint(&buf, "{d:2}", .{dt});
-    // gfx.renderText(text, 16, 16, 5);
 
     gfx.renderMain(fb_current);
 
