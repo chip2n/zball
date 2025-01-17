@@ -3,53 +3,29 @@ const sprite = @import("sprites");
 const constants = @import("constants.zig");
 const audio = @import("audio.zig");
 const utils = @import("utils.zig");
-
 const zball = @import("zball.zig");
-const BrickId = zball.BrickId;
-const ExplosionEmitter = zball.ExplosionEmitter;
-const FlameEmitter = zball.FlameEmitter;
-
 const level = @import("level.zig");
-const Level = level.Level;
+const m = @import("math");
 
 const InputState = @import("input.zig").State;
-
-const m = @import("math");
-const Rect = m.Rect;
 const collide = @import("collision.zig").collide;
 const CollisionInfo = @import("collision.zig").CollisionInfo;
 
+const BrickId = zball.BrickId;
+const ExplosionEmitter = zball.ExplosionEmitter;
+const FlameEmitter = zball.FlameEmitter;
+const Level = level.Level;
+const Rect = m.Rect;
+
 const pi = std.math.pi;
 
-// TODO move to constants?
-const paddle_speed: f32 = 180;
-const ball_base_speed: f32 = 200;
-const ball_speed_min: f32 = 100;
-const ball_speed_max: f32 = 300;
 const initial_paddle_pos: [2]f32 = .{
     @as(f32, @floatFromInt(constants.viewport_size[0])) / 2,
     @as(f32, @floatFromInt(constants.viewport_size[1])) - 8.5,
 };
-const max_balls = 32;
-const max_entities = 1024;
-const coin_freq = 0.4;
-const powerup_freq = 0.1;
 
-/// Prevents two drops being spawned back-to-back in a quick succession
-const drop_spawn_cooldown = 0.5;
-
-const flame_duration = 5;
-const laser_duration = 5;
-const laser_speed = 300;
-const laser_cooldown = 0.2;
 const brick_start_y = constants.brick_start_y;
 const death_delay = 2.5;
-const gravity = 400;
-const terminal_velocity = 300;
-
-comptime {
-    std.debug.assert(coin_freq + powerup_freq <= 1);
-}
 
 const Game = @This();
 
@@ -66,7 +42,7 @@ paddle_magnet: bool = false,
 
 entities: []Entity,
 
-ball_speed: f32 = ball_base_speed,
+ball_speed: f32 = constants.ball_base_speed,
 ball_size: BallSize = .normal,
 
 // When player dies, we start this timer. When it reaches zero, we start a new
@@ -176,7 +152,7 @@ const PowerupType = enum {
 };
 
 pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
-    const entities = try allocator.alloc(Entity, max_entities);
+    const entities = try allocator.alloc(Entity, constants.max_entities);
     errdefer allocator.free(entities);
 
     var g = Game{
@@ -244,7 +220,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             if (input.down(.right)) {
                 paddle_dx += 1;
             }
-            break :blk paddle_dx * paddle_speed * dt;
+            break :blk paddle_dx * constants.paddle_speed * dt;
         };
 
         const bounds = g.paddleBounds();
@@ -264,7 +240,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                 .type = .laser,
                 .pos = .{ bounds.x + 2, bounds.y },
                 .dir = .{ 0, -1 },
-                .speed = laser_speed,
+                .speed = constants.laser_speed,
                 .sprite = .particle_laser,
                 .collision_layers = .{
                     .bricks = true,
@@ -274,13 +250,13 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                 .type = .laser,
                 .pos = .{ bounds.x + bounds.w - 2, bounds.y },
                 .dir = .{ 0, -1 },
-                .speed = laser_speed,
+                .speed = constants.laser_speed,
                 .sprite = .particle_laser,
                 .collision_layers = .{
                     .bricks = true,
                 },
             }) catch break :shoot;
-            g.laser_cooldown_timer = laser_cooldown;
+            g.laser_cooldown_timer = constants.laser_cooldown;
             g.play(.{ .clip = .laser });
         }
 
@@ -318,8 +294,8 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             if (e.type == .none) break :blk;
             if (!e.gravity) break :blk;
             var vel = m.vmul(e.dir, e.speed);
-            vel[1] += dt * gravity;
-            vel[1] = @min(vel[1], terminal_velocity);
+            vel[1] += dt * constants.gravity;
+            vel[1] = @min(vel[1], constants.terminal_velocity);
             e.dir = vel;
             m.normalize(&e.dir);
             e.speed = m.magnitude(vel);
@@ -497,7 +473,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         } else {
             const ball = try g.spawnBall(g.ballOnPaddlePos(), constants.initial_ball_dir);
             ball.magnetized = true;
-            g.ball_speed = ball_base_speed;
+            g.ball_speed = constants.ball_base_speed;
             g.ball_size = .normal;
             g.flame_timer = 0;
         }
@@ -571,7 +547,7 @@ fn spawnDrop(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
     if (g.drop_spawn_timer > 0) return;
 
     const rng = g.prng.random();
-    const idx = rng.weightedIndex(f32, &.{ 1 - powerup_freq - coin_freq, powerup_freq, coin_freq });
+    const idx = rng.weightedIndex(f32, &.{ 1 - constants.powerup_freq - constants.coin_freq, constants.powerup_freq, constants.coin_freq });
     switch (idx) {
         0 => return,
         1 => g.spawnPowerup(pos, speed, dir),
@@ -888,9 +864,9 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
         var mult: f32 = 1.0;
 
         // Fast balls give more points
-        if (g.ball_speed > ball_base_speed) {
-            const current_extra_speed = g.ball_speed - ball_base_speed;
-            const max_extra_speed = ball_speed_max - ball_base_speed;
+        if (g.ball_speed > constants.ball_base_speed) {
+            const current_extra_speed = g.ball_speed - constants.ball_base_speed;
+            const max_extra_speed = constants.ball_speed_max - constants.ball_base_speed;
             const bonus = @round(50 * (current_extra_speed / max_extra_speed));
             points += bonus;
         }
@@ -942,14 +918,14 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
             5 * pi / 4.0,
         }),
         .flame => {
-            g.flame_timer = flame_duration;
+            g.flame_timer = constants.flame_duration;
             for (g.entities) |*e| {
                 if (e.type != .ball) continue;
                 e.flame.emitting = true;
             }
         },
         .laser => {
-            g.laser_timer = laser_duration;
+            g.laser_timer = constants.laser_duration;
         },
         .paddle_size_up => {
             const sizes = std.enums.values(PaddleSize);
@@ -965,10 +941,10 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
             }
         },
         .ball_speed_up => {
-            g.ball_speed = @min(ball_speed_max, g.ball_speed + 50);
+            g.ball_speed = @min(constants.ball_speed_max, g.ball_speed + 50);
         },
         .ball_speed_down => {
-            g.ball_speed = @max(ball_speed_min, g.ball_speed - 50);
+            g.ball_speed = @max(constants.ball_speed_min, g.ball_speed - 50);
         },
         .ball_size_up => {
             const sizes = std.enums.values(BallSize);
@@ -1005,7 +981,7 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
 }
 
 fn splitBall(g: *Game, angles: []const f32) void {
-    var active_balls = std.BoundedArray(usize, max_balls){ .len = 0 };
+    var active_balls = std.BoundedArray(usize, constants.max_balls){ .len = 0 };
     for (g.entities, 0..) |e, i| {
         if (e.type != .ball) continue;
         active_balls.append(i) catch continue;
