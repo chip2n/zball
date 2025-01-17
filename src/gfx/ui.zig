@@ -464,10 +464,6 @@ pub fn sprite(v: SpriteDesc) bool {
         .h = @floatFromInt(sp.bounds.h),
     };
     const pressed = io.mouse_pressed == .LEFT and bounds.containsPoint(io.mouse_pos[0], io.mouse_pos[1]);
-    if (io.mouse_pressed == .LEFT) {
-        std.log.warn("{d:.2} {d:.2}", .{ io.mouse_pos[0], io.mouse_pos[1] });
-    }
-
     // TODO also do this on the other elements
     win_data.same_line = false;
     win_data.cursor_advance[0] = @floatFromInt(sp.bounds.w);

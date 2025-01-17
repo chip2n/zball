@@ -2,7 +2,7 @@ const std = @import("std");
 const sprite = @import("sprites");
 const constants = @import("../constants.zig");
 const input = @import("../input.zig");
-const game = @import("../game.zig");
+const zball = @import("../zball.zig");
 const shd = @import("shader");
 const level = @import("../level.zig");
 const m = @import("math");
@@ -100,7 +100,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             scene.show_save_dialog = false;
             scene.show_load_dialog = false;
         } else {
-            game.scene_mgr.switchTo(.title);
+            zball.scene_mgr.switchTo(.title);
         }
     }
 
@@ -163,7 +163,7 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
         }
     }
 
-    const brick_ids = comptime std.enums.values(game.BrickId);
+    const brick_ids = comptime std.enums.values(zball.BrickId);
     var palette: [brick_ids.len]sprite.Sprite = undefined;
     var palette_width: usize = 0;
     inline for (brick_ids, 0..) |id, i| {
@@ -285,7 +285,7 @@ fn saveLevel(scene: *EditorScene, path: []const u8) !void {
 
     for (scene.bricks.items) |b| {
         if (b.sprite == .brick0) continue;
-        const id = try game.spriteToBrickId(b.sprite);
+        const id = try zball.spriteToBrickId(b.sprite);
         try entities.append(.{
             .type = .brick,
             .x = @intFromFloat(b.pos[0]),
@@ -306,10 +306,10 @@ fn loadLevel(scene: *EditorScene, path: []const u8) !void {
     scene.bricks.clearAndFree();
 
     for (lvl.entities) |e| {
-        const id = try game.BrickId.parse(e.sprite);
+        const id = try zball.BrickId.parse(e.sprite);
         try scene.bricks.append(.{
             .pos = .{ @floatFromInt(e.x), @floatFromInt(e.y) },
-            .sprite = game.brickIdToSprite(id),
+            .sprite = zball.brickIdToSprite(id),
         });
     }
 }

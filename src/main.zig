@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const constants = @import("constants.zig");
 const input = @import("input.zig");
 const utils = @import("utils.zig");
-const game = @import("game.zig");
+const zball = @import("zball.zig");
 const gfx = @import("gfx.zig");
 
 const sokol = @import("sokol");
@@ -46,7 +46,7 @@ export fn sokolInit() void {
     });
     stm.setup();
 
-    game.init(allocator) catch |err| {
+    zball.init(allocator) catch |err| {
         std.log.err("Unable to initialize game: {}", .{err});
         std.process.exit(1);
     };
@@ -55,7 +55,7 @@ export fn sokolInit() void {
 export fn sokolFrame() void {
     const ticks = stm.now();
     const now = stm.sec(ticks);
-    game.frame(now) catch |err| {
+    zball.frame(now) catch |err| {
         std.log.err("Unable to render frame: {}", .{err});
         std.process.exit(1);
     };
@@ -67,18 +67,10 @@ export fn sokolEvent(ev: [*c]const sapp.Event) void {
 }
 
 export fn sokolCleanup() void {
-    game.deinit();
+    zball.deinit();
     sg.shutdown();
 
     if (use_gpa) {
         _ = gpa.deinit();
     }
-}
-
-// * Tests
-
-test {
-    std.testing.refAllDecls(@import("audio.zig"));
-    std.testing.refAllDecls(@import("level.zig"));
-    std.testing.refAllDecls(@import("collision.zig"));
 }

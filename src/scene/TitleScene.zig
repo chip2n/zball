@@ -1,5 +1,5 @@
 const input = @import("../input.zig");
-const game = @import("../game.zig");
+const zball = @import("../zball.zig");
 const constants = @import("../constants.zig");
 const utils = @import("../utils.zig");
 const settings = @import("../settings.zig");
@@ -71,7 +71,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         defer ui.endWindow();
 
         if (ui.selectionItem("Start", .{})) {
-            game.scene_mgr.switchTo(.game);
+            zball.scene_mgr.switchTo(.game);
         }
         if (ui.selectionItem("Settings", .{})) {
             scene.settings_open = true;
@@ -81,7 +81,7 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         // deal with the browser intgration with the file system)
         if (!utils.is_web) {
             if (ui.selectionItem("Editor", .{})) {
-                game.scene_mgr.switchTo(.editor);
+                zball.scene_mgr.switchTo(.editor);
             }
         }
 

@@ -9,7 +9,7 @@ const sapp = sokol.app;
 pub const showMouse = sapp.showMouse;
 pub const lockMouse = sapp.lockMouse;
 
-const game = @import("game.zig");
+const zball = @import("zball.zig");
 
 const KeyTable = std.EnumMap(InputAction, struct {
     pressed: bool = false,
@@ -28,37 +28,45 @@ const InputAction = enum {
     editor_load,
 };
 
-const State = struct {
+pub const State = struct {
     keys: KeyTable = KeyTable.initFull(.{}),
 
     /// Mouse position in unscaled pixels
     mouse_pos: [2]f32 = .{ 0, 0 },
     mouse_delta: [2]f32 = .{ 0, 0 },
+
+    pub fn down(self: @This(), action: InputAction) bool {
+        return self.keys.get(action).?.down;
+    }
+
+    pub fn pressed(self: @This(), action: InputAction) bool {
+        return self.keys.get(action).?.pressed;
+    }
 };
-var state: State = .{};
+pub var state: State = .{};
 
 const keybindings = .{
-    .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{ .back } },
-    .{ .F1, &.{ .editor_save } },
-    .{ .F2, &.{ .editor_load } },
-    .{ .LEFT, &.{ .left } },
-    .{ .RIGHT, &.{ .right } },
-    .{ .SPACE, &.{ .shoot } },
+    .{ if (utils.is_web) .BACKSPACE else .ESCAPE, &.{.back} },
+    .{ .F1, &.{.editor_save} },
+    .{ .F2, &.{.editor_load} },
+    .{ .LEFT, &.{.left} },
+    .{ .RIGHT, &.{.right} },
+    .{ .SPACE, &.{.shoot} },
 };
 
 const mousebindings = .{
     .{ .LEFT, &.{ .shoot, .editor_draw } },
     .{ .RIGHT, &.{ .shoot, .editor_erase } },
-    .{ .MIDDLE, &.{ .shoot } },
+    .{ .MIDDLE, &.{.shoot} },
 };
 
 pub fn pressed(action: InputAction) bool {
-    if (game.scene_mgr.transition_progress != 0) return false;
+    if (zball.scene_mgr.transition_progress != 0) return false;
     return state.keys.get(action).?.pressed;
 }
 
 pub fn down(action: InputAction) bool {
-    if (game.scene_mgr.transition_progress != 0) return false;
+    if (zball.scene_mgr.transition_progress != 0) return false;
     return state.keys.get(action).?.down;
 }
 
