@@ -3,12 +3,12 @@
     .version = "0.3.2",
     .dependencies = .{
         .stb = .{
-            .url = "git+https://github.com/nothings/stb.git#013ac3beddff3dbffafd5177e7972067cd2b5083",
-            .hash = "1220144256113210beb90ac4b0d6f469a6da267869d9fcb6c3f49a909d63cd2cd9f6",
+            .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
+            .hash = "122082911aadaef3c836d3833f7c60386ee1ee46feffb6c54785f784801c32212aaa",
         },
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#9d113214f7750f8ab68b465b2605ce308e995fb4",
-            .hash = "1220489430d6287009e225a939fb084ab330d497fc7fdca137d2cc2ef5f0ccf71ff3",
+            .url = "git+https://github.com/floooh/sokol-zig.git#3443c2880afdcd8a6ecdd387174544e71c85ba87",
+            .hash = "1220b23309471165b60f40ba6a0979feecb9cbc110b512d7b30e02cd64909847aab5",
         },
         .sokol_tools = .{
             .url = "git+https://github.com/floooh/sokol-tools-bin.git#d80b1d8f20fef813092ba37f26723d3880839651",
