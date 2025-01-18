@@ -70,7 +70,7 @@ pub const EntityType = enum {
 
 pub const Entity = struct {
     type: EntityType = .none,
-    pos: [2]f32 = .{ 0, 0 },
+    pos: [2]f32 = .{ 0, 0 }, // Origin: top-left corner
     dir: [2]f32 = .{ 0, 0 },
     speed: f32 = 0,
     collision_layers: CollisionLayers = .{},
@@ -89,17 +89,20 @@ pub const Entity = struct {
     brick_id: ?BrickId = null,
     lives: u8 = 1,
 
-    pub fn bounds(e: Entity) ?Rect {
-        const sprite_id = e.sprite orelse return null;
+    pub fn center(e: Entity) [2]f32 {
+        const sprite_id = e.sprite orelse return e.pos;
         const sp = sprite.get(sprite_id);
         const w: f32 = @floatFromInt(sp.bounds.w);
         const h: f32 = @floatFromInt(sp.bounds.h);
-        return Rect{
-            .x = e.pos[0] - w / 2,
-            .y = e.pos[1] - h / 2,
-            .w = w,
-            .h = h,
-        };
+        return .{ e.pos[0] + w / 2, e.pos[1] + h / 2 };
+    }
+
+    pub fn bounds(e: Entity) Rect {
+        const sprite_id = e.sprite orelse return .{ .x = e.pos[0], .y = e.pos[1], .w = 0, .h = 0 };
+        const sp = sprite.get(sprite_id);
+        const w: f32 = @floatFromInt(sp.bounds.w);
+        const h: f32 = @floatFromInt(sp.bounds.h);
+        return Rect{ .x = e.pos[0], .y = e.pos[1], .w = w, .h = h };
     }
 };
 
@@ -169,17 +172,9 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
             .brick => {
                 const id = try BrickId.parse(e.sprite);
                 var entity = brickEntity(id);
-
                 const fx: f32 = @floatFromInt(e.x);
                 const fy: f32 = @floatFromInt(e.y);
-
-                const s: sprite.Sprite = entity.sprite orelse return error.BrickSpriteMissing;
-                const sp = sprite.get(s);
-                const w: f32 = @floatFromInt(sp.bounds.w);
-                const h: f32 = @floatFromInt(sp.bounds.h);
-
-                // TODO not a fan of the entity pivot point differences between editor and game
-                entity.pos = .{ fx + w / 2, fy + h / 2 + brick_start_y };
+                entity.pos = .{ fx, fy + brick_start_y };
                 _ = try g.spawnEntity(entity);
             },
         }
@@ -223,7 +218,11 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         };
 
         const bounds = g.paddleBounds();
-        g.paddle_pos[0] = std.math.clamp(g.paddle_pos[0] + dx, bounds.w / 2, zball.viewport_size[0] - bounds.w / 2);
+        g.paddle_pos[0] = std.math.clamp(
+            g.paddle_pos[0] + dx,
+            bounds.w / 2,
+            zball.viewport_size[0] - bounds.w / 2,
+        );
         for (g.entities) |*e| {
             if (e.type == .none) continue;
             if (!e.magnetized) continue;
@@ -237,7 +236,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             const bounds = g.paddleBounds();
             _ = g.spawnEntity(.{
                 .type = .laser,
-                .pos = .{ bounds.x + 2, bounds.y },
+                .pos = .{ bounds.x - 1, bounds.y },
                 .dir = .{ 0, -1 },
                 .speed = zball.laser_speed,
                 .sprite = .particle_laser,
@@ -348,14 +347,14 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         }
 
         if (e.collision_layers.paddle) {
-            if (g.collidePaddle(e, old_pos, e.pos, old_paddle_pos)) |coll| pcoll: {
+            if (g.collidePaddle(e, old_pos, e.pos, old_paddle_pos)) |coll| {
                 if (e.collectible) {
                     g.collectEntity(e);
                 } else {
                     const paddle_bounds = g.paddleBounds();
-                    const entity_bounds = e.bounds() orelse break :pcoll;
+                    const entity_bounds = e.bounds();
                     if (coll.normal[1] == 1) {
-                        e.pos = .{ coll.pos[0] + entity_bounds.w / 2, coll.pos[1] + entity_bounds.h / 2 };
+                        e.pos = .{ coll.pos[0], coll.pos[1] };
                         e.dir = paddleReflect(g.paddle_pos[0], paddle_bounds.w, e.pos, e.dir);
                         if (g.paddle_magnet) {
                             // Paddle is magnetized - make ball stick!
@@ -366,7 +365,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                             g.play(.{ .clip = .bounce });
                         }
                     } else if (coll.normal[0] == -1) {
-                        e.pos[0] = paddle_bounds.x - entity_bounds.w / 2;
+                        e.pos[0] = paddle_bounds.x - entity_bounds.w;
                         e.dir = .{ -1, 1 };
                         m.normalize(&e.dir);
                         if (e.controlled) {
@@ -374,7 +373,7 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                             e.controlled = false;
                         }
                     } else if (coll.normal[0] == 1) {
-                        e.pos[0] = paddle_bounds.x + paddle_bounds.w + entity_bounds.w / 2;
+                        e.pos[0] = paddle_bounds.x + paddle_bounds.w + entity_bounds.w;
                         e.dir = .{ 1, 1 };
                         m.normalize(&e.dir);
                         if (e.controlled) {
@@ -389,7 +388,9 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         // If entity outside level bounds, always kill
         const vw: f32 = @floatFromInt(zball.viewport_size[0]);
         const vh: f32 = @floatFromInt(zball.viewport_size[1]);
-        if (e.pos[0] < -16 or e.pos[0] > vw + 16 or e.pos[1] > vh + 16 or e.pos[1] < -16) {
+        var level_bounds = Rect{ .x = 0, .y = 0, .w = vw, .h = vh - 8 };
+        level_bounds.grow(.{ 16, 16 });
+        if (!level_bounds.overlaps(e.bounds())) {
             switch (e.type) {
                 .ball => {
                     g.play(.{ .clip = .explode, .vol = 0.5 });
@@ -445,9 +446,9 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
     }
 
     for (g.entities) |*e| {
-        e.flame.pos = e.pos;
+        e.flame.pos = e.center();
         e.flame.update(dt);
-        e.explosion.pos = e.pos;
+        e.explosion.pos = e.center();
         e.explosion.update(dt);
     }
 
@@ -646,10 +647,11 @@ fn powerupSprite(p: PowerupType) sprite.Sprite {
 fn ballOnPaddlePos(g: Game) [2]f32 {
     const paddle_bounds = g.paddleBounds();
     const ball_sprite = sprite.get(g.ballSprite());
+    const ball_w: f32 = @floatFromInt(ball_sprite.bounds.w);
     const ball_h: f32 = @floatFromInt(ball_sprite.bounds.h);
     return .{
-        g.paddle_pos[0],
-        g.paddle_pos[1] - paddle_bounds.h / 2 - ball_h / 2,
+        g.paddle_pos[0] - ball_w / 2,
+        g.paddle_pos[1] - paddle_bounds.h / 2 - ball_h,
     };
 }
 
@@ -688,9 +690,9 @@ fn ballSprite(g: Game) sprite.Sprite {
 }
 
 fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_normal: *[2]f32) bool {
-    var bounds = e.bounds() orelse return false;
-    bounds.x = p1[0] - bounds.w / 2;
-    bounds.y = p1[1] - bounds.h / 2;
+    var bounds = e.bounds();
+    bounds.x = p1[0];
+    bounds.y = p1[1];
 
     const vw: f32 = @floatFromInt(zball.viewport_size[0]);
     const vh: f32 = @floatFromInt(zball.viewport_size[1]);
@@ -701,16 +703,16 @@ fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_n
     var collided = false;
     const top_wall = Rect{ .x = 0, .y = brick_start_y, .w = vw, .h = 2 };
     if (collide(top_wall, .{ 0, 0 }, bounds, delta)) |coll| {
-        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
+        out_pos.* = coll.pos;
         out_normal.* = coll.normal;
-        curr_dist = m.magnitude(m.vsub(out_pos.*, p1));
+        curr_dist = m.magnitude(m.vsub(coll.pos, p1));
         collided = true;
     }
 
     const right_wall = Rect{ .x = vw - 2, .y = 0, .w = 2, .h = vh };
     if (collide(right_wall, .{ 0, 0 }, bounds, delta)) |coll| {
-        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
-        const dist = m.magnitude(m.vsub(out_pos.*, p1));
+        out_pos.* = coll.pos;
+        const dist = m.magnitude(m.vsub(coll.pos, p1));
         if (dist < curr_dist) {
             curr_dist = dist;
             out_normal.* = coll.normal;
@@ -720,8 +722,8 @@ fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_n
 
     const left_wall = Rect{ .x = 0, .y = 0, .w = 2, .h = vh };
     if (collide(left_wall, .{ 0, 0 }, bounds, delta)) |coll| {
-        out_pos.* = .{ coll.pos[0] + bounds.w / 2, coll.pos[1] + bounds.h / 2 };
-        const dist = m.magnitude(m.vsub(out_pos.*, p1));
+        out_pos.* = coll.pos;
+        const dist = m.magnitude(m.vsub(coll.pos, p1));
         if (dist < curr_dist) {
             curr_dist = dist;
             out_normal.* = coll.normal;
@@ -746,11 +748,11 @@ fn collideLevelBounds(e: Entity, p1: [2]f32, p2: [2]f32, out_pos: *[2]f32, out_n
 // direction changes.
 fn collidePaddle(g: *Game, e: *Entity, p1: [2]f32, p2: [2]f32, old_paddle_pos: [2]f32) ?CollisionInfo {
     const paddle_bounds = g.paddleBounds();
-    const entity_bounds = e.bounds() orelse return null;
+    const entity_bounds = e.bounds();
 
     var old_entity_bounds = entity_bounds;
-    old_entity_bounds.x = p1[0] - entity_bounds.w / 2;
-    old_entity_bounds.y = p1[1] - entity_bounds.h / 2;
+    old_entity_bounds.x = p1[0];
+    old_entity_bounds.y = p1[1];
     var old_paddle_bounds = paddle_bounds;
     old_paddle_bounds.x = old_paddle_pos[0] - paddle_bounds.w / 2;
     old_paddle_bounds.y = old_paddle_pos[1] - paddle_bounds.h / 2;
@@ -767,7 +769,7 @@ fn collidePaddle(g: *Game, e: *Entity, p1: [2]f32, p2: [2]f32, old_paddle_pos: [
 
 fn collideBricks(g: *Game, ball: *const Entity, old_pos: [2]f32, new_pos: [2]f32) ?CollisionInfo {
     const delta = m.vsub(new_pos, old_pos);
-    const ball_bounds = ball.bounds() orelse return null;
+    const ball_bounds = ball.bounds();
 
     var old_ball_bounds = ball_bounds;
     old_ball_bounds.x = old_pos[0];
@@ -780,7 +782,7 @@ fn collideBricks(g: *Game, ball: *const Entity, old_pos: [2]f32, new_pos: [2]f32
     for (g.entities) |*e| {
         if (e.type != .brick) continue;
 
-        const brick_bounds = e.bounds() orelse continue;
+        const brick_bounds = e.bounds();
         const result = collide(brick_bounds, .{ 0, 0 }, old_ball_bounds, delta) orelse continue;
         collided = true;
 
@@ -896,7 +898,7 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
 fn destroyBricksCircle(g: *Game, origin: [2]f32, radius: f32) void {
     for (g.entities) |*e| {
         if (e.type != .brick) continue;
-        const dir = m.vsub(e.pos, origin);
+        const dir = m.vsub(e.center(), origin);
         if (m.magnitude(dir) <= radius) {
             _ = g.destroyBrick(e);
         }

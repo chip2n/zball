@@ -151,18 +151,18 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (!e.rendered) continue;
         if (e.type == .ball) {
             if (e.flame.emitting) {
-                gfx.addLight(e.pos, 0xf2a54c);
+                gfx.addLight(e.center(), 0xf2a54c);
             }
         }
         if (e.type == .laser) {
-            gfx.addLight(e.pos, 0x99E550);
+            gfx.addLight(e.center(), 0x99E550);
         }
         if (e.type == .brick and e.sprite == .brick_expl) {
-            gfx.addLight(.{ e.pos[0], e.pos[1] }, 0xf2a54c);
+            gfx.addLight(e.center(), 0xf2a54c);
         }
         if (e.sprite) |s| {
             const sp = sprite.get(s);
-            const dst = e.bounds().?;
+            const dst = e.bounds();
             gfx.render(.{
                 .src = m.irect(sp.bounds),
                 .dst = dst,
