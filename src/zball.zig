@@ -203,8 +203,6 @@ pub fn spriteToBrickId(sp: sprite.Sprite) !BrickId {
 
 pub var arena: std.heap.ArenaAllocator = undefined;
 pub var prng: std.Random.DefaultPrng = undefined;
-pub var time: f64 = 0;
-pub var dt: f32 = 0;
 pub var levels: std.ArrayList(Level) = undefined;
 pub var scene_mgr: SceneManager = undefined;
 pub var fb_current: gfx.Framebuffer = undefined;
@@ -246,11 +244,7 @@ pub fn deinit() void {
     arena.deinit();
 }
 
-pub fn frame(now: f64) !void {
-    const new_dt: f32 = @floatCast(now - time);
-    dt = new_dt;
-    time = now;
-
+pub fn frame(dt: f32) !void {
     try scene_mgr.update(dt);
 
     // Render the current scene, as well as the next scene if we're transitioning

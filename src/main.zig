@@ -20,6 +20,8 @@ pub const std_options = std.Options{
 const use_gpa = !utils.is_web;
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
+var last_time: u64 = 0;
+
 // * Sokol
 
 pub fn main() !void {
@@ -33,6 +35,10 @@ pub fn main() !void {
         .icon = .{ .sokol_default = true },
         .window_title = "ZBall",
         .logger = .{ .func = slog.func },
+        .high_dpi = false,
+        .swap_interval = 1,
+        .fullscreen = false,
+        .html5_canvas_resize = false
     });
 }
 
@@ -52,9 +58,8 @@ export fn sokolInit() void {
 }
 
 export fn sokolFrame() void {
-    const ticks = stm.now();
-    const now = stm.sec(ticks);
-    zball.frame(now) catch |err| {
+    const dt: f32 = @floatCast(stm.sec(stm.laptime(&last_time)));
+    zball.frame(dt) catch |err| {
         std.log.err("Unable to render frame: {}", .{err});
         std.process.exit(1);
     };
