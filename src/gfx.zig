@@ -322,7 +322,7 @@ pub fn renderMain(fb: Framebuffer) void {
         bind.images[shd.IMG_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params2));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
