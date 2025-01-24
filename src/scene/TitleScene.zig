@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const zball = @import("../zball.zig");
 const input = @import("../input.zig");
 const utils = @import("../utils.zig");
@@ -55,7 +56,11 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
             .style = .transparent,
         });
         defer ui.endWindow();
-        ui.text("(C) 2024 - Andreas Arvidsson", .{});
+        if (builtin.mode == .Debug) {
+            ui.text("(C) 2024 - Andreas Arvidsson (DEBUG)", .{});
+        } else {
+            ui.text("(C) 2024 - Andreas Arvidsson", .{});
+        }
     }
 
     { // Main menu
