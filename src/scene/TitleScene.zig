@@ -47,19 +47,17 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
     defer ui.end();
 
     { // Footer
-        ui.beginWindow(.{
-            .id = "footer",
-            .x = 8,
-            .y = zball.viewport_size[1],
-            .z = 10,
-            .pivot = .{ 0, 1 },
-            .style = .transparent,
-        });
-        defer ui.endWindow();
         if (builtin.mode == .Debug) {
-            ui.text("(C) 2024 - Andreas Arvidsson (DEBUG)", .{});
-        } else {
-            ui.text("(C) 2024 - Andreas Arvidsson", .{});
+            ui.beginWindow(.{
+                .id = "footer",
+                .x = 8,
+                .y = zball.viewport_size[1],
+                .z = 10,
+                .pivot = .{ 0, 1 },
+                .style = .transparent,
+            });
+            defer ui.endWindow();
+            ui.text("DEBUG", .{});
         }
     }
 
