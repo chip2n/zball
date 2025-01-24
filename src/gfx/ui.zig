@@ -243,6 +243,7 @@ pub fn endWindow() void {
                 .src = m.irect(overlay.bounds),
                 .dst = .{ .x = 0, .y = 0, .w = zball.viewport_size[0], .h = zball.viewport_size[1] },
                 .z = win_z - 0.1,
+                .layer = .ui,
             });
 
             batch.renderNinePatch(.{
