@@ -121,9 +121,13 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .emsdk = emsdk,
             .use_webgl2 = true,
+            .use_webgpu = false,
             .use_emmalloc = true,
             .use_filesystem = false,
-            .extra_args = &.{ "-sUSE_OFFSET_CONVERTER=1", "-sSTACK_SIZE=262144" },
+            .extra_args = &.{
+                "-sUSE_OFFSET_CONVERTER=1",
+                "-sSTACK_SIZE=262144",
+            },
             .shell_file_path = b.path("shell.html"),
         });
 
