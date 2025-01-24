@@ -1,18 +1,107 @@
 const std = @import("std");
-const zm = @import("zmath");
 
-pub const identity = zm.identity;
-pub const translation = zm.translation;
-pub const orthographicRh = zm.orthographicRh;
-pub const orthographicLh = zm.orthographicLh;
-pub const mul = zm.mul;
-pub const Vec4 = zm.f32x4;
-pub const Mat4 = zm.Mat;
-pub const scaling = zm.scaling;
-pub const inverse = zm.inverse;
+pub const Vec4 = @Vector(4, f32);
+pub const Mat4 = [4]@Vector(4, f32);
 
 pub const Rect = GenRect(f32);
 pub const IRect = GenRect(u32);
+
+pub fn identity() Mat4 {
+    return .{
+        .{ 1.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 1.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    };
+}
+
+pub fn translation(x: f32, y: f32, z: f32) Mat4 {
+    return .{
+        .{ 1.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 1.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ x, y, z, 1.0 },
+    };
+}
+
+pub fn scaling(x: f32, y: f32, z: f32) Mat4 {
+    return .{
+        .{ x, 0.0, 0.0, 0.0 },
+        .{ 0.0, y, 0.0, 0.0 },
+        .{ 0.0, 0.0, z, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    };
+}
+
+pub fn orthographicLh(w: f32, h: f32, near: f32, far: f32) Mat4 {
+    const r = 1 / (far - near);
+    return .{
+        .{ 2 / w, 0.0, 0.0, 0.0 },
+        .{ 0.0, 2 / h, 0.0, 0.0 },
+        .{ 0.0, 0.0, r, 0.0 },
+        .{ 0.0, 0.0, -r * near, 1.0 },
+    };
+}
+
+pub fn mul(a: Mat4, b: Mat4) Mat4 {
+    var c: Mat4 = undefined;
+    comptime var m: u32 = 0;
+    inline while (m < 4) : (m += 1) {
+        c[m] = .{
+            a[m][0] * b[0][0] + a[m][1] * b[1][0] + a[m][2] * b[2][0] + a[m][3] * b[3][0],
+            a[m][0] * b[0][1] + a[m][1] * b[1][1] + a[m][2] * b[2][1] + a[m][3] * b[3][1],
+            a[m][0] * b[0][2] + a[m][1] * b[1][2] + a[m][2] * b[2][2] + a[m][3] * b[3][2],
+            a[m][0] * b[0][3] + a[m][1] * b[1][3] + a[m][2] * b[2][3] + a[m][3] * b[3][3],
+        };
+    }
+    return c;
+}
+
+pub fn mulVecMat(v: Vec4, m: Mat4) Vec4 {
+    return .{
+        m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2] + m[3][0] * v[3],
+        m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2] + m[3][1] * v[3],
+        m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2] + m[3][2] * v[3],
+        m[0][3] * v[0] + m[1][3] * v[1] + m[2][3] * v[2] + m[3][3] * v[3],
+    };
+}
+
+pub fn inverse(matrix: Mat4) ?Mat4 {
+    const m: [16]f32 = @bitCast(matrix);
+    var inv: [16]f32 = undefined;
+    var result: [16]f32 = undefined;
+    var det: f32 = 0.0;
+    var i: usize = 0;
+
+    inv[0] = m[5] * m[10] * m[15] - m[5] * m[11] * m[14] - m[9] * m[6] * m[15] + m[9] * m[7] * m[14] + m[13] * m[6] * m[11] - m[13] * m[7] * m[10];
+    inv[4] = -m[4] * m[10] * m[15] + m[4] * m[11] * m[14] + m[8] * m[6] * m[15] - m[8] * m[7] * m[14] - m[12] * m[6] * m[11] + m[12] * m[7] * m[10];
+    inv[8] = m[4] * m[9] * m[15] - m[4] * m[11] * m[13] - m[8] * m[5] * m[15] + m[8] * m[7] * m[13] + m[12] * m[5] * m[11] - m[12] * m[7] * m[9];
+    inv[12] = -m[4] * m[9] * m[14] + m[4] * m[10] * m[13] + m[8] * m[5] * m[14] - m[8] * m[6] * m[13] - m[12] * m[5] * m[10] + m[12] * m[6] * m[9];
+    inv[1] = -m[1] * m[10] * m[15] + m[1] * m[11] * m[14] + m[9] * m[2] * m[15] - m[9] * m[3] * m[14] - m[13] * m[2] * m[11] + m[13] * m[3] * m[10];
+    inv[5] = m[0] * m[10] * m[15] - m[0] * m[11] * m[14] - m[8] * m[2] * m[15] + m[8] * m[3] * m[14] + m[12] * m[2] * m[11] - m[12] * m[3] * m[10];
+    inv[9] = -m[0] * m[9] * m[15] + m[0] * m[11] * m[13] + m[8] * m[1] * m[15] - m[8] * m[3] * m[13] - m[12] * m[1] * m[11] + m[12] * m[3] * m[9];
+    inv[13] = m[0] * m[9] * m[14] - m[0] * m[10] * m[13] - m[8] * m[1] * m[14] + m[8] * m[2] * m[13] + m[12] * m[1] * m[10] - m[12] * m[2] * m[9];
+    inv[2] = m[1] * m[6] * m[15] - m[1] * m[7] * m[14] - m[5] * m[2] * m[15] + m[5] * m[3] * m[14] + m[13] * m[2] * m[7] - m[13] * m[3] * m[6];
+    inv[6] = -m[0] * m[6] * m[15] + m[0] * m[7] * m[14] + m[4] * m[2] * m[15] - m[4] * m[3] * m[14] - m[12] * m[2] * m[7] + m[12] * m[3] * m[6];
+    inv[10] = m[0] * m[5] * m[15] - m[0] * m[7] * m[13] - m[4] * m[1] * m[15] + m[4] * m[3] * m[13] + m[12] * m[1] * m[7] - m[12] * m[3] * m[5];
+    inv[14] = -m[0] * m[5] * m[14] + m[0] * m[6] * m[13] + m[4] * m[1] * m[14] - m[4] * m[2] * m[13] - m[12] * m[1] * m[6] + m[12] * m[2] * m[5];
+    inv[3] = -m[1] * m[6] * m[11] + m[1] * m[7] * m[10] + m[5] * m[2] * m[11] - m[5] * m[3] * m[10] - m[9] * m[2] * m[7] + m[9] * m[3] * m[6];
+    inv[7] = m[0] * m[6] * m[11] - m[0] * m[7] * m[10] - m[4] * m[2] * m[11] + m[4] * m[3] * m[10] + m[8] * m[2] * m[7] - m[8] * m[3] * m[6];
+    inv[11] = -m[0] * m[5] * m[11] + m[0] * m[7] * m[9] + m[4] * m[1] * m[11] - m[4] * m[3] * m[9] - m[8] * m[1] * m[7] + m[8] * m[3] * m[5];
+    inv[15] = m[0] * m[5] * m[10] - m[0] * m[6] * m[9] - m[4] * m[1] * m[10] + m[4] * m[2] * m[9] + m[8] * m[1] * m[6] - m[8] * m[2] * m[5];
+
+    det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+    if (det == 0) return null;
+
+    det = 1.0 / det;
+
+    while (i < 16) : (i += 1) {
+        result[i] = inv[i] * det;
+    }
+
+    return @bitCast(result);
+}
 
 fn GenRect(comptime T: type) type {
     return struct {

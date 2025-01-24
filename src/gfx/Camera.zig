@@ -22,7 +22,7 @@ pub fn init(v: struct {
         .view = view,
         .proj = proj,
         .view_proj = view_proj,
-        .view_proj_inv = m.inverse(view_proj),
+        .view_proj_inv = m.inverse(view_proj).?,
     };
 }
 
@@ -30,7 +30,7 @@ pub fn invalidate(cam: *Camera) void {
     cam.proj = calculateProj(cam.win_size[0], cam.win_size[1]);
     cam.view = calculateView(cam.win_size[0], cam.win_size[1]);
     cam.view_proj = m.mul(cam.view, cam.proj);
-    cam.view_proj_inv = m.inverse(cam.view_proj);
+    cam.view_proj_inv = m.inverse(cam.view_proj).?;
 }
 
 fn calculateView(width: u32, height: u32) Mat4 {
@@ -58,7 +58,7 @@ pub fn screenToWorld(cam: Camera, p: [2]f32) [2]f32 {
     const h: f32 = @floatFromInt(cam.win_size[1]);
     const mx = 2 * p[0] / w - 1;
     const my = (2 * p[1] / h - 1);
-    const result = m.mul(@Vector(4, f32){ mx, my, 0, 1 }, cam.view_proj_inv);
+    const result = m.mulVecMat(@Vector(4, f32){ mx, my, 0, 1 }, cam.view_proj_inv);
     return .{ result[0], result[1] };
 }
 

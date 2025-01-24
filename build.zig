@@ -9,7 +9,6 @@ const sokol = @import("sokol");
 const CoreDependencies = struct {
     sokol: *Build.Dependency,
     stb: *Build.Dependency,
-    zmath: *Build.Dependency,
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
@@ -24,7 +23,6 @@ pub fn build(b: *Build) !void {
     const dep_sokol = b.dependency("sokol", .{ .target = target, .optimize = optimize });
     const dep_sokol_tools = b.dependency("sokol_tools", .{ .target = target, .optimize = optimize });
     const dep_stb = b.dependency("stb", .{ .target = target, .optimize = optimize });
-    const dep_zmath = b.dependency("zmath", .{ .target = target, .optimize = optimize });
 
     // Shader compilation step
     const shdc_path = blk: {
@@ -88,7 +86,6 @@ pub fn build(b: *Build) !void {
     const deps = CoreDependencies{
         .sokol = dep_sokol,
         .stb = dep_stb,
-        .zmath = dep_zmath,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
         .sprite_data_path = sprite_data_path,
@@ -180,17 +177,8 @@ fn addDeps(
     step.addIncludePath(deps.stb.path("."));
     step.addCSourceFile(.{ .file = b.path("src/stb_impl.c"), .flags = &.{"-O3"} });
 
-    // zmath
-    const mod_zmath = deps.zmath.module("root");
-    step.addImport("zmath", mod_zmath);
-
     // math
-    const mod_math = b.addModule("math", .{
-        .root_source_file = b.path("src/math.zig"),
-        .imports = &.{
-            .{ .name = "zmath", .module = mod_zmath },
-        },
-    });
+    const mod_math = b.addModule("math", .{ .root_source_file = b.path("src/math.zig") });
     step.addImport("math", mod_math);
 
     // tools
