@@ -154,7 +154,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
             .layer = if (brick.sprite == .brick0) .background else .main,
         });
         if (brick.sprite == .brick_expl) {
-            // TODO refactor (used in game scene as well)
             gfx.addLight(
                 .{ brick.pos[0] + brick_w / 2, brick.pos[1] + brick_h / 2 },
                 0xf2a54c,

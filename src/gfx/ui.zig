@@ -137,7 +137,6 @@ pub fn end() void {
     window_stack.clearRetainingCapacity();
 }
 
-// TODO maybe feed our own events? mouse pos needs to be scaled...
 pub fn handleEvent(ev: sapp.Event) void {
     switch (ev.type) {
         .CHAR => {
@@ -210,8 +209,6 @@ pub fn endWindow() void {
     const win_data = window_data.get(win_id).?;
     win_id = 0;
 
-    // TODO do we want to render it here? abstract away batch renderer so we
-    // store render commands instead?
     const padding: f32 = switch (win_style) {
         .dialog => 6,
         else => 0,

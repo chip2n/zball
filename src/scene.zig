@@ -98,8 +98,8 @@ pub const SceneManager = struct {
     fn createScene(mgr: SceneManager, scene_type: SceneType) Scene {
         return switch (scene_type) {
             .title => Scene{ .title = TitleScene.init() },
-            .game => Scene{ .game = GameScene.init(mgr.allocator, mgr.levels[mgr.level_idx], mgr.seed) catch unreachable }, // TODO
-            .editor => Scene{ .editor = EditorScene.init(mgr.allocator) catch unreachable }, // TODO
+            .game => Scene{ .game = GameScene.init(mgr.allocator, mgr.levels[mgr.level_idx], mgr.seed) catch unreachable },
+            .editor => Scene{ .editor = EditorScene.init(mgr.allocator) catch unreachable },
         };
     }
 };
