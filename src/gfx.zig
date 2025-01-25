@@ -387,11 +387,12 @@ pub fn endFrame() void {
     sg.commit();
 }
 
-pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
+pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32, is_on_top: bool) void {
     const mvp = state.camera.view_proj;
     const vs_scene_params = shd.VsSceneParams{ .mvp = mvp };
     var fs_scene_params = shd.FsSceneParams{
-        .value = 1.0,
+        .transition_progress = transition_progress,
+        .is_on_top = @intFromBool(is_on_top),
         .scanline_amount = 0.0,
         .vignette_amount = 0.4,
         .vignette_intensity = 0.5,
@@ -404,9 +405,6 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32) void {
         fs_scene_params.vignette_intensity = 0.4;
         fs_scene_params.aberration_amount = 0.3;
     }
-    // Update uniform transition progress (shader uses it to display part of the
-    // screen while a transition is in progress)
-    fs_scene_params.value = transition_progress;
 
     sg.applyPipeline(state.scene.pip);
     sg.applyUniforms(shd.UB_vs_scene_params, sg.asRange(&vs_scene_params));

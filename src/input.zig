@@ -61,12 +61,12 @@ const mousebindings = .{
 };
 
 pub fn pressed(action: InputAction) bool {
-    if (zball.scene_mgr.transition_progress != 0) return false;
+    if (zball.scene_mgr.transition_progress != 1) return false;
     return state.keys.get(action).?.pressed;
 }
 
 pub fn down(action: InputAction) bool {
-    if (zball.scene_mgr.transition_progress != 0) return false;
+    if (zball.scene_mgr.transition_progress != 1) return false;
     return state.keys.get(action).?.down;
 }
 

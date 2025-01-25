@@ -169,7 +169,8 @@ void main() {
 layout(binding=0) uniform texture2D tex;
 layout(binding=1) uniform sampler smp;
 layout(binding=2) uniform fs_scene_params {
-    float value;
+    float transition_progress;
+    int is_on_top;
     float scanline_amount;
     float vignette_amount;
     float vignette_intensity;
@@ -212,7 +213,6 @@ float gaus(float pos, float scale) {
 vec3 pixel(vec2 uv, vec2 off) {
     vec2 real_uv = uv;
 
-    float transition_progress = value;
 #if SOKOL_MSL
     float frag_progress = frag_pos.y / resolution.y;
 #else
@@ -220,13 +220,13 @@ vec3 pixel(vec2 uv, vec2 off) {
 #endif
 
     // Fragment is outside the transition animation
-    if (frag_progress > transition_progress) discard;
+    if (is_on_top != 0 && frag_progress > transition_progress) discard;
 
     float roll_fraction = 0.2 * (1 - transition_progress);
     float distance_from_bottom = transition_progress - frag_progress;
     float roll_offset = distance_from_bottom/roll_fraction;
     bool in_roll = frag_progress >= transition_progress - roll_fraction;
-    if (in_roll) {
+    if (is_on_top != 0 && in_roll) {
         // TODO snap to pixel I guess?
         real_uv = vec2(uv.x, transition_progress + roll_fraction * warp(roll_offset));
     }
@@ -236,6 +236,13 @@ vec3 pixel(vec2 uv, vec2 off) {
     if (in_roll) {
         color = darken(roll_offset, color);
     }
+
+    if (is_on_top == 0 && transition_progress < 1) {
+        // Fade out background while transition is in progress
+        float fade_factor = 0.5;
+        color = color * (1 - fade_factor * transition_progress);
+    }
+
     return color;
 }
 

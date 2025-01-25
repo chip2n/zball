@@ -260,9 +260,10 @@ pub fn frame(dt: f32) !void {
     gfx.beginFrame();
     defer gfx.endFrame();
 
-    gfx.renderFramebuffer(fb_current, 100);
+    gfx.renderFramebuffer(fb_current, scene_mgr.transition_progress, false);
+
     if (scene_mgr.next != null) {
-        gfx.renderFramebuffer(fb_transition, scene_mgr.transition_progress);
+        gfx.renderFramebuffer(fb_transition, scene_mgr.transition_progress, true);
     }
 
     input.frame();

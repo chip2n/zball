@@ -43,7 +43,7 @@ pub const SceneManager = struct {
     seed: u64,
     current: Scene,
     next: ?Scene = null,
-    transition_progress: f32 = 0,
+    transition_progress: f32 = 1,
     level_idx: usize = 0,
     levels: []Level,
     rendering_next: bool = false,
@@ -76,6 +76,7 @@ pub const SceneManager = struct {
             next.deinit();
         }
         mgr.next = mgr.createScene(scene_type);
+        mgr.transition_progress = 0;
         if (scene_type != .game) {
             mgr.level_idx = 0;
         }
@@ -86,7 +87,7 @@ pub const SceneManager = struct {
         if (mgr.next) |*next| {
             mgr.transition_progress += dt / transition_duration;
             if (mgr.transition_progress >= 1) {
-                mgr.transition_progress = 0;
+                mgr.transition_progress = 1;
                 mgr.current.deinit();
                 mgr.current = next.*;
                 mgr.next = null;
