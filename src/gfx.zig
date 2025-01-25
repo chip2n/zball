@@ -232,12 +232,12 @@ pub fn renderMain(fb: Framebuffer) void {
         light_colors[i][1] = g / 255;
         light_colors[i][2] = b / 255;
     }
-    const fs_params = shd.FsParams{
+    var fs_params = shd.FsParams{
         .flags = .{ 1, 0, 0, 0 },
         .light_positions = light_positions,
         .light_colors = light_colors,
     };
-    const fs_params2 = shd.FsParams{
+    const fs_params_non_illuminated = shd.FsParams{
         .flags = .{ 0, 0, 0, 0 },
         .light_positions = light_positions,
         .light_colors = light_colors,
@@ -290,7 +290,7 @@ pub fn renderMain(fb: Framebuffer) void {
         if (!illuminated and b.illuminated) {
             sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         } else {
-            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params2));
+            sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params_non_illuminated));
         }
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
@@ -322,7 +322,7 @@ pub fn renderMain(fb: Framebuffer) void {
         bind.images[shd.IMG_tex] = tex.img;
         sg.applyPipeline(state.offscreen.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params2));
+        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params_non_illuminated));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
