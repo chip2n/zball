@@ -55,7 +55,7 @@ float linear = 0.04;   // Linear attenuation
 float quadratic = 0.032;  // Quadratic attenuation
 
 void main() {
-    vec4 c = texture(sampler2D(tex, smp), uv) * color; // TODO remove color I guessa
+    vec4 c = texture(sampler2D(tex, smp), uv) * color;
 
     if (flags.x > 0) {
         for (int i = 0; i < light_positions.length(); i++) {
