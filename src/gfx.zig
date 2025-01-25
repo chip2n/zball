@@ -397,6 +397,7 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32, is_on_top: b
         .vignette_amount = 0.4,
         .vignette_intensity = 0.5,
         .aberration_amount = 0.0,
+        .resolution = .{ @floatFromInt(zball.viewport_size[0]), @floatFromInt(zball.viewport_size[1]) },
     };
     if (state.camera.zoom() > 2) {
         // Scale is big enough for scanlines

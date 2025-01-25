@@ -112,7 +112,6 @@ void main() {
 }
 @end
 
-// TODO share between shaders
 @fs fs_shadow
 layout(binding=0) uniform texture2D tex;
 layout(binding=1) uniform sampler smp;
@@ -175,6 +174,7 @@ layout(binding=2) uniform fs_scene_params {
     float vignette_amount;
     float vignette_intensity;
     float aberration_amount;
+    vec2 resolution;
 };
 
 in vec2 frag_pos;
@@ -183,7 +183,6 @@ in vec2 uv;
 out vec4 frag_color;
 
 const float PI = 3.1415926535897932384626433832795;
-vec2 resolution = vec2(320, 240); // TODO pass in through uniform
 
 float warp(float x) {
     return 0.5 - sin(asin(1 - 2 * x) / 2);
