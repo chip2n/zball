@@ -175,7 +175,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     state.lights = try std.ArrayList(Light).initCapacity(allocator, zball.max_lights);
 
-    try ui.init(allocator, &state.batch, state.spritesheet_texture, state.font_texture);
+    try ui.init(allocator);
     errdefer ui.deinit();
 
     state.initialized = true;
@@ -336,32 +336,23 @@ pub fn cameraZoom() f32 {
     return state.camera.zoom();
 }
 
-pub fn spritesheetTexture() Texture {
-    return state.spritesheet_texture;
-}
-
-pub fn fontTexture() Texture {
-    return state.font_texture;
-}
-
-pub fn setTexture(tex: Texture) void {
-    state.batch.setTexture(tex);
-}
-
 pub fn renderEmitter(emitter: anytype) void {
     emitter.render(&state.batch);
 }
 
 pub fn renderText(s: []const u8, x: f32, y: f32, z: f32) void {
+    state.batch.setTexture(state.font_texture);
     var text_renderer = TextRenderer{};
     text_renderer.render(&state.batch, s, x, y, z);
 }
 
 pub inline fn render(opts: BatchRenderer.RenderOptions) void {
+    state.batch.setTexture(state.spritesheet_texture);
     state.batch.render(opts);
 }
 
 pub inline fn renderNinePatch(opts: BatchRenderer.RenderNinePatchOptions) void {
+    state.batch.setTexture(state.spritesheet_texture);
     state.batch.renderNinePatch(opts);
 }
 

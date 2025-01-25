@@ -101,7 +101,7 @@ pub const BatchRenderer = struct {
         self.allocator.free(self.buf);
     }
 
-    pub fn setTexture(self: *BatchRenderer, tex: Texture) void {
+    pub inline fn setTexture(self: *BatchRenderer, tex: Texture) void {
         self.tex = tex;
     }
 

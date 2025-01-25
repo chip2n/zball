@@ -32,7 +32,6 @@ pub fn frame(scene: *TitleScene, dt: f32) !void {
         scene.settings_open = false;
     }
 
-    gfx.setTexture(gfx.spritesheetTexture());
     gfx.render(.{
         .src = m.irect(sprite.sprites.title.bounds),
         .dst = .{

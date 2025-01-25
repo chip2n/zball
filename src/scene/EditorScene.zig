@@ -104,7 +104,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     }
 
     { // Background
-        gfx.setTexture(gfx.spritesheetTexture());
         const sp = sprite.sprites.bg;
         gfx.render(.{
             .src = m.irect(sp.bounds),
@@ -143,7 +142,6 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
     }
 
     // Render all bricks
-    gfx.setTexture(gfx.spritesheetTexture());
     for (scene.bricks.items) |brick| {
         const x = brick.pos[0];
         const y = brick.pos[1];

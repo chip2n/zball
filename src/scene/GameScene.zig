@@ -101,11 +101,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
     // * Render
 
-    // TODO should not have to do this
-    gfx.setTexture(gfx.spritesheetTexture());
-
     { // Background
-        gfx.setTexture(gfx.spritesheetTexture());
         const sp = sprite.sprites.bg;
         gfx.render(.{
             .src = m.irect(sp.bounds),
@@ -136,14 +132,10 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
 
         // Score
         const score = scene.game_state.score;
-        // TODO have to always remember this when rendering text...
-        gfx.setTexture(gfx.fontTexture());
         var buf: [32]u8 = undefined;
         const label = std.fmt.bufPrint(&buf, "score {:0>4}", .{score}) catch unreachable;
         gfx.renderText(label, 32, 0, 5);
     }
-
-    gfx.setTexture(gfx.spritesheetTexture());
 
     // Render entities
     for (scene.game_state.entities) |e| {

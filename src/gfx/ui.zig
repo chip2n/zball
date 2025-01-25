@@ -1,4 +1,5 @@
 const std = @import("std");
+const gfx = @import("../gfx.zig");
 const root = @import("root");
 const font = @import("font");
 const zball = @import("../zball.zig");
@@ -61,9 +62,6 @@ var win_width: f32 = 0;
 var win_height: f32 = 0;
 var win_z: f32 = 0;
 var win_style: WindowStyle = .dialog;
-var batch: *BatchRenderer = undefined;
-var tex_spritesheet: Texture = undefined;
-var tex_font: Texture = undefined;
 
 // Manage window focus
 var window_stack: std.ArrayList(u64) = undefined;
@@ -87,15 +85,7 @@ const WindowStyle = enum {
     hidden,
 };
 
-pub fn init(
-    allocator: std.mem.Allocator,
-    b: *BatchRenderer,
-    spritesheet_texture: Texture,
-    font_texture: Texture,
-) !void {
-    batch = b;
-    tex_spritesheet = spritesheet_texture;
-    tex_font = font_texture;
+pub fn init(allocator: std.mem.Allocator) !void {
     window_data = std.AutoHashMap(u64, WindowData).init(allocator);
     try window_data.ensureTotalCapacity(16);
     window_stack = try std.ArrayList(u64).initCapacity(allocator, 16);
@@ -215,8 +205,6 @@ pub fn endWindow() void {
     };
 
     const dialog = sprites.get(.dialog);
-    // TODO separate sprite sheet for UI
-    batch.setTexture(tex_spritesheet);
 
     var w = win_width + @as(f32, @floatFromInt(dialog.bounds.w - dialog.center.?.w));
     w += padding * 2;
@@ -236,14 +224,14 @@ pub fn endWindow() void {
         .dialog => {
             // Semi-transparent background overlay
             const overlay = sprites.get(.overlay);
-            batch.render(.{
+            gfx.render(.{
                 .src = m.irect(overlay.bounds),
                 .dst = .{ .x = 0, .y = 0, .w = zball.viewport_size[0], .h = zball.viewport_size[1] },
                 .z = win_z - 0.1,
                 .layer = .ui,
             });
 
-            batch.renderNinePatch(.{
+            gfx.renderNinePatch(.{
                 .src = m.irect(dialog.bounds),
                 .center = m.irect(dialog.center.?),
                 .dst = .{
@@ -261,13 +249,10 @@ pub fn endWindow() void {
     }
 
     { // render draw list
-        var text_renderer = TextRenderer{};
         for (win_data.draw_list[0..win_data.draw_list_idx]) |e| {
             switch (e) {
                 .text => |t| {
-                    batch.setTexture(tex_font);
-                    text_renderer.render(
-                        batch,
+                    gfx.renderText(
                         t.s,
                         t.x + padding + offset_content[0],
                         t.y + padding + offset_content[1],
@@ -275,12 +260,11 @@ pub fn endWindow() void {
                     );
                 },
                 .slider => |s| {
-                    batch.setTexture(tex_spritesheet);
                     const thumb = sprites.get(.slider_thumb);
                     const rail_inactive = sprites.get(.slider_rail_inactive);
                     const rail_active = sprites.get(.slider_rail_active);
                     // inactive rail
-                    batch.render(.{
+                    gfx.render(.{
                         .src = m.irect(rail_inactive.bounds),
                         .dst = .{
                             .x = s.x + padding + offset_content[0],
@@ -292,7 +276,7 @@ pub fn endWindow() void {
                         .z = win_z,
                     });
                     // active rail
-                    batch.render(.{
+                    gfx.render(.{
                         .src = m.irect(rail_active.bounds),
                         .dst = .{
                             .x = s.x + padding + offset_content[0],
@@ -304,7 +288,7 @@ pub fn endWindow() void {
                         .z = win_z,
                     });
                     // thumb
-                    batch.render(.{
+                    gfx.render(.{
                         .src = m.irect(thumb.bounds),
                         .dst = .{
                             .x = s.x + padding + offset_content[0] + win_width * s.value - @round(@as(f32, @floatFromInt(thumb.bounds.w)) / 2),
@@ -317,9 +301,8 @@ pub fn endWindow() void {
                     });
                 },
                 .sprite => |s| {
-                    batch.setTexture(tex_spritesheet);
                     const sp = sprites.get(s.sprite);
-                    batch.render(.{
+                    gfx.render(.{
                         .src = m.irect(sp.bounds),
                         .dst = .{
                             .x = s.x + padding + offset_content[0],
@@ -332,9 +315,8 @@ pub fn endWindow() void {
                     });
                 },
                 .ninepatch => |s| {
-                    batch.setTexture(tex_spritesheet);
                     const sp = sprites.get(s.sprite);
-                    batch.renderNinePatch(.{
+                    gfx.renderNinePatch(.{
                         .src = m.irect(sp.bounds),
                         .center = m.irect(sp.center.?),
                         .dst = .{
