@@ -226,7 +226,6 @@ vec3 pixel(vec2 uv, vec2 off) {
     float roll_offset = distance_from_bottom/roll_fraction;
     bool in_roll = frag_progress >= transition_progress - roll_fraction;
     if (is_on_top != 0 && in_roll) {
-        // TODO snap to pixel I guess?
         real_uv = vec2(uv.x, transition_progress + roll_fraction * warp(roll_offset));
     }
 
