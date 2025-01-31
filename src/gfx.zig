@@ -22,16 +22,6 @@ const sglue = sokol.glue;
 const spritesheet = @embedFile("sprites.png");
 const Texture = texture.Texture;
 
-// TODO move?
-pub const Vertex = extern struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    color: u32,
-    u: f32,
-    v: f32,
-};
-
 const Light = struct {
     pos: [2]f32 = .{ 0, 0 },
     color: u32,

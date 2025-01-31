@@ -9,6 +9,15 @@ const IRect = m.IRect;
 
 const max_batches = 16;
 
+pub const Vertex = extern struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    color: u32,
+    u: f32,
+    v: f32,
+};
+
 const TextureId = usize;
 
 // TODO we can look up tw and th afterwards. Also, tex could be just u8
@@ -500,8 +509,6 @@ pub const BatchRenderer = struct {
         return false;
     }
 };
-
-const Vertex = @import("../gfx.zig").Vertex;
 
 const QuadOptions = struct {
     buf: []Vertex,

@@ -1,5 +1,5 @@
 const zball = @import("../zball.zig");
-const Vertex = @import("../gfx.zig").Vertex;
+const Vertex = @import("batch.zig").Vertex;
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 const shd = @import("shader");
