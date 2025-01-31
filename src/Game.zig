@@ -860,19 +860,23 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
             }
         },
         .metal => {
-            if (brick.lives > 0) {
-                const rng = g.prng.random();
-                const weak_sprites = [_]sprite.Sprite{
-                    .brick_metal_weak,
-                    .brick_metal_weak2,
-                    .brick_metal_weak3,
-                };
-                const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
-                // Metal bricks requires two hits to break
-                brick.sprite = next_sprite;
-                if (g.flame_timer <= 0) {
-                    g.play(.{ .clip = .clink });
+            if (g.flame_timer <= 0) {
+                if (brick.lives > 0) {
+                    const rng = g.prng.random();
+                    const weak_sprites = [_]sprite.Sprite{
+                        .brick_metal_weak,
+                        .brick_metal_weak2,
+                        .brick_metal_weak3,
+                    };
+                    const next_sprite = weak_sprites[rng.intRangeAtMost(usize, 0, weak_sprites.len - 1)];
+                    // Metal bricks requires two hits to break
+                    brick.sprite = next_sprite;
+                    if (g.flame_timer <= 0) {
+                        g.play(.{ .clip = .clink });
+                    }
                 }
+            } else {
+                brick.lives = 0;
             }
         },
         .explode => {
