@@ -1,5 +1,3 @@
-// TODO use for all particle effects
-
 const std = @import("std");
 const root = @import("root");
 const sprites = @import("sprites");
@@ -75,7 +73,6 @@ const EmitterDesc = struct {
     explosiveness: f32,
 };
 
-// TODO Remove comptime usage - everything can be tweaked during runtime. Needs allocator in this case (unless we make count fixed)
 pub fn Emitter(comptime desc: EmitterDesc) type {
     const count = desc.count;
     const lifetime = desc.lifetime;
@@ -116,6 +113,13 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
             };
         }
 
+        pub fn start(self: *Self, rng: std.Random, pos: [2]f32) void {
+            self.reset();
+            self.rng = rng;
+            self.emitting = true;
+            self.pos = pos;
+        }
+
         pub fn update(self: *Self, dt: f32) void {
             self.time += dt;
 
@@ -134,17 +138,17 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
 
             // Time to spawn another particle?
             if (self.emitting) {
-                const start = self.cycle_timer;
-                const end = start + dt;
-                var t = start;
-                while (t < end and self.cycle_spawns < count) {
+                const cycle_start = self.cycle_timer;
+                const cycle_end = cycle_start + dt;
+                var t = cycle_start;
+                while (t < cycle_end and self.cycle_spawns < count) {
                     if (self.next_spawn <= t) {
                         self.spawnParticle();
                     }
                     t += spawn_freq;
                 }
 
-                self.cycle_timer = end;
+                self.cycle_timer = cycle_end;
             } else {
                 self.cycle_timer = 0;
                 self.cycle_spawns = 0;
@@ -158,6 +162,16 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
                 self.next_spawn = 0;
                 if (!desc.loop) self.emitting = false;
             }
+        }
+
+        pub fn reset(self: *Self) void {
+            self.emitting = false;
+            self.time = 0;
+            self.idx = 0;
+            self.spawn_timer = 0;
+            self.cycle_timer = 0;
+            self.next_spawn = 0;
+            self.cycle_spawns = 0;
         }
 
         fn spawnParticle(self: *Self) void {
@@ -194,7 +208,6 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         }
 
         pub fn render(self: Self, batch: *BatchRenderer) void {
-            // TODO cache
             const weight_sum = blk: {
                 var sum: f32 = 0;
                 for (self.sprites) |s| {

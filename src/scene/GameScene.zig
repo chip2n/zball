@@ -142,7 +142,7 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         if (e.type == .none) continue;
         if (!e.rendered) continue;
         if (e.type == .ball) {
-            if (e.flame.emitting) {
+            if (e.flame > 0) {
                 gfx.addLight(e.center(), 0xf2a54c);
             }
         }
@@ -206,14 +206,16 @@ pub fn frame(scene: *GameScene, dt: f32) !void {
         });
     }
 
-    // Render entity explosion particles
-    for (scene.game_state.entities) |e| {
-        gfx.renderEmitter(e.explosion);
+    // Render explosion particles
+    for (scene.game_state.explosion_emitters) |e| {
+        if (!e.emitting) continue;
+        gfx.renderEmitter(e);
     }
 
     // Render entity flame particles
-    for (scene.game_state.entities) |e| {
-        gfx.renderEmitter(e.flame);
+    for (scene.game_state.flame_emitters) |e| {
+        if (!e.emitting) continue;
+        gfx.renderEmitter(e);
     }
 
     { // Render game menus

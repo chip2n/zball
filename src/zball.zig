@@ -61,6 +61,7 @@ pub const initial_ball_dir: [2]f32 = blk: {
 pub const offscreen_sample_count = 1;
 pub const max_textures = 8;
 pub const max_lights = 256;
+pub const max_explosions = 32;
 
 // Render limits (per scene)
 pub const max_scene_quads = 4096;

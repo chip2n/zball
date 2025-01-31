@@ -40,6 +40,8 @@ paddle_size: PaddleSize = .normal,
 paddle_magnet: bool = false,
 
 entities: []Entity,
+flame_emitters: []FlameEmitter,
+explosion_emitters: []ExplosionEmitter,
 
 ball_speed: f32 = zball.ball_base_speed,
 ball_size: BallSize = .normal,
@@ -63,7 +65,6 @@ pub const EntityType = enum {
     brick,
     ball,
     laser,
-    explosion,
     powerup,
     coin,
 };
@@ -76,8 +77,7 @@ pub const Entity = struct {
     collision_layers: CollisionLayers = .{},
     sprite: ?sprite.Sprite = null,
     magnetized: bool = false,
-    flame: FlameEmitter = .{},
-    explosion: ExplosionEmitter = .{},
+    flame: usize = 0, // index + 1 into flame_emitters field (zero is null value)
     controlled: bool = true,
     frame: u8 = 0,
     gravity: bool = false,
@@ -157,14 +157,24 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
     const entities = try allocator.alloc(Entity, zball.max_entities);
     errdefer allocator.free(entities);
 
+    const flame_emitters = try allocator.alloc(FlameEmitter, zball.max_balls);
+    errdefer allocator.free(flame_emitters);
+
+    const explosion_emitters = try allocator.alloc(ExplosionEmitter, zball.max_entities);
+    errdefer allocator.free(explosion_emitters);
+
     var g = Game{
         .allocator = allocator,
         .prng = std.Random.DefaultPrng.init(seed),
         .entities = entities,
+        .flame_emitters = flame_emitters,
+        .explosion_emitters = explosion_emitters,
     };
 
-    // zero-intialize entities
+    // initialize allocated memory
     for (g.entities) |*e| e.* = .{};
+    for (g.flame_emitters) |*e| e.* = .{};
+    for (g.explosion_emitters) |*e| e.* = .{};
 
     // initialize bricks
     for (lvl.entities) |e| {
@@ -394,9 +404,9 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             switch (e.type) {
                 .ball => {
                     g.play(.{ .clip = .explode, .vol = 0.5 });
-                    _ = g.spawnExplosion(e.pos, .ball_normal) catch {};
+                    g.spawnExplosion(e.pos, .ball_normal);
                     e.type = .none;
-                    e.flame.emitting = false;
+                    g.destroyFlame(e);
 
                     // If the ball was the final ball, start a death timer
                     for (g.entities) |entity| {
@@ -419,12 +429,6 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
             .brick => {},
             .laser => {},
             .powerup => {},
-            .explosion => {
-                // When the emitter stops, we remove the entity
-                if (!e.explosion.emitting) {
-                    e.* = .{};
-                }
-            },
             .coin => {
                 defer e.frame = (e.frame + 1) % 64;
                 if (e.frame >= 32) {
@@ -445,18 +449,32 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
         }
     }
 
+    // Sync flame emitter positions with entities
     for (g.entities) |*e| {
-        e.flame.pos = e.center();
-        e.flame.update(dt);
-        e.explosion.pos = e.center();
-        e.explosion.update(dt);
+        if (e.flame == 0) continue;
+        const emitter = &g.flame_emitters[e.flame - 1];
+        if (!emitter.emitting) {
+            e.flame = 0;
+        } else {
+            emitter.pos = e.center();
+        }
+    }
+
+    // Update emitters
+    for (g.explosion_emitters) |*e| {
+        if (!e.emitting) continue;
+        e.update(dt);
+    }
+    for (g.flame_emitters) |*e| {
+        if (!e.emitting) continue;
+        e.update(dt);
     }
 
     flame: {
         if (!utils.tickDownTimer(g, "flame_timer", dt)) break :flame;
         for (g.entities) |*e| {
             if (e.type != .ball) continue;
-            e.flame.emitting = false;
+            g.destroyFlame(e);
         }
     }
 
@@ -526,21 +544,35 @@ fn spawnEntity(g: *Game, entity: Entity) !*Entity {
     for (g.entities) |*e| {
         if (e.type != .none) continue;
         e.* = entity;
-        // Auto-fill some fields so the caller don't have to remember it
-        e.flame = FlameEmitter.init(.{ .rng = g.prng.random(), .sprites = &zball.particleFlameSprites });
         return e;
     } else {
         return error.MaxEntitiesReached;
     }
 }
 
-fn spawnExplosion(g: *Game, pos: [2]f32, sp: sprite.Sprite) !void {
-    const expl = try g.spawnEntity(.{ .type = .explosion, .pos = pos });
-    expl.explosion = ExplosionEmitter.init(.{
-        .rng = g.prng.random(),
-        .sprites = zball.particleExplosionSprites(sp),
-    });
-    expl.explosion.emitting = true;
+fn spawnExplosion(g: *Game, pos: [2]f32, sp: sprite.Sprite) void {
+    for (g.explosion_emitters) |*emitter| {
+        if (emitter.emitting) continue;
+        emitter.start(g.prng.random(), pos);
+        emitter.sprites = zball.particleExplosionSprites(sp);
+        break;
+    }
+}
+
+fn spawnFlame(g: *Game, e: *Entity) void {
+    for (g.flame_emitters, 0..) |*emitter, i| {
+        if (emitter.emitting) continue;
+        emitter.start(g.prng.random(), e.pos);
+        e.flame = i + 1;
+        break;
+    }
+}
+
+fn destroyFlame(g: *Game, e: *Entity) void {
+    if (e.flame > 0) {
+        g.flame_emitters[e.flame - 1].emitting = false;
+        e.flame = 0;
+    }
 }
 
 fn spawnDrop(g: *Game, pos: [2]f32, speed: f32, dir: [2]f32) void {
@@ -887,9 +919,7 @@ fn destroyBrick(g: *Game, brick: *Entity) bool {
         }
 
         g.score += @as(u32, @intFromFloat(@round(points * mult)));
-
-        const sp = brick.sprite.?;
-        g.spawnExplosion(brick.pos, sp) catch {};
+        g.spawnExplosion(brick.pos, brick.sprite.?);
     }
 
     return brick.lives == 0;
@@ -922,7 +952,8 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
             g.flame_timer = zball.flame_duration;
             for (g.entities) |*e| {
                 if (e.type != .ball) continue;
-                e.flame.emitting = true;
+                if (e.flame > 0) continue;
+                g.spawnFlame(e);
             }
         },
         .laser => {
@@ -969,9 +1000,9 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
                 switch (e.type) {
                     .ball => {
                         e.type = .none;
-                        e.flame.emitting = false;
+                        g.destroyFlame(e);
                         g.play(.{ .clip = .explode, .vol = 0.5 });
-                        _ = g.spawnExplosion(e.pos, .ball_normal) catch {};
+                        g.spawnExplosion(e.pos, .ball_normal);
                     },
                     else => {},
                 }
@@ -995,7 +1026,7 @@ fn splitBall(g: *Game, angles: []const f32) void {
             var d2 = ball.dir;
             m.vrot(&d2, angle);
             const new_ball = g.spawnBall(ball.pos, d2) catch break;
-            new_ball.flame.emitting = ball.flame.emitting;
+            g.spawnFlame(new_ball);
         }
         ball.dir = d1;
     }
