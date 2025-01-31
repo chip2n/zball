@@ -24,10 +24,9 @@ pub fn init(width: u32, height: u32) @This() {
     const attachments = sg.makeAttachments(attachments_desc);
 
     var bind = sg.Bindings{};
-    // TODO max_verts is actually max verts PER frame buffer, but we're making two of those...
     bind.vertex_buffers[0] = sg.makeBuffer(.{
         .usage = .STREAM,
-        .size = zball.max_verts * @sizeOf(Vertex),
+        .size = zball.max_scene_verts * @sizeOf(Vertex),
     });
     bind.samplers[shd.SMP_smp] = sg.makeSampler(.{
         .min_filter = .NEAREST,

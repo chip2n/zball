@@ -98,9 +98,9 @@ pub const BatchRenderer = struct {
     pub fn init(allocator: std.mem.Allocator) !BatchRenderer {
         return .{
             .allocator = allocator,
-            .verts = try allocator.alloc(Vertex, zball.max_verts),
+            .verts = try allocator.alloc(Vertex, zball.max_scene_verts),
             .batches = try allocator.alloc(Batch, max_batches),
-            .buf = try allocator.alloc(RenderCommand, zball.max_quads),
+            .buf = try allocator.alloc(RenderCommand, zball.max_scene_quads),
         };
     }
 

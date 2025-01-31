@@ -58,11 +58,13 @@ pub const initial_ball_dir: [2]f32 = blk: {
     break :blk dir;
 };
 
-pub const max_quads = 4096;
-pub const max_verts = max_quads * 6;
 pub const offscreen_sample_count = 1;
 pub const max_textures = 8;
 pub const max_lights = 256;
+
+// Render limits (per scene)
+pub const max_scene_quads = 4096;
+pub const max_scene_verts = max_scene_quads * 6;
 
 comptime {
     std.debug.assert(coin_freq + powerup_freq <= 1);
