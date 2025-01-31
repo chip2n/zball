@@ -200,6 +200,8 @@ pub fn init(allocator: std.mem.Allocator, lvl: Level, seed: u64) !Game {
 
 pub fn deinit(g: Game) void {
     g.allocator.free(g.entities);
+    g.allocator.free(g.explosion_emitters);
+    g.allocator.free(g.flame_emitters);
 }
 
 pub fn tick(g: *Game, dt: f32, input: InputState) !void {
