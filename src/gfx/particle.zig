@@ -115,8 +115,8 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
 
         pub fn start(self: *Self, rng: std.Random, pos: [2]f32) void {
             self.reset();
-            self.rng = rng;
             self.emitting = true;
+            self.rng = rng;
             self.pos = pos;
         }
 
@@ -172,6 +172,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
             self.cycle_timer = 0;
             self.next_spawn = 0;
             self.cycle_spawns = 0;
+            for (&self.particles) |*p| p.* = .{};
         }
 
         fn spawnParticle(self: *Self) void {

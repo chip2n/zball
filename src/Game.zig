@@ -563,6 +563,7 @@ fn spawnFlame(g: *Game, e: *Entity) void {
     for (g.flame_emitters, 0..) |*emitter, i| {
         if (emitter.emitting) continue;
         emitter.start(g.prng.random(), e.pos);
+        emitter.sprites = &zball.particleFlameSprites;
         e.flame = i + 1;
         break;
     }
