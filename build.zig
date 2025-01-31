@@ -101,7 +101,7 @@ pub fn build(b: *Build) !void {
     try addAssets(b, main_mod);
 
     if (target.result.isWasm()) {
-        const dep_emsdk = b.dependency("emsdk", .{});
+        const dep_emsdk = dep_sokol.builder.dependency("emsdk", .{});
         const lib = b.addStaticLibrary(.{
             .name = "game",
             .root_module = main_mod,

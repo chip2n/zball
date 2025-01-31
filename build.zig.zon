@@ -14,10 +14,6 @@
             .url = "git+https://github.com/floooh/sokol-tools-bin.git#d80b1d8f20fef813092ba37f26723d3880839651",
             .hash = "1220f2ae16952843dd25b6bc86b888a3fd8c3f25d34adddfd8d1d2b9f801429e80e4",
         },
-        .emsdk = .{
-            .url = "git+https://github.com/emscripten-core/emsdk#3.1.73",
-            .hash = "1220d2b37748757d43de92f0ef723b6a00c3cae4b6a9c582b607421704498a5cfd2b",
-        },
         .aseprite = .{
             .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#078f2dfb3b6227cdc5825d4803c4bb6018ab5655",
             .hash = "1220ba6255c58e5562a40c8e2537bb39e4294abc2dba369b483ae4eb497582012d31",
