@@ -54,7 +54,7 @@ death_timer: f32 = 0,
 drop_spawn_timer: f32 = 0,
 
 flame_timer: f32 = 0,
-laser_timer: f32 = 999,
+laser_timer: f32 = 0,
 laser_cooldown_timer: f32 = 0,
 
 // Triggered audio effects are queued up in this and cleared every tick
