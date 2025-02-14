@@ -38,7 +38,7 @@ pub fn main() !void {
         .high_dpi = false,
         .swap_interval = 1,
         .fullscreen = false,
-        .html5_canvas_resize = false
+        .html5_canvas_resize = false,
     });
 }
 
