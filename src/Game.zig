@@ -703,9 +703,7 @@ pub fn paddleBounds(g: Game) Rect {
 
     var w: f32 = @floatFromInt(sp.bounds.w);
     w *= scale;
-    // NOTE: Hard coded because we can't extract this based on sprite bounds
-    // TODO why not?
-    const h: f32 = 7;
+    const h: f32 = @floatFromInt(sp.bounds.h);
     return m.Rect{
         .x = g.paddle_pos[0] - w / 2,
         .y = g.paddle_pos[1] - h / 2,
