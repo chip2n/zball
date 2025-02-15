@@ -161,7 +161,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     // resource bindings to render the fullscreen quad (composed from the
     // offscreen render target textures
-    state.shaders.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
+    state.shaders.scene.bind.vertex_buffers[0] = state.quad_vbuf;
     state.shaders.scene.bind.samplers[shd.SMP_smp] = smp;
 
     state.lights = try std.ArrayList(Light).initCapacity(allocator, zball.max_lights);
@@ -345,7 +345,6 @@ pub inline fn renderNinePatch(opts: BatchRenderer.RenderNinePatchOptions) void {
     state.batch.renderNinePatch(opts);
 }
 
-// TODO return a handler?
 pub fn createFramebuffer() Framebuffer {
     return Framebuffer.init(@intCast(zball.viewport_size[0]), @intCast(zball.viewport_size[1]));
 }
