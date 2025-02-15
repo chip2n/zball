@@ -188,6 +188,7 @@ pub fn renderMain(fb: Framebuffer) void {
     defer state.lights.clearRetainingCapacity();
 
     const result = state.batch.commit();
+    defer state.batch.reset();
     if (result.batches.len == 0) return;
 
     var pass_action: sg.PassAction = .{};
