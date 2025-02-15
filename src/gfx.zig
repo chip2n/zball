@@ -236,6 +236,9 @@ pub fn renderMain(fb: Framebuffer) void {
     };
 
     // Render background
+    sg.applyPipeline(state.shaders.main.pip);
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+    sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
     for (result.batches) |b| {
         if (b.layer != .background) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -243,14 +246,14 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.shaders.main.pip);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
 
     // Render shadows
+    sg.applyPipeline(state.shaders.shadow.pip);
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+    sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
     for (result.batches) |b| {
         if (b.layer != .main) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -258,18 +261,14 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-
-        // We render the main layer two times to display a shadow
-        // TODO avoid switching pipelines often
-        sg.applyPipeline(state.shaders.shadow.pip);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
 
     // Render main layer
     var illuminated = false;
+    sg.applyPipeline(state.shaders.main.pip);
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
     for (result.batches) |b| {
         if (b.layer != .main) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -277,8 +276,6 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.shaders.main.pip);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         if (!illuminated and b.illuminated) {
             sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         } else {
@@ -290,6 +287,9 @@ pub fn renderMain(fb: Framebuffer) void {
     }
 
     // Render particles
+    sg.applyPipeline(state.shaders.main.pip);
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+    sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
     for (result.batches) |b| {
         if (b.layer != .particles) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -297,14 +297,14 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.shaders.main.pip);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
 
     // Render ui
+    sg.applyPipeline(state.shaders.main.pip);
+    sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
+    sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params_non_illuminated));
     for (result.batches) |b| {
         if (b.layer != .ui) continue;
         const tex = texture.get(b.tex) catch |err| {
@@ -312,9 +312,6 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.shaders.main.pip);
-        sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
-        sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params_non_illuminated));
         sg.applyBindings(bind);
         sg.draw(@intCast(b.offset), @intCast(b.len), 1);
     }
