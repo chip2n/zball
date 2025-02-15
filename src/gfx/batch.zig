@@ -20,7 +20,6 @@ pub const Vertex = extern struct {
 
 const TextureId = usize;
 
-// TODO we can look up tw and th afterwards. Also, tex could be just u8
 const TextureInfo = struct { handle: Texture, tw: f32, th: f32 };
 const Layer = enum { background, main, particles, ui };
 
@@ -181,7 +180,6 @@ pub const BatchRenderer = struct {
         const buf = self.buf[0..self.idx];
         std.mem.sort(RenderCommand, buf, {}, cmdLessThan);
 
-        // TODO maybe an easier way?
         var tex = buf[0].tex().handle;
         var tw = buf[0].tex().tw;
         var th = buf[0].tex().th;
