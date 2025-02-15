@@ -370,7 +370,6 @@ pub fn tick(g: *Game, dt: f32, input: InputState) !void {
                         e.dir = paddleReflect(g.paddle_pos[0], paddle_bounds.w, e.pos, e.dir);
                         if (g.paddle_magnet) {
                             // Paddle is magnetized - make ball stick!
-                            // TODO sound?
                             e.magnetized = true;
                         } else {
                             // Bounce the ball
