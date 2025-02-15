@@ -30,16 +30,17 @@ const Light = struct {
 const GfxState = struct {
     initialized: bool = false,
     camera: Camera = undefined,
-    // TODO rename these shaders so its clearer what they do
-    offscreen: struct {
-        pip: sg.Pipeline = .{},
-    } = .{},
-    shadow: struct {
-        pip: sg.Pipeline = .{},
-    } = .{},
-    scene: struct {
-        pip: sg.Pipeline = .{},
-        bind: sg.Bindings = .{},
+    shaders: struct {
+        main: struct {
+            pip: sg.Pipeline = .{},
+        } = .{},
+        shadow: struct {
+            pip: sg.Pipeline = .{},
+        } = .{},
+        scene: struct {
+            pip: sg.Pipeline = .{},
+            bind: sg.Bindings = .{},
+        } = .{},
     } = .{},
     spritesheet_texture: Texture = undefined,
     font_texture: Texture = undefined,
@@ -92,7 +93,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
             .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
         };
 
-        state.offscreen.pip = sg.makePipeline(pip_desc);
+        state.shaders.main.pip = sg.makePipeline(pip_desc);
     }
 
     { // shadow shader
@@ -118,7 +119,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
             .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
         };
 
-        state.shadow.pip = sg.makePipeline(pip_desc);
+        state.shaders.shadow.pip = sg.makePipeline(pip_desc);
     }
 
     // a vertex buffer to render a fullscreen quad
@@ -148,7 +149,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .src_factor_alpha = .SRC_ALPHA,
         .dst_factor_alpha = .ONE_MINUS_SRC_ALPHA,
     };
-    state.scene.pip = sg.makePipeline(scene_pip_desc);
+    state.shaders.scene.pip = sg.makePipeline(scene_pip_desc);
 
     // a sampler to sample the offscreen render target as texture
     const smp = sg.makeSampler(.{
@@ -160,8 +161,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     // resource bindings to render the fullscreen quad (composed from the
     // offscreen render target textures
-    state.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
-    state.scene.bind.samplers[shd.SMP_smp] = smp;
+    state.shaders.scene.bind.vertex_buffers[0] = state.quad_vbuf; // TODO
+    state.shaders.scene.bind.samplers[shd.SMP_smp] = smp;
 
     state.lights = try std.ArrayList(Light).initCapacity(allocator, zball.max_lights);
 
@@ -242,7 +243,7 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.offscreen.pip);
+        sg.applyPipeline(state.shaders.main.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
@@ -260,7 +261,7 @@ pub fn renderMain(fb: Framebuffer) void {
 
         // We render the main layer two times to display a shadow
         // TODO avoid switching pipelines often
-        sg.applyPipeline(state.shadow.pip);
+        sg.applyPipeline(state.shaders.shadow.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
@@ -276,7 +277,7 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.offscreen.pip);
+        sg.applyPipeline(state.shaders.main.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         if (!illuminated and b.illuminated) {
             sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
@@ -296,7 +297,7 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.offscreen.pip);
+        sg.applyPipeline(state.shaders.main.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params));
         sg.applyBindings(bind);
@@ -311,7 +312,7 @@ pub fn renderMain(fb: Framebuffer) void {
             continue;
         };
         bind.images[shd.IMG_tex] = tex.img;
-        sg.applyPipeline(state.offscreen.pip);
+        sg.applyPipeline(state.shaders.main.pip);
         sg.applyUniforms(shd.UB_vs_params, sg.asRange(&vs_params));
         sg.applyUniforms(shd.UB_fs_params, sg.asRange(&fs_params_non_illuminated));
         sg.applyBindings(bind);
@@ -389,12 +390,12 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32, is_on_top: b
         fs_scene_params.aberration_amount = 0.3;
     }
 
-    sg.applyPipeline(state.scene.pip);
+    sg.applyPipeline(state.shaders.scene.pip);
     sg.applyUniforms(shd.UB_vs_scene_params, sg.asRange(&vs_scene_params));
     sg.applyUniforms(shd.UB_fs_scene_params, sg.asRange(&fs_scene_params));
-    state.scene.bind.vertex_buffers[0] = state.quad_vbuf;
-    state.scene.bind.images[shd.IMG_tex] = fb.attachments_desc.colors[0].image;
-    sg.applyBindings(state.scene.bind);
+    state.shaders.scene.bind.vertex_buffers[0] = state.quad_vbuf;
+    state.shaders.scene.bind.images[shd.IMG_tex] = fb.attachments_desc.colors[0].image;
+    sg.applyBindings(state.shaders.scene.bind);
     sg.draw(0, 4, 1);
 }
 
