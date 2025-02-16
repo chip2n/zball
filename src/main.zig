@@ -32,7 +32,6 @@ pub fn main() !void {
         .event_cb = sokolEvent,
         .width = zball.initial_screen_size[0],
         .height = zball.initial_screen_size[1],
-        .icon = .{ .sokol_default = true },
         .window_title = "ZBall",
         .logger = .{ .func = slog.func },
         .high_dpi = false,
