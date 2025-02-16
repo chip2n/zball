@@ -2,6 +2,7 @@ const std = @import("std");
 const m = @import("math");
 const utils = @import("utils.zig");
 const gfx = @import("gfx.zig");
+const settings = @import("settings.zig");
 
 const sokol = @import("sokol");
 const sapp = sokol.app;
@@ -77,7 +78,8 @@ pub fn mouse() [2]f32 {
 
 /// Get mouse delta, scaled based on zoom
 pub fn mouseDelta() [2]f32 {
-    return m.vmul(state.mouse_delta, 1 / gfx.cameraZoom());
+    const sensitivity = m.lerp(0.1, 1.0, settings.mouse_sensitivity);
+    return m.vmul(state.mouse_delta, sensitivity);
 }
 
 pub fn frame() void {

@@ -1,8 +1,10 @@
 const zball = @import("zball.zig");
-const audio = @import("audio.zig");
 
 const gfx = @import("gfx.zig");
 const ui = gfx.ui;
+
+pub var vol_sfx: f32 = 0.5;
+pub var mouse_sensitivity: f32 = 0.2;
 
 pub fn renderMenu() bool {
     ui.beginWindow(.{
@@ -16,7 +18,11 @@ pub fn renderMenu() bool {
 
     var sfx_focused = false;
     _ = ui.selectionItem("Volume", .{ .focused = &sfx_focused });
-    ui.slider(.{ .value = &audio.vol_sfx, .focused = sfx_focused });
+    ui.slider(.{ .value = &vol_sfx, .focused = sfx_focused });
+
+    var sensitivity_focused = false;
+    _ = ui.selectionItem("Sensitivity", .{ .focused = &sensitivity_focused });
+    ui.slider(.{ .value = &mouse_sensitivity, .focused = sensitivity_focused });
 
     if (ui.selectionItem("Back", .{})) {
         return true;

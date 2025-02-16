@@ -1,5 +1,6 @@
 const std = @import("std");
 const root = @import("root");
+const settings = @import("settings.zig");
 
 const sokol = @import("sokol");
 const saudio = sokol.audio;
@@ -88,8 +89,6 @@ pub inline fn play(v: PlayDesc) void {
     state.play(v);
 }
 
-pub var vol_sfx: f32 = 0.5;
-
 const AudioTrack = struct {
     clip: ?AudioClip = null,
     frame: usize = 0,
@@ -97,7 +96,7 @@ const AudioTrack = struct {
     vol: f32 = 1.0,
 
     fn volume(track: AudioTrack) f32 {
-        return track.vol * vol_sfx;
+        return track.vol * settings.vol_sfx;
     }
 };
 
