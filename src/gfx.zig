@@ -373,7 +373,7 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32, is_on_top: b
         .transition_progress = transition_progress,
         .is_on_top = @intFromBool(is_on_top),
         .scanline_amount = 0.0,
-        .vignette_amount = 0.4,
+        .vignette_amount = 0.2,
         .vignette_intensity = 0.5,
         .aberration_amount = 0.0,
         .resolution = .{ @floatFromInt(zball.viewport_size[0]), @floatFromInt(zball.viewport_size[1]) },
@@ -381,7 +381,7 @@ pub fn renderFramebuffer(fb: Framebuffer, transition_progress: f32, is_on_top: b
     if (state.camera.zoom() > 2) {
         // Scale is big enough for scanlines
         fs_scene_params.scanline_amount = 1.0;
-        fs_scene_params.vignette_amount = 0.6;
+        fs_scene_params.vignette_amount = 0.4;
         fs_scene_params.vignette_intensity = 0.4;
         fs_scene_params.aberration_amount = 0.3;
     }
