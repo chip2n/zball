@@ -79,7 +79,9 @@ pub fn mouse() [2]f32 {
 /// Get mouse delta, scaled based on zoom
 pub fn mouseDelta() [2]f32 {
     const sensitivity = m.lerp(0.1, 1.0, settings.mouse_sensitivity);
-    return m.vmul(state.mouse_delta, sensitivity);
+    // NOTE: Web seems to interpret raw mouse data slightly faster
+    const factor = if (utils.is_web) 0.5 else 1.0;
+    return m.vmul(state.mouse_delta, factor * sensitivity);
 }
 
 pub fn frame() void {
