@@ -3,6 +3,10 @@
 
 A Breakout-clone written in Zig.
 
+You can play the web build [[https://arvidsson.io/project-zball.html][here]].
+
+[[./zball.gif]]
+
 ** Building for desktop
 
 #+begin_src bash
