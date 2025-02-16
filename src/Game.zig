@@ -1030,7 +1030,7 @@ fn splitBall(g: *Game, angles: []const f32) void {
             var d2 = ball.dir;
             m.vrot(&d2, angle);
             const new_ball = g.spawnBall(ball.pos, d2) catch break;
-            g.spawnFlame(new_ball);
+            if (g.flame_timer > 0) g.spawnFlame(new_ball);
         }
         ball.dir = d1;
     }
