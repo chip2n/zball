@@ -30,6 +30,11 @@ pub fn invalidate(cam: *Camera) void {
     cam.proj = calculateProj(cam.win_size[0], cam.win_size[1]);
     cam.view = calculateView(cam.win_size[0], cam.win_size[1]);
     cam.view_proj = m.mul(cam.view, cam.proj);
+
+    // NOTE: Need to be larger than viewport to calculate the inverse, otherwise
+    // we crash :(
+    if (cam.win_size[0] < zball.viewport_size[0]) return;
+    if (cam.win_size[1] < zball.viewport_size[1]) return;
     cam.view_proj_inv = m.inverse(cam.view_proj).?;
 }
 
