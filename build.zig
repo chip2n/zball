@@ -139,6 +139,7 @@ pub fn build(b: *Build) !void {
             else => unreachable,
         };
         const exe = b.addExecutable(.{ .name = name, .root_module = main_mod });
+        exe.subsystem = .Windows;
         b.installArtifact(exe);
 
         // Check step
