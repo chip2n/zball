@@ -144,6 +144,7 @@ void main() {
 @vs vs_scene
 @msl_options fixup_clipspace
 @msl_options flip_vert_y
+@hlsl_options fixup_clipspace
 @hlsl_options flip_vert_y
 
 layout(binding=0) uniform vs_scene_params {
