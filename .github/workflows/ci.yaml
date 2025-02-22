@@ -25,8 +25,6 @@ jobs:
         with:
           version: master
       - run: zig build -Doptimize=ReleaseSafe
-      - name: Set executable permissions
-        run: chmod +x zig-out/bin/game-linux
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -71,8 +69,6 @@ jobs:
         with:
           version: master
       - run: zig build -Doptimize=ReleaseSafe
-      - name: Set executable permissions
-        run: chmod +x zig-out/bin/game-macos
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
