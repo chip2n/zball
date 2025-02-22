@@ -1,6 +1,6 @@
 .{
     .name = "zball",
-    .version = "0.3.8",
+    .version = "0.3.9",
     .dependencies = .{
         .stb = .{
             .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
