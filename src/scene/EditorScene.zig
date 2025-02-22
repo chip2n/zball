@@ -213,7 +213,12 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
 
                 ui.text("Save level", .{});
                 if (ui.textInput(.{ .text = &scene.dialog_buf })) |path| {
-                    try scene.saveLevel(path);
+                    scene.saveLevel(path) catch |err| {
+                        switch (err) {
+                            error.IsDir => std.log.err("You need to specify a file for the level, not a directory.", .{}),
+                            else => std.log.err("Unable to save level: {}", .{err}),
+                        }
+                    };
                     scene.show_save_dialog = false;
                 }
             }
@@ -229,7 +234,12 @@ pub fn frame(scene: *EditorScene, dt: f32) !void {
 
                 ui.text("Load level", .{});
                 if (ui.textInput(.{ .text = &scene.dialog_buf })) |path| {
-                    try scene.loadLevel(path);
+                    scene.loadLevel(path) catch |err| {
+                        switch (err) {
+                            error.IsDir => std.log.err("You need to specify a file for the level, not a directory.", .{}),
+                            else => std.log.err("Unable to load level: {}", .{err}),
+                        }
+                    };
                     scene.show_load_dialog = false;
                 }
             }
