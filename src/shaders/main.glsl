@@ -216,6 +216,8 @@ vec3 pixel(vec2 uv, vec2 off) {
 
 #if SOKOL_MSL
     float frag_progress = frag_pos.y / resolution.y;
+#elif SOKOL_HLSL
+    float frag_progress = frag_pos.y / resolution.y;
 #else
     float frag_progress = 1 - frag_pos.y / resolution.y;
 #endif
