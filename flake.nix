@@ -8,7 +8,7 @@
   outputs = { self, nixpkgs, flake-utils, zig_overlay, ...}:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs { inherit system; };
-      zig = zig_overlay.packages.${system}.master-2025-02-21;
+      zig = zig_overlay.packages.${system}.master-2025-03-01;
     in {
       devShell = pkgs.mkShell {
         packages = [

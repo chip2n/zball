@@ -1,6 +1,7 @@
 .{
-    .name = "zball",
+    .name = .zball,
     .version = "0.4.2",
+    .fingerprint = 0x20369834739e5d7d,
     .dependencies = .{
         .stb = .{
             .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
@@ -15,8 +16,8 @@
             .hash = "1220f2ae16952843dd25b6bc86b888a3fd8c3f25d34adddfd8d1d2b9f801429e80e4",
         },
         .aseprite = .{
-            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#078f2dfb3b6227cdc5825d4803c4bb6018ab5655",
-            .hash = "1220ba6255c58e5562a40c8e2537bb39e4294abc2dba369b483ae4eb497582012d31",
+            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#ec248c97608de538356693fdbfe63efdab36c3c0",
+            .hash = "aseprite_utils-1.0.0-GNCKzvQUAADISq0HTlMu7wfeUyBJ39h1vTDpotbDmjNV",
         }
     },
     .paths = .{
