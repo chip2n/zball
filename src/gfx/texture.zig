@@ -7,7 +7,7 @@ const c = @cImport({
     @cInclude("stb_image.h");
 });
 
-var textures: [zball.max_textures]TextureData = .{.{}} ** zball.max_textures;
+var textures: [zball.max_textures]TextureData = .{TextureData{}} ** zball.max_textures;
 
 pub const Texture = usize;
 

@@ -93,7 +93,7 @@ pub fn Emitter(comptime desc: EmitterDesc) type {
         /// The sprites to use for each particle, along with the factor of the lifetime they will be displayed
         sprites: []const SpriteDesc = undefined,
 
-        particles: [count]Particle = .{.{}} ** count,
+        particles: [count]Particle = .{Particle{}} ** count,
         idx: usize = 0,
         time: f32 = 0,
         spawn_timer: f32 = 0,

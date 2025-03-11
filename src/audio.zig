@@ -106,7 +106,7 @@ pub const AudioState = struct {
     num_channels: usize = 2,
     time: f64 = 0,
     samples: [sample_buf_length]f32 = undefined,
-    playing: [32]AudioTrack = .{.{}} ** 32,
+    playing: [32]AudioTrack = .{AudioTrack{}} ** 32,
 
     fn play(self: *Self, v: PlayDesc) void {
         // Check if we've played this clip recently - if we have, ignore it
