@@ -51,7 +51,7 @@ pub fn main() !void {
     defer output_file.close();
     const out = output_file.writer();
 
-    try out.print("pub const image = @embedFile(\"{s}\");\n", .{img_path});
+    try out.print("pub const image = @embedFile(\"font.png\");\n", .{});
     try out.print("pub const ascent = {};\n", .{ascent});
     try out.print("pub const descent = {};\n\n", .{descent});
     try out.print("pub const line_gap = {};\n\n", .{line_gap});

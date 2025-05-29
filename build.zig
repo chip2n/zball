@@ -12,6 +12,7 @@ const CoreDependencies = struct {
 
     shader_path: Build.LazyPath,
     font_path: Build.LazyPath,
+    font_img_path: Build.LazyPath,
     sprite_data_path: Build.LazyPath,
     sprite_image_path: Build.LazyPath,
 };
@@ -59,7 +60,7 @@ pub fn build(b: *Build) !void {
     tool_fontpack_run_step.dependOn(&tool_fontpack_run.step);
     tool_fontpack_run.addFileArg(b.path("assets/04b09.ttf"));
     const tool_fontpack_output = tool_fontpack_run.addOutputFileArg("font.zig");
-    _ = tool_fontpack_run.addOutputFileArg("font.png");
+    const tool_fontpack_img_output = tool_fontpack_run.addOutputFileArg("font.png");
 
     var sprite_data_path: std.Build.LazyPath = undefined;
     var sprite_image_path: std.Build.LazyPath = undefined;
@@ -88,6 +89,7 @@ pub fn build(b: *Build) !void {
         .stb = dep_stb,
         .shader_path = shader_output,
         .font_path = tool_fontpack_output,
+        .font_img_path = tool_fontpack_img_output,
         .sprite_data_path = sprite_data_path,
         .sprite_image_path = sprite_image_path,
     };
@@ -191,6 +193,7 @@ fn addDeps(
         },
     });
     step.addAnonymousImport("font", .{ .root_source_file = deps.font_path });
+    step.addAnonymousImport("font.png", .{ .root_source_file = deps.font_img_path });
     step.addAnonymousImport("sprites.png", .{ .root_source_file = deps.sprite_image_path });
     step.addAnonymousImport("sprites", .{ .root_source_file = deps.sprite_data_path });
 }
