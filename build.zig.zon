@@ -2,27 +2,29 @@
     .name = .zball,
     .version = "0.4.2",
     .fingerprint = 0x20369834739e5d7d,
-    .minimum_zig_version = "0.15.0-dev.1380+e98aeeb73",
+    .minimum_zig_version = "0.15.0-dev.1473+23fff3442",
     .dependencies = .{
-        .stb = .{
-            .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
-            .hash = "122082911aadaef3c836d3833f7c60386ee1ee46feffb6c54785f784801c32212aaa",
-        },
-        .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig?ref=master#2f4a22caa1799c4a9bf2b87d21dd2af91f452ca3",
-            .hash = "sokol-0.1.0-pb1HK42WLQCphk4zdd8fVfw5COyd95iN4-abmBhlt87J",
-        },
+        // NOTE: Experiencing some issues with zigs git fetching stuff, so vendoring all libs for now
+        // .stb = .{
+        //     .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
+        //     .hash = "122082911aadaef3c836d3833f7c60386ee1ee46feffb6c54785f784801c32212aaa",
+        // },
+        // .sokol = .{
+        //     .url = "git+https://github.com/floooh/sokol-zig?ref=master#2f4a22caa1799c4a9bf2b87d21dd2af91f452ca3",
+        //     .hash = "sokol-0.1.0-pb1HK42WLQCphk4zdd8fVfw5COyd95iN4-abmBhlt87J",
+        // },
         // .sokol_tools = .{
         //     .url = "git+https://github.com/floooh/sokol-tools-bin?ref=master#d80b1d8f20fef813092ba37f26723d3880839651",
         //     .hash = "1220f2ae16952843dd25b6bc86b888a3fd8c3f25d34adddfd8d1d2b9f801429e80e4",
         // },
-        .sokol_tools = .{
-            .path = "libs/sokol-tools-bin"
-        },
-        .aseprite = .{
-            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git?ref=main#3c67ab273adb6323334d56cf3e7439ee29280dbb",
-            .hash = "aseprite_utils-1.0.0-GNCKzlMWAACjJLG-q93TfiWEWAnFFHixoSMKFo6diqoK",
-        },
+        // .aseprite = .{
+        //     .url = "git+https://github.com/chip2n/zig-aseprite-utils.git?ref=main#3c67ab273adb6323334d56cf3e7439ee29280dbb",
+        //     .hash = "aseprite_utils-1.0.0-GNCKzlMWAACjJLG-q93TfiWEWAnFFHixoSMKFo6diqoK",
+        // },
+        .stb = .{ .path = "libs/stb" },
+        .sokol = .{ .path = "libs/sokol-zig" },
+        .sokol_tools = .{ .path = "libs/sokol-tools-bin" },
+        .aseprite = .{ .path = "libs/zig-aseprite-utils" },
     },
     .paths = .{
         "build.zig",

@@ -1,0 +1,12 @@
+.{
+    .name = .aseprite_utils,
+    .version = "1.0.0",
+    .fingerprint = 0x1599c69fce8ad018, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.15.0-dev.1145+3ae0ba096",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

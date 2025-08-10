@@ -6,6 +6,7 @@ const zball = @import("zball.zig");
 const level = @import("level.zig");
 const m = @import("math");
 
+const BoundedArray = @import("bounded_array.zig").BoundedArray;
 const InputState = @import("input.zig").State;
 const collide = @import("collision.zig").collide;
 const CollisionInfo = @import("collision.zig").CollisionInfo;
@@ -58,7 +59,7 @@ laser_timer: f32 = 0,
 laser_cooldown_timer: f32 = 0,
 
 // Triggered audio effects are queued up in this and cleared every tick
-audio_clips: std.BoundedArray(audio.PlayDesc, 16) = std.BoundedArray(audio.PlayDesc, 16){},
+audio_clips: BoundedArray(audio.PlayDesc, 16) = BoundedArray(audio.PlayDesc, 16){},
 
 pub const EntityType = enum {
     none,
@@ -1017,7 +1018,7 @@ fn acquirePowerup(g: *Game, p: PowerupType) void {
 }
 
 fn splitBall(g: *Game, angles: []const f32) void {
-    var active_balls = std.BoundedArray(usize, zball.max_balls){ .len = 0 };
+    var active_balls = BoundedArray(usize, zball.max_balls){ .len = 0 };
     for (g.entities, 0..) |e, i| {
         if (e.type != .ball) continue;
         active_balls.append(i) catch continue;

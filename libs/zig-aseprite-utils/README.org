@@ -1,0 +1,46 @@
+* zig-aseprite-utils
+
+This is a library to work with Aseprite files (mainly in the Zig build
+process). It is NOT a parser for ~.aseprite~ files - it uses the ~aseprite~
+binary to export slices, and generates Zig code for each slice that you can
+import in your Zig project. Nine-patch slices are also supported.
+
+I've mainly added what I need during my casual adventures in game development -
+if you need something else, let me know (or submit a PR).
+
+** Usage
+
+Add module to your projects ~build.zig.zon~ file:
+
+#+begin_src bas
+zig fetch --save git+https://github.com/chip2n/zig-aseprite-utils.git
+#+end_src
+
+Then, in your ~build.zig~ file, you can add a build step to export your sprites
+and slice data, and generate Zig code for them:
+
+#+begin_src zig
+const aseprite = @import("aseprite");
+
+const dep_aseprite = b.dependency("aseprite", .{
+    .target = target,
+    .optimize = optimize,
+});
+
+const art_aseprite = dep_aseprite.artifact("aseprite");
+const result = aseprite.exportAseprite(b, art_aseprite, b.path("spritesheet.ase"));
+exe.root_module.addAnonymousImport("spritesheet.png", .{ .root_source_file = result.img_path });
+exe.root_module.addAnonymousImport("sprites", .{
+    .root_source_file = result.img_data,
+});
+#+end_src
+
+Using it in your project:
+
+#+begin_src zig
+const sprite = @import("sprite");
+const slice = sprite.get(brick.sprite);
+// slice.name: the name of the slice
+// slice.bounds: the region covering the entire sprite
+// slice.center: the region of the "inner sprite", in case it's a 9-patch
+#+end_src
