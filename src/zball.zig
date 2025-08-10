@@ -226,8 +226,8 @@ pub fn init(allocator: std.mem.Allocator) !void {
     errdefer levels.deinit();
     inline for (level_files) |path| {
         const data = @embedFile(path);
-        var fbs = std.io.fixedBufferStream(data);
-        const lvl = try level.readLevel(arena.allocator(), fbs.reader());
+        var reader = std.io.Reader.fixed(data);
+        const lvl = try level.readLevel(arena.allocator(), &reader);
         errdefer lvl.deinit();
         try levels.append(lvl);
     }

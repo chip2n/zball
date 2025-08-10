@@ -11,7 +11,7 @@ bind: sg.Bindings = .{},
 pub fn init(width: u32, height: u32) @This() {
     var attachments_desc = sg.AttachmentsDesc{};
     const color_img_desc: sg.ImageDesc = .{
-        .render_target = true,
+        .usage = .{ .render_attachment = true },
         .width = @intCast(width),
         .height = @intCast(height),
         .sample_count = zball.offscreen_sample_count,
@@ -25,7 +25,7 @@ pub fn init(width: u32, height: u32) @This() {
 
     var bind = sg.Bindings{};
     bind.vertex_buffers[0] = sg.makeBuffer(.{
-        .usage = .STREAM,
+        .usage = .{ .stream_update = true },
         .size = zball.max_scene_verts * @sizeOf(Vertex),
     });
     bind.samplers[shd.SMP_smp] = sg.makeSampler(.{

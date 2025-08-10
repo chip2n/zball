@@ -2,23 +2,24 @@
     .name = .zball,
     .version = "0.4.2",
     .fingerprint = 0x20369834739e5d7d,
+    .minimum_zig_version = "0.15.0-dev.1145+3ae0ba096",
     .dependencies = .{
         .stb = .{
             .url = "git+https://github.com/nothings/stb.git#5c205738c191bcb0abc65c4febfa9bd25ff35234",
             .hash = "122082911aadaef3c836d3833f7c60386ee1ee46feffb6c54785f784801c32212aaa",
         },
         .sokol = .{
-            .url = "git+https://github.com/floooh/sokol-zig.git#a292c3cea079c3c9de8a6b1c2fd79ddae472e088",
-            .hash = "1220072a0988c8ce53680094a04a6513cce6854d8f838a2a17d34bf9176da73023a2",
+            .url = "git+https://github.com/floooh/sokol-zig?ref=master#2f4a22caa1799c4a9bf2b87d21dd2af91f452ca3",
+            .hash = "sokol-0.1.0-pb1HK42WLQCphk4zdd8fVfw5COyd95iN4-abmBhlt87J",
         },
         .sokol_tools = .{
             .url = "git+https://github.com/floooh/sokol-tools-bin.git#d80b1d8f20fef813092ba37f26723d3880839651",
             .hash = "1220f2ae16952843dd25b6bc86b888a3fd8c3f25d34adddfd8d1d2b9f801429e80e4",
         },
         .aseprite = .{
-            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git#ec248c97608de538356693fdbfe63efdab36c3c0",
-            .hash = "aseprite_utils-1.0.0-GNCKzvQUAADISq0HTlMu7wfeUyBJ39h1vTDpotbDmjNV",
-        }
+            .url = "git+https://github.com/chip2n/zig-aseprite-utils.git?ref=main#3c67ab273adb6323334d56cf3e7439ee29280dbb",
+            .hash = "aseprite_utils-1.0.0-GNCKzlMWAACjJLG-q93TfiWEWAnFFHixoSMKFo6diqoK",
+        },
     },
     .paths = .{
         "build.zig",

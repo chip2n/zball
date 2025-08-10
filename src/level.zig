@@ -19,21 +19,24 @@ pub const Level = struct {
     }
 };
 
-pub const LevelEntity = packed struct(u48) {
+pub const LevelEntity = packed struct(u64) {
     type: LevelEntityType,
     x: u16,
     y: u16,
     sprite: u8 = 0,
+    _padding: u16 = 0,
 };
 
 pub fn readLevel(allocator: std.mem.Allocator, reader: anytype) !Level {
-    const header = try reader.readStruct(LevelHeader);
+    const headerInt = try reader.takeInt(u32, .little);
+    const header: LevelHeader = @bitCast(headerInt);
     if (header.version != 1) {
         return error.UnknownLevelVersion;
     }
     var entities = std.ArrayList(LevelEntity).init(allocator);
     for (0..header.entity_count) |_| {
-        const entity = try reader.readStruct(LevelEntity);
+        const entityInt = try reader.takeInt(u64, .little);
+        const entity: LevelEntity = @bitCast(entityInt);
         try entities.append(entity);
     }
     return Level{
@@ -47,9 +50,9 @@ pub fn writeLevel(entities: []const LevelEntity, writer: anytype) !void {
     try writer.writeStruct(LevelHeader{
         .version = 1,
         .entity_count = @intCast(entities.len),
-    });
+    }, .little);
     for (entities) |e| {
-        try writer.writeStruct(e);
+        try writer.writeStruct(e, .little);
     }
 }
 
@@ -62,11 +65,13 @@ test "write and read level" {
 
     var buf = std.ArrayList(u8).init(std.testing.allocator);
     defer buf.deinit();
-    const writer = buf.writer();
-    try writeLevel(&entities, writer);
+    var writer = buf.writer();
+    var writer_adapter = writer.adaptToNewApi();
+    try writeLevel(&entities, &writer_adapter.new_interface);
 
-    var fbs = std.io.fixedBufferStream(buf.items);
-    const result = try readLevel(std.testing.allocator, fbs.reader());
+    var reader = std.io.Reader.fixed(buf.items);
+    var reader_adapter = reader.adaptToNewApi();
+    const result = try readLevel(std.testing.allocator, &reader_adapter.new_interface);
     defer result.deinit();
 
     try std.testing.expectEqual(result.entities.len, entities.len);

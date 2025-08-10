@@ -286,6 +286,9 @@ fn saveLevel(scene: *EditorScene, path: []const u8) !void {
     const file = try std.fs.createFileAbsolute(path, .{});
     defer file.close();
 
+    var buffer: [1024]u8 = undefined;
+    var writer = file.writer(&buffer);
+
     var entities = std.ArrayList(LevelEntity).init(scene.allocator);
     defer entities.deinit();
 
@@ -299,14 +302,16 @@ fn saveLevel(scene: *EditorScene, path: []const u8) !void {
             .sprite = @intFromEnum(id),
         });
     }
-    try level.writeLevel(entities.items, file.writer());
+    try level.writeLevel(entities.items, &writer.interface);
 }
 
 fn loadLevel(scene: *EditorScene, path: []const u8) !void {
     const file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
 
-    const lvl = try level.readLevel(scene.allocator, file.reader());
+    var buffer: [1024]u8 = undefined;
+    var reader = file.reader(&buffer);
+    const lvl = try level.readLevel(scene.allocator, &reader.interface);
     defer lvl.deinit();
 
     scene.bricks.clearAndFree();

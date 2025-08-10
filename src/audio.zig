@@ -45,7 +45,7 @@ pub fn init() void {
     state.num_channels = @intCast(saudio.channels()); // may be different than requested
 }
 
-fn stream_callback(buffer: [*c]f32, num_frames: i32, num_chan: i32) callconv(.C) void {
+fn stream_callback(buffer: [*c]f32, num_frames: i32, num_chan: i32) callconv(.c) void {
     const num_samples: usize = @intCast(num_frames * num_chan);
 
     const dst = buffer[0..num_samples];

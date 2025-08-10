@@ -104,7 +104,7 @@ pub fn build(b: *Build) !void {
 
     if (target.result.cpu.arch.isWasm()) {
         const dep_emsdk = dep_sokol.builder.dependency("emsdk", .{});
-        const lib = b.addStaticLibrary(.{
+        const lib = b.addLibrary(.{
             .name = "game",
             .root_module = main_mod,
         });
@@ -225,11 +225,14 @@ fn buildFontPackTool(
     optimize: OptimizeMode,
     dep_stb: *Build.Dependency,
 ) !*Build.Step.Compile {
-    const exe = b.addExecutable(.{
-        .name = "fontpack",
+    const mod = b.createModule(.{
         .root_source_file = b.path("tools/fontpack.zig"),
         .target = b.graph.host,
         .optimize = optimize,
+    });
+    const exe = b.addExecutable(.{
+        .name = "fontpack",
+        .root_module = mod,
     });
     exe.addIncludePath(dep_stb.path("."));
     exe.addCSourceFile(.{ .file = b.path("tools/stb_impl.c"), .flags = &.{"-O3"} });

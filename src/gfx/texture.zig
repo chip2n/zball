@@ -33,8 +33,8 @@ pub fn loadPNG(v: struct { data: []const u8, usage: TextureUsage = .immutable })
         .height = y,
         .pixel_format = .RGBA8,
         .usage = switch (v.usage) {
-            .immutable => .IMMUTABLE,
-            .mutable => .DYNAMIC,
+            .immutable => .{ .immutable = true },
+            .mutable => .{ .dynamic_update = true },
         },
     };
     const img_data_slice = img_data[0..size];
@@ -87,18 +87,14 @@ pub fn get(handle: Texture) !TextureData {
 }
 
 fn makeSokolImage(desc: *sg.ImageDesc, data: []const u8) sg.Image {
-    switch (desc.usage) {
-        .DYNAMIC, .STREAM => {
-            const img = sg.makeImage(desc.*);
-            desc.data.subimage[0][0] = sg.asRange(data);
-            sg.updateImage(img, desc.data);
-            return img;
-        },
-        else => {
-            desc.data.subimage[0][0] = sg.asRange(data);
-            return sg.makeImage(desc.*);
-        },
+    if (desc.usage.immutable) {
+        desc.data.subimage[0][0] = sg.asRange(data);
+        return sg.makeImage(desc.*);
     }
+    const img = sg.makeImage(desc.*);
+    desc.data.subimage[0][0] = sg.asRange(data);
+    sg.updateImage(img, desc.data);
+    return img;
 }
 
 pub fn draw(handle: Texture, x: usize, y: usize) !void {

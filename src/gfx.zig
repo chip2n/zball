@@ -126,7 +126,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     const vw: f32 = @floatFromInt(zball.viewport_size[0]);
     const vh: f32 = @floatFromInt(zball.viewport_size[1]);
     state.quad_vbuf = sg.makeBuffer(.{
-        .usage = .IMMUTABLE,
+        .usage = .{ .immutable = true },
         .data = sg.asRange(&[_]f32{
             0,  0,  0, 1,
             vw, 0,  1, 1,

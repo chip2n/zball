@@ -49,14 +49,15 @@ pub fn main() !void {
 
     var output_file = try std.fs.cwd().createFile(output_path, .{});
     defer output_file.close();
-    const out = output_file.writer();
+    var buffer: [1024]u8 = undefined;
+    var out = output_file.writer(&buffer);
 
-    try out.print("pub const image = @embedFile(\"font.png\");\n", .{});
-    try out.print("pub const ascent = {};\n", .{ascent});
-    try out.print("pub const descent = {};\n\n", .{descent});
-    try out.print("pub const line_gap = {};\n\n", .{line_gap});
+    try out.interface.print("pub const image = @embedFile(\"font.png\");\n", .{});
+    try out.interface.print("pub const ascent = {};\n", .{ascent});
+    try out.interface.print("pub const descent = {};\n\n", .{descent});
+    try out.interface.print("pub const line_gap = {};\n\n", .{line_gap});
 
-    _ = try out.write(
+    _ = try out.interface.write(
         \\pub const Glyph = struct {
         \\    ch: u8,
         \\    x: u32,
@@ -68,9 +69,9 @@ pub fn main() !void {
         \\};
     );
 
-    _ = try out.write("pub const glyphs = [_]Glyph{\n");
+    _ = try out.interface.write("pub const glyphs = [_]Glyph{\n");
     for (glyphs) |glyph| {
-        try out.print(
+        try out.interface.print(
             "    .{{ .ch = {}, .x = {}, .y = {}, .w = {}, .h = {}, .bbox = .{{ {}, {}, {}, {} }}, .advance = {} }},\n",
             .{
                 glyph.ch,
@@ -86,8 +87,10 @@ pub fn main() !void {
             },
         );
     }
-    _ = try out.write("};");
-    _ = try out.write("\n\n");
+    _ = try out.interface.write("};");
+    _ = try out.interface.write("\n\n");
+
+    try out.interface.flush();
 
     return std.process.cleanExit();
 }
